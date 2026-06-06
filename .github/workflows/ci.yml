@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # pnpm avant setup-node : la version vient du champ `packageManager` du package.json.
       - name: Setup pnpm
