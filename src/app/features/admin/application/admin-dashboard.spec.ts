@@ -26,6 +26,7 @@ function makeContactGateway(overrides: Partial<ContactGateway> = {}): ContactGat
     deleteMessage: () => of(undefined),
     getUnreadCount: () => of(0),
     invalidateUnreadCount: () => undefined,
+    markAllRead: () => of({ count: 0 }),
     ...overrides,
   } as ContactGateway;
 }
