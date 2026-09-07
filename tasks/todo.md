@@ -111,10 +111,21 @@ P1 : capture 1440×900 + 390×844.
 
 ## Lot 2 — hiérarchie & mesure
 
-- [ ] **P3** — 1 CTA primaire dans le hero, supprimer les doublons de `nav-items.ts` (`home-hero-section.ts`)
-      + test de non-régression sur la nav
-- [ ] **P4** — événement `cta_click` : `analytics.types.ts` (union `TrackPayload['type']`),
-      `analytics.gateway.ts`, `http-analytics.gateway.ts` + spec (`HttpTestingController`)
+- [x] **P3** — 1 CTA primaire dans le hero (« Voir les projets »), « Me contacter » et « En savoir
+      plus » supprimés avec leurs méthodes (`home-hero-section.ts`) — **PROUVÉ** sur le prérendu
+      (1 seul `app-button` dans la section hero, `jsaction="click:;"` → replay armé)
+  - Non-régression nav : `header.spec.ts` vérifie que **toutes** les entrées de `NAV_LINKS` restent
+    desservies (route → `<a href>`, section → bouton), piloté par la constante, pas par de la copie
+  - `SectionScroller` n'est plus injecté par le hero : le seul chemin vers la section contact est la nav
+- [x] **P4** — événement `cta_click` : `analytics.types.ts` (union `TrackPayload['type']`),
+      `analytics.gateway.ts`, `http-analytics.gateway.ts` + 2 specs (`HttpTestingController` : émission
+      `{ type:'cta_click', entityId, entityTitle }`, no-op SSR)
+  - Forme choisie : `trackCtaClick(ctaId, label)` calqué sur `trackProjectClick` — `entityId` porte
+    l'emplacement (`home_hero_projects`), donc un futur `/stats/cta` se lit comme `/stats/projects`
+  - ⚠️ **Aucune mesure tant que l'API (repo séparé) n'accepte pas `cta_click`** : le back valide
+    probablement `type` contre un enum → 400, et `fireAndForget` avale l'erreur (`catchError(() => EMPTY)`).
+    Le front est prêt ; le lot ne livre pas la lecture. Reste à faire côté API : accepter le type,
+    puis exposer un compteur (`StatsOverview.ctaClicks` ou `/stats/cta`) pour le dashboard admin.
   - Seul trou de mesure réel : impossible aujourd'hui de connaître le taux de clic home → /projects par source
   - Note YAGNI : `AnalyticsGateway` est une `abstract class` à **une seule** implémentation — ce que
     `Méthode…md` liste dans les pièges. On ajoute à l'existant, **on ne refactore pas l'abstraction ici**.
