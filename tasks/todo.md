@@ -134,7 +134,8 @@ Contraintes techniques du hero (à respecter par toute formulation) :
   sont **surlignés en `--color-primary` gratuitement**. Aucun autre mot ne l'est.
 - `availability` : badge à pastille verte, `text-xs` → 4-6 mots maximum
 
-- [ ] **P2** — réécrire le hero : `home.static-data.ts:6-9`
+- [x] **P2** — réécrire le hero : `home.static-data.ts:6-9` — **PROUVÉ** sur le prérendu
+      (`<h1>` = « Julien Nédellec », `Angular` et `NestJS` surlignés, badge `availability` porte le CDI)
 
   **Formulation retenue le 2026-09-06 (option A — « nom + preuve ») :**
 
@@ -158,10 +159,14 @@ Contraintes techniques du hero (à respecter par toute formulation) :
     → porte ouverte conservée
   - « sur ma propre infrastructure » est vérifiable par le site lui-même
 
-- [ ] **P2bis** — aligner le SEO de la route home (`app.routes.ts:16-20`), **même commit que P2**
+- [x] **P2bis** — aligner le SEO de la route home (`app.routes.ts:16-20`), **même commit que P2** — **PROUVÉ**
+      (`<meta name="description">` et `keywords` du prérendu portent la nouvelle formulation)
   - La description actuelle finit par « **disponible pour vos projets** » → lecture freelance,
     alors que la recherche est un CDI. Bloquant : contredit le badge `availability` de P2.
   - Ajouter l'angle industrie dans `description` + `keywords`
+  - Élargissement assumé : `src/index.html` portait la **même** lecture freelance (« Disponible pour
+    vos projets web ») dans son `<meta name="description">` de repli — alignée sur la description de
+    route dans le même commit. `og:`/`twitter:` non touchés : le service `Seo` les réécrit par route.
 - [ ] **P2ter** _(optionnel, à trancher après P2)_ — les 3 cartes d'expertise
   (`home.static-data.ts:12-34`) restent de la prose générique (« architecture signals »,
   « validation stricte des données »). Candidates à une passe « preuve » plus tard — **hors lot**,
