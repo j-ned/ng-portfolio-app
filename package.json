@@ -94,6 +94,7 @@
   },
   "dependencies": {
     "@sentry/angular": "^10.56.0",
+    "isomorphic-dompurify": "4.2.0",
     "marked": "^18.0.11"
   }
 }
