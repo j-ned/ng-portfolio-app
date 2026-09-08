@@ -31,8 +31,8 @@ type ContactFormGroup = {
   host: { class: 'block' },
   imports: [ReactiveFormsModule, AppIcon, Button, ContactInfoPanel],
   template: `
-    <section class="animate-fade-up py-16 md:py-10 px-6">
-      <div class="max-w-5xl mx-auto">
+    <section class="animate-fade-up py-12 md:py-20">
+      <div class="page-container max-w-5xl">
         <header class="text-center mb-14">
           <span
             class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-widest mb-5"
@@ -58,8 +58,8 @@ type ContactFormGroup = {
               Envoyer un message
             </h3>
 
-            <form [formGroup]="form" (ngSubmit)="submitContact()" class="flex flex-col gap-8">
-              <fieldset class="grid grid-cols-1 sm:grid-cols-2 gap-6 border-0 p-0 m-0">
+            <form [formGroup]="form" (ngSubmit)="submitContact()" class="flex flex-col gap-6">
+              <fieldset class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 border-0 p-0 m-0">
                 <legend class="sr-only">Informations personnelles</legend>
                 <div>
                   <label for="name" class="form-label">Nom complet *</label>
