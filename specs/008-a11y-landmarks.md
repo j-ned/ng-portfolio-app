@@ -258,3 +258,25 @@ restaurés), servi en statique. Même harnais que le baseline (Playwright 1.58 +
 - **Hors périmètre, préexistant** : `scrollable-region-focusable` ×8 sur les articles de blog
   (`/blog/<slug>`, blocs `<pre>` défilants non focusables), identique sur `master` ; à traiter
   dans une spec dédiée, comme `admin-layout.ts` (`<main>` imbriqué, route non publique).
+
+## Review code
+
+**Verdict** : APPROVED
+**Gates CI locaux** : tests ✅ (`pnpm test`, exit 0, 83 fichiers / 686 passed) / lint ✅ (`pnpm lint`, exit 0, « All files pass linting ») / build ✅ (`pnpm run build --configuration production` exit 0, preuve § Verify ; non rejoué, artefact `dist/` 20:22 cohérent avec le commit 2f0620a : 1 `<main>` sur les 15 `index.html`, `aria-label` de carte uniques). `prettier --check` sur les 20 fichiers source touchés : OK.
+**Checks mécaniques** : checker non vendoré : auto-checks joués à la main (`fakeAsync|waitForAsync|flushMicrotasks|toMatchSnapshot|getByTestId|fireEvent` sur les specs du diff : 0 hit ; `innerHTML` : 1 hit, ligne réindentée préexistante de `blog-detail.ts`, hors changement ; réf ADR/§/n° spec dans le code : 0 hit). Profil sans champs archéologie / immutabilité / mutation : règles non vérifiées par profil, tracé.
+**Warnings de gate** : aucun (sorties test et lint lues en entier).
+**Rendu compilé** : ✅ (`drawer` à sélecteur élément, pas d'attribut ; pixelmatch 0 px sur 28/28 en § Verify)
+**Preuve de verify runtime** : ✅ (§ Verify + contre-vérification du reviewer sur le build statique : `/mentions-legales` 1 `main`, 1 `header` de bannière, host `block min-h-svh pt-20 pb-16` ; `/` en 375 px menu ouvert : 1 `main`, dialog hors du `header`, 0 `header` dans le dialog, `nav` de cartes nommées « Liens du projet DashFlow / CandiDash », aucune erreur `NG0`. Erreurs console observées uniquement liées à l'environnement de service statique : `/api/config` 404 et CORS vers l'API prod depuis `localhost`, neutralisées par le proxy du harnais § Verify)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+Espaces inline vérifiés sur `git diff -w` : `</a\n>.` et `</a\n>. Vous pouvez` (privacy) collent la ponctuation comme avant ; `</span><span>` (logo du header) sans espace comme avant ; `>politique … GitHub</a\n>` garde l'espace avant « (États-Unis) » ; interpolations `{{ … }}` sans effet. Confirmé par le pixelmatch 0 px.
+
+**Tests notables** :
+- ⚠️ `*.spec.ts` (×8 pages) — l'égalité exacte de `classList` de l'host fige des utilitaires Tailwind : tout ajustement d'espacement casse le test sans régression fonctionnelle. Prescrit par le plan comme garde-fou de layout ; à alléger plus tard si le coût se fait sentir.
+- ✨ `header.spec.ts:183` — le dialog est vérifié hors du `header` menu ouvert : épingle exactement le choix « `<header>` plutôt que `role` sur l'host ».
+- ✨ `drawer.spec.ts:122` — couvre le second `banner` découvert à l'axe (tranche 4), invisible au prérendu.
