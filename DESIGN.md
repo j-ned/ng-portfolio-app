@@ -185,9 +185,9 @@ Contrastes calculés (composition sRGB, WCAG 2.x) : `line` 1,22:1 (Console, fond
 
 ### Status
 
-- **Status Success** (`#16a34a`): badges success, états validés.
-- **Status Warn** (`#d97706`): badges avertissement.
-- **Status Error** (`#dc2626`): erreurs de form, messages destructifs.
+- **Status Success** (`#016630`, green-800 en Ivoire): badges success, états validés.
+- **Status Warn** (`#973c00`, amber-800 en Ivoire): badges avertissement.
+- **Status Error** (`#9f0712`, red-800 en Ivoire): erreurs de form, messages destructifs.
 
 ### Named Rules
 
