@@ -650,3 +650,112 @@ suivante.
 2. **Pas de rappel pour une réservation faite moins de 30 h avant le rendez-vous** : réservée à
    24 h 05, elle recevrait sinon le rappel quelques minutes après la confirmation. Recommandation :
    garder le seuil de 30 h (`reminderMinCreatedAheadHours`).
+
+## Plan de test
+
+### Tranche A1 — les créneaux libres sont justes toute l'année
+
+API `nest-portfolio-app`, branche `feat/booking`, fichiers sous `src/booking/` (66 tests, 6 suites,
+builders partagés `booking-test-builders.ts` : `anAvailabilityRule`, `anAvailabilityClosure`,
+`aBooking`, typés sur `AvailabilityRule`, `AvailabilityClosure`, `Booking` du barrel `schema`).
+
+Signatures figées par les tests (non précisées au plan) :
+`computeFreeSlots({ now, rules, closures, bookings }): readonly { startsAt: Date; endsAt: Date }[]`
+(les rendez-vous portent `status`, un `cancelled` est ignoré par le calcul) ;
+`AvailabilityService.listRules()` et `listClosures()` (terminateur Drizzle `orderBy`, fermetures
+filtrées sur `endsOn >= date de Paris du jour`) ; `BookingService` injecte `DRIZZLE` et
+`AvailabilityService`, lit les rendez-vous de la fenêtre (terminateur `where`) ;
+`getSlots(): Promise<{ timeZone: 'Europe/Paris'; slots: { startsAt: string; endsAt: string }[] }>`
+(chaînes `toISOString()`).
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `booking-policy.spec.ts` | 1 | constante de politique | `toEqual` exact de `BOOKING_POLICY` (golden) |
+| `paris-time.spec.ts` | 13 | `parisWallTimeToUtc` : table DST des consignes + minuit / 23:30 du 25/10, 02:00 répété, 01:30 et 02:00 du 28/03 | instant ISO exact ou `null` |
+| | 6 | `toParisDate` aux bords des deux jours de bascule | date `YYYY-MM-DD` de Paris |
+| | 5 | `isoWeekday` | 1 à 7, dimanche = 7 |
+| | 4 | `formatParisLong` | « lundi 19 octobre 2026 à 09:00 », heure répétée, lendemain du trou |
+| `compute-free-slots.spec.ts` | 3 | plage dimanche 0–1440 : 25/10/2026, 28/03/2027 ; durée | 48 (sans `01:00Z`/`01:30Z`), 46 (`00:30Z` suivi de `01:00Z`) ; 30 min absolues |
+| | 2 | préavis | 24 h pile proposé, 23 h 59 refusé |
+| | 4 | horizon | 21 j pile proposé, 21 j + 30 min refusé, triangulé à 09:30 ; bornes min/max = now + 24 h / now + 21 j |
+| | 8 | battement | RDV 10:00–10:30 → 09:30, 10:00, 10:30 exclus, 09:00 et 11:00 libres ; liste exacte ; bornes semi-ouvertes (RDV 10:15–10:45 → 09:30 et 11:00 libres) ; RDV annulé ignoré |
+| | 7 | fermetures | inclusive aux deux bornes ; jugée sur la date de Paris (plage jeudi 00:00–01:00 = mercredi 23:00Z) |
+| | 3 | plages | 09:00–10:00 → 09:00 et 09:30 ; tri et dédoublonnage ; aucune plage → `[]` |
+| `availability.service.spec.ts` | 3 | lecture | `listRules` rend les lignes ; `listClosures` filtre sur `2026-10-25` à 22:30Z et `2026-10-26` à 23:30Z (date de Paris, pas UTC) |
+| `booking.service.spec.ts` | 5 | `getSlots` (horloge simulée) | réponse exacte `{ timeZone, slots }` avec battement ; annulé non bloquant ; préavis depuis l'heure courante ; aucune donnée personnelle sérialisée ; vide |
+| `booking.controller.spec.ts` | 2 | `GET /booking/slots` (supertest, ValidationPipe de `main.ts`) | 200, corps du service, `Cache-Control: no-store` ; aucune garde, `PublicReadThrottle` (120 / 60 s) |
+
+Indépendance au fuseau du processus : prouvée par le rejeu `TZ=Pacific/Kiritimati pnpm test --
+src/booking` prescrit par la tranche (changer `process.env.TZ` dans un test n'a pas d'effet sous
+Jest, vérifié). Non couverts par un test automatique en A1 : schéma et migration `0022`
+(`pnpm db:migrate` sur la base jetable), câblage `BookingModule` dans `AppModule` (`pnpm build`
+et démarrage), contrôle ICU dans l'image ; `overlapsBooking` est laissé à A2, qui l'utilise.
+
+Sortie condensée (`pnpm test -- src/booking; echo $?`) :
+
+```
+FAIL src/booking/booking-policy.spec.ts      Cannot find module './booking-policy'
+FAIL src/booking/paris-time.spec.ts          Cannot find module './paris-time'
+FAIL src/booking/compute-free-slots.spec.ts  Cannot find module './compute-free-slots'
+FAIL src/booking/availability.service.spec.ts Cannot find module './availability.service'
+FAIL src/booking/booking.service.spec.ts     Cannot find module './availability.service'
+FAIL src/booking/booking.controller.spec.ts  Cannot find module './booking.controller'
+Test Suites: 6 failed, 6 total
+EXIT 1
+```
+
+`pnpm test; echo $?` : `Test Suites: 6 failed, 1 skipped, 47 passed` ; `Tests: 5 skipped, 897
+passed` ; exit 1 ; les seuls échecs sont les six suites `src/booking`. `tsc --noEmit` : seules
+erreurs nouvelles TS2307 (modules absents) et TS2305 (`Booking`, `AvailabilityRule`,
+`AvailabilityClosure` absents du barrel) ; prettier vert ; eslint ne signale que des cascades de
+types non résolus.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 16:32, 6 failed / 6 total suites, 66 tests écrits non collectés). Nature : module
+applicatif introuvable à l'import (aucune erreur de harnais) ; le GREEN doit créer
+`booking-policy.ts`, `paris-time.ts`, `compute-free-slots.ts`, `availability.service.ts`,
+`booking.service.ts`, `booking.controller.ts` et les types du schéma.
+
+## Journal des tranches
+
+### A1
+
+GREEN le 2026-10-13, API `nest-portfolio-app` branche `feat/booking`, non commité. Tests de `qa`
+inchangés.
+
+**Fichiers**
+- Créés : `src/database/schema/booking.ts` (trois tables, checks, index, types `AvailabilityRule`,
+  `AvailabilityClosure`, `Booking`, `NewBooking`), `drizzle/0022_booking.sql`,
+  `drizzle/meta/0022_snapshot.json` (`pnpm db:generate --name booking`, nommé directement
+  `0022_booking`), `src/booking/booking-policy.ts`, `paris-time.ts`, `compute-free-slots.ts`,
+  `availability.service.ts`, `booking.service.ts`, `booking.controller.ts`, `booking.module.ts`.
+- Modifiés : `src/database/schema/index.ts` (import, `export *`, `schema`),
+  `drizzle/meta/_journal.json` (entrée 22), `src/app.module.ts` (`BookingModule`).
+
+**Écarts au plan**
+- Colonnes `format`, `status`, `cancelled_by` déclarées `text(…, { enum })` (patron `projects.kind`) en
+  plus des checks : types littéraux côté TypeScript, aucun effet sur le SQL généré.
+- `computeFreeSlots` prend des `Pick<…>` (plages : jour et minutes ; fermetures : dates ; rendez-vous :
+  `startsAt`, `endsAt`, `status`) ; `BookingService` ne sélectionne que ces trois colonnes des
+  rendez-vous (`confirmed`, `ends_at > now`, `starts_at < now + 21 j + 45 min`) : aucune donnée
+  personnelle n'est lue pour la route publique.
+- `overlapsBooking` non exporté (laissé à A2, comme prévu au plan de test) : le test de battement est
+  en ligne dans `computeFreeSlots`.
+- Postgres jetable lancé avec **Docker** (`docker run`, mêmes arguments) : `podman` n'est pas installé
+  sur le poste.
+
+**Preuves**
+- `pnpm test -- src/booking; echo $?` → `Test Suites: 6 passed`, `Tests: 66 passed`, exit 0 ;
+  `TZ=Pacific/Kiritimati pnpm test -- src/booking` → idem, exit 0 (le `globalSetup` respecte un `TZ`
+  explicite).
+- `pnpm test; echo $?` → `Test Suites: 1 skipped, 53 passed` ; `Tests: 5 skipped, 963 passed`, exit 0.
+- `pnpm lint` exit 0 ; `pnpm build` exit 0.
+- `DATABASE_URL=postgres://postgres:it@127.0.0.1:55433/postgres pnpm db:migrate` exit 0 sur
+  `postgres:17-alpine` neuve ; `\d booking` montre les 18 colonnes, `booking_cancel_token_hash_unique`,
+  `booking_starts_at_idx` et les six checks ; `availability_rule` et `availability_closure` avec leurs
+  checks ; 23 migrations journalisées.
+- Contrôle hors test sur la même base (script jetable supprimé) : plage mercredi 09:00–12:00 → 12
+  créneaux (deux mercredis dans la fenêtre au 2026-10-13), un rendez-vous confirmé inséré à 10:00 →
+  9 (09:30, 10:00, 10:30 retirés) ; fermeture passée filtrée par `listClosures`.
+- ICU dans `node:24-alpine` (image de l'API) : `02:30` ; libellé long
+  « dimanche 25 octobre 2026 à 02:30 ».
