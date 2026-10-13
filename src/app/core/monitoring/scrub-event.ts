@@ -1,6 +1,7 @@
-import type { Breadcrumb, ErrorEvent } from '@sentry/angular';
+import type { Breadcrumb, BrowserOptions, ErrorEvent } from '@sentry/angular';
 
 type EventRequest = NonNullable<ErrorEvent['request']>;
+type StreamedSpan = Parameters<NonNullable<BrowserOptions['beforeSendSpan']>>[0];
 
 const FILTERED = '[Filtered]';
 const FILTERED_BODY_KEYS = ['password', 'newPassword', 'currentPassword', 'code', 'token', 'email'];
@@ -58,6 +59,25 @@ export function scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb {
         key,
         urlKeys.includes(key) && typeof value === 'string' ? withoutQueryAndFragment(value) : value,
       ]),
+    ),
+  };
+}
+
+const SPAN_URL_KEYS = ['url.full', 'http.url'];
+const DROPPED_SPAN_KEYS = ['url.query', 'url.fragment'];
+
+export function scrubSpan(span: StreamedSpan): StreamedSpan {
+  return {
+    ...span,
+    attributes: Object.fromEntries(
+      Object.entries(span.attributes)
+        .filter(([key]) => !DROPPED_SPAN_KEYS.includes(key))
+        .map(([key, value]) => [
+          key,
+          SPAN_URL_KEYS.includes(key) && typeof value === 'string'
+            ? withoutQueryAndFragment(value)
+            : value,
+        ]),
     ),
   };
 }

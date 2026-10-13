@@ -4,9 +4,9 @@ import type {
   BookingFormat,
 } from './models/booking.model';
 
-export type BookingFicheRow = { readonly label: string; readonly value: string };
+type BookingFicheRow = { readonly label: string; readonly value: string };
 
-export type BookingFiche = { readonly title: string; readonly rows: readonly BookingFicheRow[] };
+type BookingFiche = { readonly title: string; readonly rows: readonly BookingFicheRow[] };
 
 export const BOOKING_FICHE: BookingFiche = {
   title: 'Appel de cadrage · 30 min',

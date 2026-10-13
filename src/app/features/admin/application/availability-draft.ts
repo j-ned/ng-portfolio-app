@@ -5,7 +5,7 @@ import type {
 
 export type AvailabilityRangeRow = { start: string; end: string };
 
-export type AvailabilityWeekdayKey =
+type AvailabilityWeekdayKey =
   'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
 export type AvailabilityDraft = Record<AvailabilityWeekdayKey, AvailabilityRangeRow[]>;

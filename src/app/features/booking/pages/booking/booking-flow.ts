@@ -39,7 +39,7 @@ const EMPTY_BOOKING: BookingDraft = {
   website: '',
 };
 
-export type BookingOutcome =
+type BookingOutcome =
   | {
       readonly kind: 'confirmed';
       readonly confirmation: BookingConfirmation;

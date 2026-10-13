@@ -8,7 +8,7 @@ import { counted } from '@shared/format/counted';
 import { groupedNumber } from '@shared/format/grouped-number';
 import type { FilterOption } from '@shared/ui/filter-group';
 
-export type AdminBookingContact =
+type AdminBookingContact =
   | { readonly kind: 'video'; readonly href: string }
   | { readonly kind: 'phone'; readonly href: string; readonly label: string };
 
