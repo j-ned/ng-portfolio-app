@@ -28,11 +28,41 @@ const withFilteredBody = (data: unknown): unknown =>
       )
     : data;
 
+type EventException = NonNullable<ErrorEvent['exception']>;
+type StackFrame = NonNullable<
+  NonNullable<NonNullable<EventException['values']>[number]['stacktrace']>['frames']
+>[number];
+
+// Une erreur globale sans script (« Script error ») prend location.href comme fichier de frame.
+const withScrubbedFrame = ({ filename, abs_path, ...frame }: StackFrame): StackFrame => ({
+  ...frame,
+  ...(filename !== undefined && { filename: withoutQueryAndFragment(filename) }),
+  ...(abs_path !== undefined && { abs_path: withoutQueryAndFragment(abs_path) }),
+});
+
+const withScrubbedFrames = (exception: EventException): EventException => ({
+  ...exception,
+  values: exception.values?.map((value) =>
+    value.stacktrace?.frames
+      ? {
+          ...value,
+          stacktrace: {
+            ...value.stacktrace,
+            frames: value.stacktrace.frames.map(withScrubbedFrame),
+          },
+        }
+      : value,
+  ),
+});
+
 export function scrubEvent(event: ErrorEvent): ErrorEvent {
-  if (!event.request) return event;
-  const { cookies: _cookies, url, headers, data, ...request } = event.request;
+  const scrubbed = event.exception
+    ? { ...event, exception: withScrubbedFrames(event.exception) }
+    : event;
+  if (!scrubbed.request) return scrubbed;
+  const { cookies: _cookies, url, headers, data, ...request } = scrubbed.request;
   return {
-    ...event,
+    ...scrubbed,
     request: {
       ...request,
       ...(url !== undefined && { url: withoutQueryAndFragment(url) }),

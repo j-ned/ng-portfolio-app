@@ -89,6 +89,49 @@ describe('scrubEvent', () => {
   });
 });
 
+describe('scrubEvent stack frames', () => {
+  const TOKEN_URL =
+    'https://nedellec-julien.fr/rendez-vous/annulation#AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde';
+  const PAGE_URL = 'https://nedellec-julien.fr/rendez-vous/annulation';
+
+  it('given a global error whose frame filename is the page URL with the cancel token, when scrubbed, then filename and abs_path lose the fragment', () => {
+    const event: ErrorEvent = {
+      type: undefined,
+      exception: {
+        values: [
+          {
+            type: 'Error',
+            value: 'Script error',
+            stacktrace: {
+              frames: [
+                { filename: TOKEN_URL, abs_path: TOKEN_URL, lineno: 1 },
+                { filename: 'https://nedellec-julien.fr/main-ABCDEFGH.js', lineno: 2 },
+              ],
+            },
+          },
+        ],
+      },
+    };
+
+    const frames = scrubEvent(event).exception?.values?.[0]?.stacktrace?.frames;
+
+    expect(frames).toEqual([
+      { filename: PAGE_URL, abs_path: PAGE_URL, lineno: 1 },
+      { filename: 'https://nedellec-julien.fr/main-ABCDEFGH.js', lineno: 2 },
+    ]);
+    expect(JSON.stringify(scrubEvent(event))).not.toContain('AbCdEf');
+  });
+
+  it('given an exception without stack trace, when scrubbed, then it is kept as is', () => {
+    const event: ErrorEvent = {
+      type: undefined,
+      exception: { values: [{ type: 'Error', value: 'boom' }] },
+    };
+
+    expect(scrubEvent(event)).toEqual(event);
+  });
+});
+
 describe('scrubBreadcrumb', () => {
   it.each([
     { category: 'fetch', url: '/api/fail?email=x@y.z', expected: '/api/fail' },

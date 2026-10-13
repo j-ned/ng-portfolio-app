@@ -2654,3 +2654,38 @@ Correctifs du 2026-10-13, non commités, sur `5643df1`.
 3. **Motif email (non bloquant) : laissé en l'état.** `@IsEmail()` sans option = `validator.js` `isEmail` (partie locale ≤ 64 octets, domaine FQDN avec TLD alphabétique d'au moins 2 caractères ou punycode, labels sans `_` ni tiret en bord, règles de points et de guillemets). Le reproduire fidèlement demande soit la dépendance `validator` côté front, soit une regex longue qui resterait une approximation (donc un écart résiduel quand même) ; et le motif est aujourd'hui partagé à l'identique avec `contact-form.ts` (duplication déjà signalée pour extraction dans `shared/forms/`). L'alignement a sa place dans ce suivi, sur les deux formulaires à la fois, plutôt qu'en divergence locale dans la réservation.
 
 **Gates** (sorties réelles, après correctifs) : `pnpm test; echo $?` → `Test Files 248 passed (248)`, `Tests 4510 passed (4510)`, `0` · `pnpm lint; echo $?` → « All files pass linting. », `0` · `pnpm run build --configuration production; echo $?` → « Prerendered 9 static routes. », `0` · `prettier --check` sur les fichiers touchés : conforme.
+
+#### Re-revue des correctifs (`5643df1..391f295`)
+
+Revue du 2026-10-13, limitée à `git diff 5643df1..391f295` (8 fichiers, commit `391f295`).
+
+**Verdict** : APPROVED
+**Gates CI locaux** : tests ✅ (`pnpm test`, exit 0 : 248 fichiers, 4510 tests passés sur 4510) / lint ✅ (`pnpm lint`, exit 0, « All files pass linting. ») / build ✅ (`pnpm run build --configuration production`, exit 0, « Prerendered 9 static routes. ») / format ✅ (`pnpm run format:check`, exit 0).
+**Checks mécaniques** : checker non vendoré : greps à la main sur le diff. Aucun snapshot, `.only`/`.skip`, boucle générant des `it` ; un seul commentaire ajouté (`main.ts`, une ligne de WHY) ; `scrubSpan` a un consommateur hors de son fichier (`main.ts`) ; les cinq symboles du point 2 ne sont plus exportés et n'apparaissent que dans leur fichier.
+**Warnings de gate** : aucun nouveau (a).
+**Rendu compilé** : N/A (aucune surface UI touchée)
+**Preuve de verify runtime** : ✅ preuve de la revue initiale, toujours valable : le diff ne change ni gabarit ni route ni comportement visible ; `beforeSendSpan` ne s'exécute que lorsque Sentry est configuré (inactif devant la doublure, qui ne sert pas `/api/config`), la preuve de ce chemin repose donc sur les tests unitaires et la lecture du SDK ci-dessous.
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : N/A
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+Constats :
+- **Analyse « stream » confirmée dans `node_modules`** (`@sentry/core` 11.0.0) : `client.js:95` réduit `traceLifecycle` à `"stream"` sauf `'static'` explicite (absent de `main.ts`) ; `utils/warnAboutIgnoredTransactionOptions.js` signale `beforeSendTransaction` comme ignoré dans ce mode ; `tracing/spans/captureSpan.js` émet `processSpan` (où `httpContextIntegration` pose `url.full` sur le segment) **puis** applique `beforeSendSpan` s'il n'est pas marqué statique (`isStaticBeforeSendSpanCallback` : propriété `_static`, que `scrubSpan` n'a pas) ; `browserTracingIntegration._createRouteSpan` pose `url.full` via `filterCollectedUrl`, qui ne retire que la query. Mon correctif attendu (`beforeSendTransaction`) visait le mode transaction : il aurait été ignoré. `beforeSendSpan: scrubSpan` est le bon crochet, et il voit les attributs après leur pose.
+- **Point 1 levé.** `scrubSpan` est pure (test de non-mutation), nettoie `url.full` et `http.url`, retire `url.query` et `url.fragment`, garde le reste ; tests RED puis GREEN tracés au bloc Correctifs, jeton absent du JSON sérialisé de spans segment et enfant. Les noms de spans streamés ne portent pas d'URL (nom de repli bas cardinal au pageload en mode stream) ; erreurs et breadcrumbs restent couverts par `scrubEvent`/`scrubBreadcrumb`.
+- **Point 2 levé.**
+- Motif email laissé en l'état : raisonnement accepté (alignement à faire sur les deux formulaires dans le suivi d'extraction `shared/forms/`).
+
+**Risque résiduel** (non bloquant) :
+- `integrations/globalhandlers.js:111` (`@sentry/browser`) prend `location.href` comme nom de fichier d'une frame d'erreur globale sans URL de script (cas « Script error » ou erreur inline), et `scrubEvent` ne nettoie pas les frames : sur la page d'annulation, une telle erreur emporterait le fragment. Cas rare, préexistant et étranger à ce diff ; à traiter dans un suivi en étendant `scrubEvent` aux `exception.values[].stacktrace.frames[].filename`.
+- Le correctif dépend du mode `stream` : un passage à `traceLifecycle: 'static'` exigerait `beforeSendTransaction` et `withStaticSpan` (noté au bloc Correctifs, à garder en tête lors d'une montée de version Sentry).
+- Les autres risques de la revue initiale restent valables (ordre de déploiement API → plages → front, Sentry absent des gates de CI).
+
+#### Suivi traité avant la PR (2026-10-13)
+
+Risque résiduel de la re-revue (fragment dans les frames d'erreur globale) corrigé : `scrubEvent`
+nettoie `filename` et `abs_path` des frames de `exception.values[].stacktrace` (query et fragment).
+RED : `pnpm test --include='src/app/core/monitoring/scrub-event.spec.ts'` 1 failed / 31 ; GREEN :
+31 passed ; `pnpm test` 4512 passed, exit 0 ; `pnpm lint` exit 0.
