@@ -16,6 +16,7 @@ export const serverRoutes: ServerRoute[] = [
   // Contenu écrit dans le code : prérendu au build
   { path: 'mentions-legales', renderMode: RenderMode.Prerender },
   { path: 'confidentialite', renderMode: RenderMode.Prerender },
+  { path: 'rendez-vous', renderMode: RenderMode.Prerender },
   { path: OFFERS_BASE_PATH, renderMode: RenderMode.Prerender },
   ...OFFERS.map(({ slug }): ServerRoute => ({
     path: `${OFFERS_BASE_PATH}/${slug}`,

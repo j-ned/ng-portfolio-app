@@ -67,6 +67,11 @@ describe('groupDaysByWeek', () => {
       ],
     },
     {
+      case: 'a week starting on the first of the month',
+      dates: ['2027-02-03'],
+      expected: [{ key: '2027-02-01', label: 'Semaine du 1er février', dates: ['2027-02-03'] }],
+    },
+    {
       case: 'a week without any free day in between',
       dates: ['2026-10-20', '2026-11-03'],
       expected: [

@@ -1,3 +1,5 @@
+import { withFirstOfMonth } from '@shared/format/with-first-of-month';
+
 const PARIS_TIME_ZONE = 'Europe/Paris';
 
 const DATE_KEY = new Intl.DateTimeFormat('fr-FR', {
@@ -55,17 +57,17 @@ export function formatParisTime(instant: string): string {
 
 export function formatParisDateTime(instant: string): string {
   const date = new Date(instant);
-  return `${LONG_DATE.format(date)} à ${TIME.format(date)}`;
+  return `${withFirstOfMonth(LONG_DATE, date)} à ${TIME.format(date)}`;
 }
 
 export function formatDayLabel(dateKey: string): string {
-  return DAY_LABEL.format(fromDateKey(dateKey));
+  return withFirstOfMonth(DAY_LABEL, fromDateKey(dateKey));
 }
 
 export function formatDayShortLabel(dateKey: string): string {
-  return DAY_SHORT_LABEL.format(fromDateKey(dateKey));
+  return withFirstOfMonth(DAY_SHORT_LABEL, fromDateKey(dateKey));
 }
 
 export function formatWeekLabel(mondayKey: string): string {
-  return `Semaine du ${DAY_MONTH.format(fromDateKey(mondayKey))}`;
+  return `Semaine du ${withFirstOfMonth(DAY_MONTH, fromDateKey(mondayKey))}`;
 }

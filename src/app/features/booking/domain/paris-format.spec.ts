@@ -68,6 +68,7 @@ describe('formatParisDateTime', () => {
     { instant: '2026-10-19T07:00:00.000Z', expected: 'lundi 19 octobre 2026 à 09:00' },
     { instant: '2026-10-19T22:30:00.000Z', expected: 'mardi 20 octobre 2026 à 00:30' },
     { instant: '2027-03-29T07:00:00.000Z', expected: 'lundi 29 mars 2027 à 09:00' },
+    { instant: '2026-11-01T08:00:00.000Z', expected: 'dimanche 1er novembre 2026 à 09:00' },
   ])('Given $instant When formatted Then it reads « $expected »', ({ instant, expected }) => {
     expect(formatParisDateTime(instant)).toBe(expected);
   });
@@ -77,8 +78,8 @@ describe('formatDayLabel', () => {
   it.each([
     { date: '2026-10-19', expected: 'lundi 19 octobre' },
     { date: '2026-10-25', expected: 'dimanche 25 octobre' },
-    { date: '2026-11-01', expected: 'dimanche 1 novembre' },
-    { date: '2027-01-01', expected: 'vendredi 1 janvier' },
+    { date: '2026-11-01', expected: 'dimanche 1er novembre' },
+    { date: '2027-01-01', expected: 'vendredi 1er janvier' },
     { date: '2027-03-28', expected: 'dimanche 28 mars' },
   ])('Given Paris date $date When labelled Then it reads « $expected »', ({ date, expected }) => {
     expect(formatDayLabel(date)).toBe(expected);
@@ -89,7 +90,7 @@ describe('formatDayShortLabel', () => {
   it.each([
     { date: '2026-10-19', expected: 'lun. 19' },
     { date: '2026-10-25', expected: 'dim. 25' },
-    { date: '2026-11-01', expected: 'dim. 1' },
+    { date: '2026-11-01', expected: 'dim. 1er' },
     { date: '2027-03-28', expected: 'dim. 28' },
   ])('Given Paris date $date When labelled Then it reads « $expected »', ({ date, expected }) => {
     expect(formatDayShortLabel(date)).toBe(expected);

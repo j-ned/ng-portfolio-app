@@ -650,6 +650,10 @@ suivante.
 2. **Pas de rappel pour une réservation faite moins de 30 h avant le rendez-vous** : réservée à
    24 h 05, elle recevrait sinon le rappel quelques minutes après la confirmation. Recommandation :
    garder le seuil de 30 h (`reminderMinCreatedAheadHours`).
+3. **« 1er » pour le premier du mois sur la page publique** (arbitré le 2026-10-13) : « dimanche 1er
+   novembre », « dim. 1er », « Semaine du 1er février », « dimanche 1er novembre 2026 à 09:00 »,
+   cohérent avec l'admin (`withFirstOfMonth`). Les emails de l'API (`formatParisLong`) écrivent encore
+   « 1 novembre » : hors de cette PR front.
 
 ## Plan de test
 
@@ -1155,6 +1159,112 @@ erreur de harnais, aucun délai dépassé. Le GREEN remplace les corps neutres, 
 `{ provide: BookingGateway, useClass: HttpBookingGateway }` dans `app.config.ts`, et peut ajuster la
 forme interne des squelettes (pas les signatures publiques, figées par les tests).
 
+### Tranche F2a — le visiteur choisit un jour et une heure
+
+Front, branche `feat/024-prise-de-rendez-vous` (sur `1afaeac`), 44 tests neufs : 35 dans 4 fichiers
+neufs de la feature, 5 dans `src/app/app.routes.booking.spec.ts`, 4 ajoutés à des suites existantes.
+
+**Limite F2a / F2b.** Le choix de l'heure passe par `[formField]` (plan) : F2a pose donc `form()` sur un
+modèle réduit à `startsAt` ; le schéma (requis, coordonnées, téléphone), la soumission, l'erreur
+`booking-start-error`, `booking-time-heading` et le récapitulatif restent à F2b. `selectDay` vide
+`startsAt` dès F2a (Consignes : « changer de jour vide l'heure »).
+
+**Squelettes de signature** (même raison qu'en F1, un bundle unique) : `booking-copy.static-data.ts`
+(`BOOKING_FICHE` vide), `booking.routes.ts` (`BOOKING_ROUTES = []`), `BookingFlow` (signaux constants,
+méthodes sans effet, `state` constant à `'error'` pour qu'aucun test d'état ne passe par hasard),
+`Booking`, `BookingDayPicker`, `BookingTimePicker` (entrées et sorties, gabarit vide). Doublure ajoutée :
+`testing/radio-label.ts` (`radioLabel` : texte du `<label>` du radio hors `aria-hidden`, happy-dom ne
+calculant pas le nom accessible ; `radiosOf` : radios natifs portant le `data-testid`).
+
+Décision du propriétaire appliquée (2026-10-13, « 1er ») : changement de contrat des formateurs de F1,
+pas une adaptation mécanique ; quatre valeurs attendues de `paris-format.spec.ts` passent à « 1er »
+et deux cas sont ajoutés. Le GREEN ne peut pas importer `admin/application/with-first-of-month.ts`
+depuis `booking/domain` (règle de dépendance) : déplacement vers `shared/format/` ou équivalent.
+
+Signatures figées par les tests (non précisées au plan) :
+- `BookingFlow` (`@Injectable()`, fourni par `providers: [BookingFlow]` de `Booking`) : `state:
+  Signal<LoadState>` (`idle` et `loading` → `'loading'`), `weeks`, `currentWeek: Signal<BookingWeek |
+  null>`, `hasPreviousWeek`, `hasNextWeek`, `showPreviousWeek()`, `showNextWeek()` (sans effet aux
+  bornes), `selectedDate: Signal<string | null>`, `selectedDay: Signal<BookingDay | null>`,
+  `selectDay(date)`, `reloadSlots()`, `form.startsAt` (`FieldTree<string>`, `''` par défaut). Semaine
+  affichée bornée après rechargement. Arbitrage du propriétaire (2026-10-13, après le GREEN) : changer
+  de semaine conserve jour et heure ; au rechargement, un jour disparu repasse à `null` **et** l'heure à
+  `''` ; une heure disparue (jour présent) repasse à `''` ; jour et heure présents sont gardés.
+- `BookingDayPicker` : entrées `week` (requise), `selectedDate`, `hasPrevious`, `hasNext` ; sorties
+  `daySelected` (date), `previousWeek`, `nextWeek`. Radios natifs `booking-day-option` (testid sur
+  l'`input`, `value` = date, nom = libellé long), un seul `fieldset` dont la `legend` est le libellé de
+  semaine ; boutons `type="button"` nommés « Semaine précédente » / « Semaine suivante », `aria-disabled="true"`
+  aux bornes (jamais `disabled` natif) et sans émission.
+- `BookingTimePicker` : entrées `day` et `field` (`FieldTree<string>`) ; radios `booking-time-option`
+  (`value` = instant, nom = heure de Paris), `legend` = libellé du jour ; couvert par la page.
+- Page : `booking-time-picker` absent tant qu'aucun jour n'est choisi ; état vide avec un bouton
+  `booking-empty-contact` (testid ajouté à la liste) qui appelle `SectionScroller.scrollTo('contact')`,
+  patron du pied de page ; un seul `h1`, aucun `header`/`main`/`footer`.
+- Route : `rendez-vous` en `loadChildren` vers `BOOKING_ROUTES`, `''` → `Booking` portant `title` (suffixe
+  « | Julien Nédellec ») et `data.seo` (même titre, `url`, `type: 'website'`, description de 70 à 160
+  caractères, fil d'Ariane « Accueil » › « Prendre rendez-vous ») ; `rendez-vous` en `Prerender` ;
+  sitemap `/rendez-vous` juste après `/blog`, `monthly`, `0.6`.
+- Copie proposée, figée en golden (à relire par le propriétaire) : `BOOKING_FICHE` = « Appel de cadrage
+  · 30 min » ; Durée « 30 min », Format « Visio ou téléphone », Tarif « Gratuit », Fuseau « Heure de Paris ».
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `pages/booking/booking-flow.spec.ts` | 5 | chargement : serveur, en cours, vide, deux semaines, erreur puis relance | `getSlots` jamais appelé et `'loading'` au serveur ; 1 appel en cours ; `'empty'` ; `'ready'`, clés et libellés ; `'error'` puis 2 appels et `'ready'` |
+| | 5 | navigation de semaine | aller-retour avec les deux bornes ; sans effet au-delà de la dernière et de la première ; jour et heure conservés à l'aller et au retour ; semaine ramenée à la seule restante après rechargement |
+| | 5 | sélection | jour choisi avec ses heures et sans heure ; changer de jour vide `startsAt` ; jour disparu → jour `null` et heure `''` ; heure seule disparue → jour gardé, heure `''` ; jour et heure gardés |
+| `application/booking-day-picker.spec.ts` | 7 | composant dumb | radios (nom, valeur, non cochés) ; groupe : même `name`, un `fieldset`, `legend` = semaine ; seul le jour choisi coché ; clic → `daySelected` ; boutons actifs → une émission chacun ; bornes → `aria-disabled`, focusables, aucune émission ; noms des boutons |
+| `pages/booking/booking.spec.ts` | 2 | prérendu et chargement | serveur : fiche + `booking-slots-loading`, 0 appel ; squelette du navigateur en attente identique (`outerHTML`) à celui du serveur |
+| | 1 | fiche | titre et lignes du cartouche = `BOOKING_FICHE` |
+| | 3 | états | `load-error` puis Réessayer → 2 appels, jours affichés ; vide sans sélecteurs ; contact → `scrollTo('contact')` |
+| | 5 | parcours | première semaine, pas d'heure ; heures du jour (nom, valeur, `legend`) ; heure cochée ; changer de jour puis revenir → aucune heure cochée ; semaine suivante, bornes `aria-disabled` |
+| | 1 | structure | un `h1`, aucun repère |
+| `domain/booking-copy.static-data.spec.ts` | 1 | golden | `toEqual` de `BOOKING_FICHE` |
+| `domain/paris-format.spec.ts` (contrat « 1er ») | 3 modifiés + 1 ajouté | `formatDayLabel` 1/11 et 1/1, `formatDayShortLabel` 1/11, `formatParisDateTime` 1/11 | « dimanche 1er novembre », « vendredi 1er janvier », « dim. 1er », « dimanche 1er novembre 2026 à 09:00 » |
+| `domain/group-days-by-week.spec.ts` | 1 ajouté | semaine d'un lundi 1er | `2027-02-01`, « Semaine du 1er février » |
+| `src/app/app.routes.booking.spec.ts` | 5 | route | `loadChildren` → `BOOKING_ROUTES` ; `/rendez-vous` → `Booking` ; titre et SEO ; description ; fil d'Ariane |
+| `src/app/app.routes.server.spec.ts` | 1 ajouté (`it.each`) | rendu | `rendez-vous` en `Prerender` |
+| `src/server/feeds/sitemap.spec.ts` | 2 adaptés + 1 ajouté | sitemap | ordre avec `/rendez-vous` après `/blog` ; 8 pages statiques + offres ; entrée `monthly` `0.6` |
+
+Balayage de recalibration (le sitemap gagne une page statique) : `grep` de `7 + OFFERS`, `/blog\``,
+`confidentialite` et `mentions-legales` sur `src/**/*.spec.ts` ; seuls `sitemap.spec.ts` (ordre, compte) et
+`app.routes.server.spec.ts` encodaient la liste ; `footer.spec.ts` (liens du pied de page) relève de F4.
+Balayage « 1er » : `1 novembre`, `1 janvier`, `dim. 1'`, `Semaine du` sur `src/app/features/booking`.
+
+Non couverts par un test automatique : `PUBLIC_READ_PATHS` sans `/booking` (aucune requête au rendu
+serveur, prouvé par le test de prérendu) ; `dist/angular-portfolio-app/browser/rendez-vous/index.html`
+produit sans requête au build (`pnpm run build --configuration production`, vérification du GREEN) ;
+`booking-time-picker` sans spec isolé (rendu et liaison prouvés par la page).
+
+Sortie condensée (`pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?`) :
+
+```
+Test Files  6 failed | 3 passed (9)
+     Tests  38 failed | 99 passed (137)
+EXIT 1
+```
+
+`pnpm test; echo $?` (après `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+`Test Files 9 failed | 232 passed (241)` ; `Tests 47 failed | 4146 passed (4193)` ; exit 1. Échecs :
+`booking-flow.spec.ts` 13, `booking.spec.ts` 12, `booking-day-picker.spec.ts` 7, `app.routes.booking.spec.ts`
+5, `paris-format.spec.ts` 4, `sitemap.spec.ts` 3, `booking-copy.static-data.spec.ts` 1,
+`group-days-by-week.spec.ts` 1, `app.routes.server.spec.ts` 1 ; les 102 tests de F1 non touchés et toutes
+les autres suites restent verts. Typecheck et Prettier verts (le bundle de test se construit) ; `eslint`
+sur les fichiers touchés : exit 0 ; grep d'archéologie : aucun résultat dans les fichiers écrits.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 19:04, 47 failed / 4193 total). Nature : 47 `AssertionError` (valeur neutre des
+squelettes, page vide, route et sitemap absents) ; aucune erreur de harnais, aucun délai dépassé.
+
+Reprise après le GREEN (2026-10-13 19:20, sur demande de la session) : le test « slots on their way »
+dépassait 5 s une fois la ressource réelle en place (une `rxResource` en chargement garde une
+`PendingTask`, `whenStable()` ne se résout jamais avec `NEVER`) : le `flush()` de
+`booking-flow.spec.ts` borne désormais l'attente par une macro-tâche, comme `settleBounded`, assertion
+inchangée. Arbitrage ci-dessus figé : 1 test ajouté (semaine changée, jour et heure conservés), 1 test
+ajouté (heure seule disparue), 2 tests renforcés (jour disparu : heure `''` ; jour gardé : heure gardée).
+Ces cas sont verts contre l'implémentation GREEN existante (elle appliquait déjà l'arbitrage) : pas de
+RED à rendre. Ciblée : `Test Files 9 passed (9)`, `Tests 139 passed (139)`, exit 0 ; `pnpm test` (cache
+vidé) : `Test Files 241 passed (241)`, `Tests 4195 passed (4195)`, exit 0 ; `eslint` du fichier : exit 0.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1163,6 +1273,7 @@ forme interne des squelettes (pas les signatures publiques, figées par les test
 - **Tranche A4 — l'admin gère plages, fermetures et rendez-vous** : GREEN 359 passed / 359 total + 14 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 14 passed / 14 total sur Postgres 17 réel (exit 0), application démarrée (`node dist/main.js`) : 8 routes admin mappées, 401 sans session, parcours admin complet et 4 emails dans Mailpit · refactor : `assertNotStarted` et `bookingNotFound` partagés entre annulation visiteur et propriétaire, `siteUrl()` du notifier partagé entre lien d'annulation et lien de réservation
 - **Tranche A5 — rappel la veille et purge** : GREEN 380 passed / 380 total + 28 skipped (`pnpm test -- src/booking`, exit 0 ; 392 avec `log-redact`, aussi sous `TZ=Pacific/Kiritimati`), intégration 28 passed / 28 total sur Postgres 17 réel (exit 0), rappel rendu dans Mailpit (1 email, pas de second au repassage) · refactor : aucun ; `pnpm lint` exit 1 sur 2 erreurs du fichier de test `booking-scheduler.service.spec.ts` (non modifié, à corriger par `qa`)
 - **Tranche F1 — la gateway parle le contrat de l'API** : GREEN 102 passed / 102 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4151 passed / 4151 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : champ `apiUrl` de la gateway renommé `bookingUrl` (il porte déjà le préfixe `/booking`)
+- **Tranche F2a — le visiteur choisit un jour et une heure** : GREEN partiel 136 passed / 137 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 1), suite complète 4192 passed / 4193 total (exit 1) : seul échec, délai dépassé du test « Given the slots are on their way » de `booking-flow.spec.ts` (contrat de test à revoir par `qa`, cf. `### F2a`) ; `pnpm lint` exit 0, build production exit 0, non commité · refactor : prédicat `offers` renommé `isOffered`
 
 ### A1
 
@@ -1500,6 +1611,62 @@ gateway ; `app.config.ts` gagne un provider non injecté).
 Point d'attention pour F2a : les libellés de jour suivent `Intl` (« dimanche 1 novembre »), figés ainsi
 par les tests ; l'admin applique `withFirstOfMonth` (« 1er ») dans `admin/application`. Si la page
 publique doit écrire « 1er », c'est une décision de `qa`/architecte, pas un écart de F1.
+
+### F2a
+
+GREEN le 2026-10-13, front branche `feat/024-prise-de-rendez-vous`, non commité. Tests et doublures de
+`qa` inchangés.
+
+- « 1er » : `withFirstOfMonth` déplacé de `features/admin/application/` vers `shared/format/` (pas de
+  spec existant à déplacer), cinq imports admin repointés ; appliqué aux quatre formateurs à libellé de
+  jour de `paris-format.ts` (date longue, jour, jour court, semaine).
+- `BookingFlow` : `rxResource` dont `params` vaut `undefined` hors navigateur (ressource `idle`, aucune
+  requête au prérendu) ; `_weekIndex` et `_selectedDate` en `linkedSignal` bornés aux semaines et jours
+  rechargés ; le modèle `{ startsAt }` est lui aussi un `linkedSignal` sur les jours : un horaire disparu
+  au rechargement est remis à `''` (arbitrage : changer de semaine conserve jour et heure, seul le
+  rechargement les invalide ; la partie « heure » n'est couverte par aucun test, à ajouter par `qa`).
+- Page `Booking` : titre et chapeau, puis grille cartouche « Appel de cadrage · 30 min » +
+  `app-dimension-line` à gauche (collante en `lg`), parcours à droite (`h2.section-title`), `@switch`
+  sur `state` : squelette `role="status"` identique serveur / navigateur, `app-load-error` + Réessayer,
+  état vide avec `booking-empty-contact` → `SectionScroller.scrollTo('contact')`. Radios natifs masqués
+  (`sr-only`) dans des libellés-cartes : `has-checked` (fond `primary-bg`, texte blanc, clair et
+  sombre), `has-focus-visible` (contour `primary`), cibles de 44 px (heures) et 64 px (jours). Boutons
+  de semaine `aria-disabled` aux bornes, jamais `disabled`.
+- Routes : `rendez-vous` en `loadChildren`, `''` → `Booking` (import statique dans le chunk lazy) avec
+  `title` et `data.seo` (BreadcrumbList) ; sans `data.preload` (page hors navigation principale, comme
+  les pages légales) ; `RenderMode.Prerender` ; sitemap `/rendez-vous` (`monthly`, `0.6`).
+- Copie de page ajoutée à `booking-copy.static-data.ts` (`BOOKING_PAGE_COPY`), à relire par le
+  propriétaire.
+
+**Contrat de test à revoir (`qa`)** : `booking-flow.spec.ts`, « Given the slots are on their way When
+the flow starts in the browser » dépasse 5 s. Son `flush()` attend `ApplicationRef.whenStable()`, or une
+ressource en chargement garde une `PendingTask` jusqu'à la première émission du flux
+(`_resource-chunk.mjs`, `loadEffect`) : avec `NEVER`, jamais stable, quelle que soit l'implémentation
+`rxResource` prescrite par le plan. `booking.spec.ts` contourne déjà ce piège avec `settleBounded`. Au
+RED, le squelette sans ressource ne posait aucune tâche, d'où l'absence de délai dépassé à l'époque.
+
+Sorties : ciblée `Tests 1 failed | 136 passed (137)`, exit 1 ; `pnpm test` `Tests 1 failed | 4192 passed
+(4193)`, exit 1 (même test) ; `pnpm lint` « All files pass linting. », exit 0 ; `format:check` exit 0 ;
+`pnpm run build --configuration production` exit 0, « Prerendered 9 static routes » ;
+`dist/angular-portfolio-app/browser/rendez-vous/index.html` (48 Ko) contient `booking-fiche` et
+`booking-slots-loading`, aucun instant ISO, aucun `startsAt`, aucune URL `booking/slots`.
+
+## Verify
+
+Tranche F2a, `pnpm start` (dev SSR, port 4200), créneaux servis par `page.route('**/api/booking/slots')`
+dans un script Playwright jetable (la doublure `ci/api-stub` ne sert pas encore le booking, F6),
+créneaux générés relativement à l'heure courante.
+
+1. Ouvrir `/rendez-vous` (desktop 1440×1000 et mobile 375×812, clair et sombre) : 1 appel à `slots`,
+   « Semaine du 12 octobre », aucun horaire affiché.
+2. Cliquer le premier jour : 6 horaires apparaissent (hydratation prouvée par la réaction).
+3. Cliquer le 2ᵉ horaire : 1 radio coché.
+4. Semaine suivante : « Semaine du 19 octobre », l'horaire choisi reste coché (arbitrage).
+
+Verdict : **PASS** sur les quatre combinaisons. Captures :
+`/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f2a/{desktop,mobile}-{light,dark}-{1-days,2-time-chosen,3-next-week}.png`.
+Console : aucune erreur applicative ; seules deux 502 du proxy de dev vers une API locale absente
+(`/api/config`, `/api/analytics/track`), étrangères au booking.
 
 ## Review code
 

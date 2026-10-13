@@ -22,7 +22,7 @@ describe('serverRoutes', () => {
     expect([...serverRendered].sort()).toEqual([...CONTENT_ROUTES].sort());
   });
 
-  it.each(['mentions-legales', 'confidentialite', 'offres'])(
+  it.each(['mentions-legales', 'confidentialite', 'offres', 'rendez-vous'])(
     'prerenders the static page %s',
     (path) => {
       expect(findRoute(path)?.renderMode).toBe(RenderMode.Prerender);
