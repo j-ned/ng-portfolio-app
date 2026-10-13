@@ -801,10 +801,105 @@ GREEN doit créer `cancel-token.ts`, `video-room-url.ts`, `dto/create-booking.dt
 `BookingCreateThrottle`, `isExclusionViolation`, `BOOKING_VIDEO_URL_BASE` + getter et
 `drizzle/0023_booking_no_overlap.sql`.
 
+### Tranche A3 — invitations et annulation par le visiteur
+
+API `nest-portfolio-app`, branche `feat/booking` (sur `01b2f4c`), 103 tests neufs dans 8 fichiers.
+
+Signatures figées par les tests (non précisées au plan) :
+- `toIcs(event)` (`src/booking/to-ics.ts`), `event = { method: 'REQUEST' | 'CANCEL', uid, stamp, startsAt,
+  endsAt, summary, description, location, organizer: { name, email }, attendee: { name, email } }` ;
+  `SEQUENCE` (0 / 1) et `STATUS` (`CONFIRMED` / `CANCELLED`) **dérivés de la méthode** ; `UID` = id brut ;
+  `METHOD` avant `BEGIN:VEVENT`, `END:VEVENT` juste avant `END:VCALENDAR` (pas de `VTIMEZONE`) ; `CN`
+  entre guillemets s'il contient `,` `;` `:` ; repli « plein » (une ligne de 76 octets donne 75 + ` a`).
+- `MailerService.sendMail({ …, icalEvent?: { method, content } })` → nodemailer reçoit
+  `icalEvent: { method, content, filename: 'invitation.ics' }`.
+- `BookingNotifier` (`booking-notifier.service.ts`) injecte `MailerService` et `AppConfigService`
+  (`publicSiteUrl`, barre finale non doublée) ; `bookingConfirmed(row, token)` et
+  `bookingCancelled(row)` envoient chacun deux emails (visiteur, `contact@nedellec-julien.fr`) avec la même
+  invitation (`REQUEST` puis `CANCEL`, `DTSTAMP` = horloge à l'envoi), sujet et corps datés par
+  `formatParisLong` ; un échec d'envoi est rejeté vers l'appelant. Le jeton n'apparaît que dans le
+  corps de l'email du visiteur : ni email propriétaire, ni `.ics`, ni log.
+- `BookingService` injecte `BookingNotifier` ; `create` appelle `bookingConfirmed(ligne insérée,
+  jeton)` après la transaction, sans l'attendre, échec journalisé (`Logger.error`, message contenant
+  l'id). `previewCancellation(token)` → `{ startsAt, endsAt, format, status, cancellable }`
+  (`cancellable` = confirmé et `now < startsAt`) ; `cancelByVisitor(token)` → `{ status: 'cancelled' }`.
+  Lecture `db.select().from(bookings).where(eq(cancelTokenHash, hash))` (terminateur `where`), puis
+  `db.update(bookings).set({ status, cancelledAt: now, cancelledBy: 'visitor' }).where(id et status
+  'confirmed').returning()` ; ligne rendue → `bookingCancelled(ligne)` sans attente ; aucune ligne
+  (annulation concurrente) → 200 sans email ; déjà annulé → 200 sans écriture ni email, **avant** le
+  contrôle d'heure ; `now >= startsAt` → `ConflictException({ error: 'cancel_too_late' })` ; inconnu →
+  `NotFoundException({ error: 'booking_not_found' })`.
+- Contrôleur : `POST bookings/cancel/preview` et `POST bookings/cancel` répondent **200** (pas le 201
+  par défaut de Nest), corps `{ token }` (`@Matches(/^[A-Za-z0-9_-]{43}$/)`), aucune garde ni throttle
+  propre.
+- `OWNER_EMAIL` : constante (`mailer.constants.ts`) comme le plan le décide ; les tests assertent le
+  destinataire `contact@nedellec-julien.fr`, pas le symbole.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `to-ics.spec.ts` | 32 | VCALENDAR pur | structure et ordre ; `UID`, `SEQUENCE:0`, `STATUS:CONFIRMED`, `DTSTAMP`/`DTSTART`/`DTEND` en `Z` (3 instants dont DST, millisecondes tronquées) ; `ORGANIZER` exact, `ATTENDEE` mailto + `CN` (3 cas entre guillemets) ; `CANCEL` → `SEQUENCE:1`, `STATUS:CANCELLED`, même `UID` et dates ; CRLF partout ; ligne de 75 octets non repliée, 76 repliée en deux ; 8 descriptions (accents, `€`, émojis, décalées d'1 à 3 octets) → chaque ligne ≤ 75 octets, ni `U+FFFD` ni surrogate isolé, dépliage exact ; continuation à une espace ; échappement `\\ ; , \n` (CRLF compris, `:` intact) sur DESCRIPTION, SUMMARY, LOCATION |
+| `booking-notifier.service.spec.ts` | 16 | emails et invitations | deux destinataires ; date de Paris en français dans sujet et corps (hiver, été) ; lien `…/rendez-vous/annulation#<jeton>` au visiteur, barre finale non doublée ; jeton absent de l'email propriétaire, des `.ics` et des logs, y compris sur échec SMTP (rejeté) ; visio → lien et `LOCATION:<url>` ; téléphone → numéro, `LOCATION` avec le numéro, sans lien ; coordonnées et message au propriétaire ; échappement HTML ; `REQUEST` complet ; annulation : deux emails `CANCEL`/`SEQUENCE:1`/`STATUS:CANCELLED`, sans lien d'annulation, nom échappé |
+| `booking.service.spec.ts` (notification de `create`) | 8 | `fireAndForget` | ligne insérée + jeton dont `hashCancelToken` = empreinte insérée ; appel après la transaction ; confirmation rendue sans attendre un envoi bloqué ; échec journalisé avec l'id sans le jeton ; champ piège puis vraie réservation → une seule notification ; plafond, 409, 23P01 → aucune (3 gardes vertes avant GREEN) |
+| `booking.service.spec.ts` (`previewCancellation`) | 8 | aperçu | réponse exacte ; recherche par empreinte (paramètres SQL), jamais par le jeton ; annulé / commence à l'instant / commencé → non annulable, 1 ms avant → annulable ; 404 ; jeton hors logs |
+| `booking.service.spec.ts` (`cancelByVisitor`) | 14 | annulation | `set` exact, mise à jour gardée par id + `confirmed` ; `bookingCancelled(ligne annulée)` après l'`update`, sans attente, échec journalisé sans jeton ; déjà annulé (même passé) → 200 sans écriture ni email ; course perdue → 200 sans email ; 409 `cancel_too_late` (à l'instant, commencé, terminé) ; 1 ms avant → annulé ; 404 sans écriture ; jeton hors logs |
+| `booking.controller.spec.ts` | 18 | supertest, deux routes | 400 sans appel (42 et 44 caractères, `+`, absent, champ inconnu) ; 404 / 409 avec `error` métier et `path` sans jeton ; aucune garde ni throttle propre ; 200 et corps exacts, jeton lu dans le corps |
+| `mailer/mailer.service.spec.ts` | 2 | `icalEvent` | `REQUEST` et `CANCEL` transmis avec `filename: 'invitation.ics'` |
+| `config/env.validation.spec.ts` + `app-config.service.spec.ts` | 4 | `PUBLIC_SITE_URL` | défaut `https://nedellec-julien.fr`, valeur gardée, non-URL rejetée ; getter `publicSiteUrl` |
+| `booking.integration.spec.ts` | 1 | Postgres réel | réservation, annulation par `cancelByVisitor(jeton reçu par le notifier)`, nouvelle réservation au même horaire réussie, ligne `cancelled` / `visitor` / `cancelledAt`, 2 lignes, une notification d'annulation |
+
+Adaptation mécanique : `booking.service.spec.ts` (2 modules de test A1/A2) et
+`booking.integration.spec.ts` (1) — `useMocker` qui fournit un double de `BookingNotifier` reconnu par
+nom de classe (le module n'existe pas encore : un import ferait tomber les suites A1/A2) et lève sur
+toute autre dépendance ; `booking.controller.spec.ts` — 2 doubles ajoutés à `booking`. Aucune valeur
+attendue modifiée.
+
+Sweep : `contact@nedellec-julien.fr` / `CONTACT_RECIPIENT` dans les tests → seul
+`contact.service.spec.ts` (littéral, inchangé, reste vert après le passage à `OWNER_EMAIL`).
+Fire-and-forget vidé par 10 micro-tâches (`setImmediate` est simulé par les fake timers de ces
+suites). Assertions vérifiées contre une implémentation de référence jetable (`to-ics`, notifier,
+méthodes du service : 32, 16 et 64 verts, intégration 10 verts), supprimée avant la preuve.
+
+Non couverts par un test automatique : rendu dans Gmail / Outlook / Google Agenda (manuel Mailpit
+prévu), copie propriétaire en `REQUEST` (repli `PUBLISH` à acter au manuel), câblage
+`BookingNotifier` dans `BookingModule` (`pnpm build` et démarrage), retrait de `CONTACT_RECIPIENT`.
+
+Sortie condensée (`pnpm test -- src/booking; echo $?`) :
+
+```
+FAIL src/booking/to-ics.spec.ts                   Cannot find module './to-ics'
+FAIL src/booking/booking-notifier.service.spec.ts Cannot find module './booking-notifier.service'
+FAIL src/booking/booking.service.spec.ts          22 × TypeError: service.cancelByVisitor / previewCancellation is not a function, 5 × toHaveBeenCalledTimes (0 au lieu de 1) ; 37 verts (34 A1/A2 + 3 gardes)
+FAIL src/booking/booking.controller.spec.ts       18 × toBe / toEqual / toBeDefined (404 au lieu de 200/400/409, route absente) ; 11 A1/A2 verts
+Test Suites: 4 failed, 1 skipped, 7 passed, 11 of 12 total
+Tests:       45 failed, 10 skipped, 156 passed, 211 total
+EXIT 1
+```
+
+Intégration (`docker run … postgres:17-alpine` sur 55433) : `Tests: 1 failed, 9 passed, 10 total`,
+exit 1 ; échec `expect(notifier.bookingConfirmed).toHaveBeenCalledTimes(1)` (0 appel) ; les 9 cas A2
+restent verts.
+
+`pnpm test; echo $?` : `Test Suites: 7 failed, 2 skipped, 52 passed` ; `Tests: 51 failed, 15 skipped,
+1068 passed, 1134 total` ; exit 1 ; seuls échecs : les quatre suites ci-dessus plus
+`env.validation.spec.ts` (3), `app-config.service.spec.ts` (1), `mailer.service.spec.ts` (2) ; les
+1065 tests verts d'A2 le restent. `tsc --noEmit` : seules erreurs nouvelles TS2307 (`to-ics`,
+`booking-notifier.service`), TS2339 (`cancelByVisitor`, `previewCancellation`, `publicSiteUrl`),
+TS2353 (`icalEvent`) ; TS2345 préexistantes inchangées. Prettier vert ; eslint ne signale que des
+cascades de types non résolus.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 17:18, 51 failed / 1134 total, plus 2 suites non chargées (48 tests) et 1 failed / 10
+total en intégration). Nature : module ou membre applicatif absent et assertions d'appel, d'HTTP et
+d'env ; aucune erreur de harnais. Trois gardes « aucune notification sur échec » sont vertes avant le
+GREEN par construction. Le GREEN doit créer `to-ics.ts`, `booking-notifier.service.ts` et ses gabarits,
+`icalEvent` du mailer, `OWNER_EMAIL`, `PUBLIC_SITE_URL` + getter, `CancelTokenDto`,
+`previewCancellation`, `cancelByVisitor`, l'appel du notifier dans `create` et les deux routes.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
 - **Tranche A2 — une réservation est confirmée, jamais en double** : GREEN 153 passed / 153 total + 9 skipped (`pnpm test -- src/booking`, exit 0), intégration 9 passed / 9 total sur Postgres 17 réel (exit 0) · refactor : test de battement extrait de `computeFreeSlots` en `overlapsBooking` (partagé avec le 409), lecture des entrées du calcul factorisée entre `getSlots` et `create`, marche `cause` d'`isUniqueViolation` partagée avec `isExclusionViolation`
+- **Tranche A3 — invitations et annulation par le visiteur** : GREEN 249 passed / 249 total + 10 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 10 passed / 10 total sur Postgres 17 réel (exit 0), 4 emails vérifiés dans Mailpit · refactor : gabarits regénérés au format compact des gabarits contact (Prettier les avait éclatés), paramètres `ATTENDEE` réduits à `CN` + `PARTSTAT` (ligne repliée inutilement)
 
 ### A1
 
@@ -895,3 +990,78 @@ Tests de `qa` inchangés (horodatages antérieurs au GREEN vérifiés).
 - `pnpm lint` exit 0 ; `pnpm build` exit 0.
 - Non vérifié : démarrage de l'application (câblage DI d'`AppConfigModule` dans `BookingModule`),
   faute d'env S3/SMTP locale ; couvert par compilation seulement.
+
+### A3
+
+GREEN le 2026-10-13, API `nest-portfolio-app` branche `feat/booking` (sur `01b2f4c`), non commité.
+Tests de `qa` inchangés.
+
+**Fichiers**
+- Créés : `src/booking/to-ics.ts`, `src/booking/booking-notifier.service.ts`,
+  `src/booking/dto/cancel-token.dto.ts`, `src/booking/mail-templates/booking-confirmation.html`
+  (visiteur, seul porteur du lien d'annulation), `booking-notification.html` (propriétaire :
+  coordonnées, société, message), `booking-cancelled.html` (les deux côtés, accroche et intro en
+  variables).
+- Modifiés : `src/booking/booking.service.ts` (`BookingNotifier` injecté, notification
+  `fireAndForget` après la transaction, `previewCancellation`, `cancelByVisitor`,
+  `findByCancelToken`), `booking.controller.ts` (deux routes `@HttpCode(200)`), `booking.module.ts`
+  (provider `BookingNotifier`), `src/mailer/mailer.service.ts` (`icalEvent` transmis avec
+  `filename: 'invitation.ics'`, clé absente sans invitation), `mailer.constants.ts` (`OWNER_EMAIL`),
+  `src/contact/contact.service.ts` (`CONTACT_RECIPIENT` retiré au profit d'`OWNER_EMAIL`),
+  `src/config/env.schema.ts` + `app-config.service.ts` (`PUBLIC_SITE_URL`, getter `publicSiteUrl`),
+  `README.md` (ligne d'env, paragraphe du destinataire propriétaire).
+- `nest-cli.json` inchangé : l'asset `**/mail-templates/**/*.html` copie déjà les trois gabarits
+  (`dist/booking/mail-templates/`).
+
+**Écarts au plan**
+- `BookingModule` n'importe pas `MailerModule` : il est `@Global()` et déjà importé par
+  `AppModule` ; `MailerService` est résolu sans import.
+- `ATTENDEE;CN=…;PARTSTAT=ACCEPTED` (le visiteur a lui-même réservé) ; pas de `ROLE` ni de `RSVP`
+  (valeurs par défaut de la RFC). `CALSCALE:GREGORIAN` ajouté (défaut explicite).
+- Valeur `CN` : guillemets retirés de la saisie avant mise entre guillemets (un `"` n'est pas
+  représentable dans une valeur de paramètre RFC 5545).
+- Téléphone : lien `tel:` (chiffres et `+`) dans les emails, `LOCATION:Téléphone : <numéro>`.
+- `bookingCancelled` envoie au propriétaire « <nom> (<email>) a annulé son rendez-vous » : rédigé pour
+  l'annulation visiteur (seule existante en A3) ; A4 devra adapter l'intro à `cancelledBy: 'owner'`
+  et au motif.
+- Copie du propriétaire laissée en `METHOD:REQUEST` (même `UID`) : le repli `PUBLISH` n'est pas
+  acté, faute d'essai dans Google Agenda (voir Non vérifié).
+
+**Preuves**
+- `pnpm test -- src/booking; echo $?` → `Test Suites: 1 skipped, 11 passed` ; `Tests: 10 skipped,
+  249 passed, 259 total` ; exit 0. Idem sous `TZ=Pacific/Kiritimati`, exit 0.
+- `docker run --rm -d --name booking-it -e POSTGRES_PASSWORD=it -p 55433:5432
+  docker.io/postgres:17-alpine`, `pg_isready`, puis `BOOKING_IT_DATABASE_URL=… pnpm test --
+  booking.integration; echo $?` → `Tests: 10 passed, 10 total`, exit 0.
+- `pnpm test; echo $?` → `Test Suites: 2 skipped, 59 passed` ; `Tests: 15 skipped, 1167 passed,
+  1182 total` ; exit 0.
+- `pnpm lint` exit 0 ; `pnpm build` exit 0 ; `dist/booking/mail-templates/` contient les trois
+  gabarits.
+- Mailpit (`axllent/mailpit`, SMTP 1025) : script jetable hors repo, vrai `MailerService` sur un
+  transport nodemailer `localhost:1025`, `BookingNotifier` du build, réservation visio dont le nom
+  contient `<b>`, `publicSiteUrl` avec barre finale. `GET /api/v1/messages` → 4 messages :
+  - `camille@example.com` « Rendez-vous confirmé : mercredi 4 novembre 2026 à 11:00 » ;
+  - `contact@nedellec-julien.fr` « Nouveau rendez-vous : Camille <b>Martin</b>, mercredi 4 novembre
+    2026 à 11:00 » ;
+  - `camille@example.com` « Rendez-vous annulé : mercredi 4 novembre 2026 à 11:00 » ;
+  - `contact@nedellec-julien.fr` « Rendez-vous annulé : Camille <b>Martin</b>, mercredi 4 novembre
+    2026 à 11:00 ».
+  Chaque `/raw` : `multipart/mixed` > `multipart/alternative` (`text/html`, `text/calendar;
+  charset="utf-8"; method="REQUEST"` pour les deux premiers, `method="CANCEL"` pour les deux
+  derniers) + pièce jointe `application/ics; name="invitation.ics"`. Contenu `.ics` : `UID:dddddddd-…`
+  identique, `DTSTART:20261104T100000Z`, `DTEND:20261104T103000Z`, `DTSTAMP` en `Z` à l'heure
+  d'envoi, `SEQUENCE:0` / `STATUS:CONFIRMED` puis `SEQUENCE:1` / `STATUS:CANCELLED`, CRLF seuls,
+  lignes ≤ 75 octets, `ORGANIZER;CN=Julien Nédellec:mailto:contact@nedellec-julien.fr`. Lien
+  `https://nedellec-julien.fr/rendez-vous/annulation#<jeton>` présent dans le seul email de
+  confirmation du visiteur ; jeton absent des trois autres messages bruts et des quatre `.ics` ;
+  nom échappé (`&lt;b&gt;`) dans les quatre HTML. `html-check` Mailpit : 91,6 % des tests de
+  compatibilité client supportés, 0,8 % non supportés.
+
+**Non vérifié**
+- Import réel dans Google Agenda (compte propriétaire et compte tiers), affichage Gmail / Outlook,
+  retrait de l'événement à réception du `CANCEL` : demande un SMTP réel vers ces boîtes (Mailpit, `pnpm
+  mail:up`, capture sans délivrer) : à faire par le propriétaire après déploiement, ou en local avec
+  le SMTP de prod. Le repli `PUBLISH` pour la copie du
+  propriétaire reste à trancher sur ce résultat.
+- Démarrage de l'application (câblage DI de `BookingNotifier`) : couvert par compilation et par les
+  modules de test, pas par un `nest start`.
