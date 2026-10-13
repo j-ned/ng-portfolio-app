@@ -1065,6 +1065,96 @@ applicatif absent ; aucune erreur de harnais. Le GREEN doit créer `booking-sche
 `bookingReminder` et le gabarit `booking-reminder.html`, `src/common/log-redact.ts` consommé par
 `app.module.ts`, le provider dans `BookingModule` et la section README.
 
+### Tranche F1 — la gateway parle le contrat de l'API
+
+Front, branche `feat/024-prise-de-rendez-vous`, 103 tests : 102 dans 5 fichiers neufs, 1 ajouté à
+`src/app/app.config.spec.ts`. DTO figés sur le code API réel (`booking.controller.ts`,
+`booking-admin.controller.ts`, types `SlotsResponse`, `BookingConfirmation`, `CancellationPreview`,
+`AdminBooking` de `booking.service.ts`, `HttpExceptionFilter` : code métier dans `error`).
+
+**Squelettes de signature (patron des specs 020/021).** Le builder `@angular/build:unit-test` compile
+toutes les specs en un seul bundle : un module absent fait échouer le build entier (`Could not resolve`,
+TS2307, vérifié par sonde), aucun test ne tourne. Pour que le rouge tombe sur une assertion, F1 pose :
+les types complets (`booking.model.ts`, `booking-admin.model.ts`, `booking-api.types.ts`), le port
+`BookingGateway`, et des corps neutres que le GREEN remplace : formateurs de `paris-format.ts` rendant
+`''`, `groupSlotsByDay` / `groupDaysByWeek` rendant `[]`, adapters rendant des valeurs vides,
+`HttpBookingGateway` (`@Injectable()`) dont chaque méthode rend `NEVER` (aucune requête). Aucun ne fait
+passer un test de comportement. Doublures de test : `testing/booking-builders.ts` (builders domaine et
+DTO, `anApiErrorBody(status, error)`), `testing/stub-booking-gateway.ts` (sous-classe du port, patron
+`stub-profile-gateway.ts`, non testé).
+
+Signatures figées par les tests (non précisées au plan) :
+- `paris-format.ts` : `toParisDateKey(instant): string` (`YYYY-MM-DD` de Paris),
+  `formatParisTime(instant)` (« 09:00 », jamais « 24:00 »), `formatParisDateTime(instant)` (« lundi 19
+  octobre 2026 à 09:00 », même forme que `formatParisLong` de l'API), `formatDayLabel(dateKey)`
+  (« lundi 19 octobre »), `formatDayShortLabel(dateKey)` (« lun. 19 ») ; les libellés de jour prennent une
+  **date de Paris**, pas un instant (la semaine doit nommer un lundi sans créneau).
+- `groupDaysByWeek` : `key` = date du lundi ISO, `label` = « Semaine du 19 octobre » (lundi, même s'il n'a
+  aucun créneau) ; aucune semaine vide n'est émise entre deux semaines réservables ; les jours sont rendus
+  tels quels (même référence d'égalité).
+- Résultats : `BookingResult<T, R> = { success: true; data: T } | { success: false; reason: R }` ;
+  `BookingSubmission`, `BookingCancelPreviewResult`, `BookingCancelResult` (`data: null`),
+  `BookingAdminResult<T>` avec `BookingAdminFailure = 'overlap' | 'invalid' | 'not-found' | 'too-late' |
+  'network' | 'server'` ; `BookingScope = 'upcoming' | 'past'` ; `NewAvailabilityClosure = Omit<AvailabilityClosure, 'id'>`.
+- Port : `getSlots()`, `createBooking(request)`, `previewCancellation(token)`, `cancelBooking(token)`,
+  `getBookings(scope)`, `getUpcomingCount()` + `invalidateUpcomingCount()`,
+  `cancelBookingAsOwner(id, reason | null)`, `getAvailabilityRules()`, `replaceAvailabilityRules(rules)`,
+  `getClosures()`, `createClosure(closure)`, `deleteClosure(id)`. Lectures : erreur propagée (la page
+  affiche `load-error`) ; écritures : Result. Toutes les requêtes portent `SKIP_ERROR_TOAST` (la première
+  requête du compteur au moins).
+- Corps envoyés : `BookingRequest` tel quel (`phone`/`company` à `null` acceptés par
+  `@ValidateIf`/`@IsOptional`), `{ token }`, `{ reason }`, `{ rules }`, `{ startsOn, endsOn, reason }`.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `domain/paris-format.spec.ts` | 9 | `toParisDateKey` : 23:59 / minuit en été et en hiver, bords des deux jours de bascule | date de Paris exacte |
+| | 7 | `formatParisTime` : été, hiver, minuit, 02:30 répété, 03:00 après, 01:30 puis 03:00 au trou de mars | heure murale exacte |
+| | 3 | `formatParisDateTime` | « lundi 19 octobre 2026 à 09:00 », passage de minuit, lendemain du trou |
+| | 5 + 4 | `formatDayLabel`, `formatDayShortLabel` (jours de bascule, 1er du mois, 1er janvier) | libellé exact |
+| `domain/group-slots-by-day.spec.ts` | 1 | aucun créneau | `[]` (garde-fou, vert sur le squelette) |
+| | 1 | deux créneaux d'un matin | `toEqual` exact du `BookingDay` (date, libellés, `timeLabel`) |
+| | 2 | de part et d'autre de minuit de Paris, été et hiver | coupure sur la date de Paris |
+| | 1 | même date UTC, après minuit de Paris | les trois créneaux rejoignent le 20 |
+| | 2 | 25/10/2026 (`00:30Z`, `02:00Z`) et 28/03/2027 (`00:30Z`, `01:00Z`) | un jour, « 02:30, 03:00 » / « 01:30, 03:00 » |
+| | 1 | jours non consécutifs | ordre conservé, aucun jour vide inventé |
+| `domain/group-days-by-week.spec.ts` | 1 | aucun jour | `[]` (garde-fou, vert sur le squelette) |
+| | 1 | deux jours de la même semaine | `toEqual` exact, jours inchangés |
+| | 5 | dimanche puis lundi, à cheval sur deux mois, sur deux années, semaine du changement d'heure, semaine vide intercalée | clés et libellés des lundis |
+| `infra/booking.adapter.spec.ts` | 9 | six adapters : champ en trop ignoré (`timeZone`, `cancelTokenHash`), visio / téléphone, aperçu annulé, plage dimanche 0–1440, motif `null` | `toEqual` exact |
+| `infra/http-booking.gateway.spec.ts` | 1 | `GET slots` | `GET` silencieux, enveloppe retirée |
+| | 2 | `POST bookings` visio et téléphone | corps = demande, succès adapté |
+| | 10 | `it.each` statut → raison : `0` network, `400` invalid, `409 slot_taken`, `422 slot_unavailable`, `422 booking_limit_reached`, `429` rate-limited, `500`/`502`/`503` server, `404` server | `{ success: false, reason }` exact |
+| | 2 + 9 | aperçu et annulation par jeton : `POST` silencieux `{ token }` ; `404`, `400` (jeton malformé) → not-found, `409 cancel_too_late` → too-late, `0`, `5xx` | Result exact |
+| | 4 + 4 | lectures admin (`?scope=upcoming\|past`, plages, fermetures) ; `500` propagé sur les quatre lectures | liste adaptée ; `'error'`, jamais `[]` |
+| | 4 | compteur : nombre nu, une requête pour deux lecteurs, `invalidateUpcomingCount` relance, échec non mis en cache | `[2, 2]`, `[2, 1]`, relance 1 |
+| | 4 + 10 | écritures admin : `PATCH …/cancel { reason }`, `PUT rules { rules }`, `POST closures`, `DELETE closures/:id` (204) ; `404`, `409 cancel_too_late`, `400 rules_overlap` → overlap, `400` → invalid, `0`, `5xx` | Result exact |
+| `app.config.spec.ts` (ajout) | 1 | port résolu | `BookingGateway` → instance de `HttpBookingGateway` |
+
+Sortie condensée (`pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?`) :
+
+```
+Test Files  5 failed (5)
+     Tests  100 failed | 2 passed (102)
+EXIT 1
+```
+
+La commande prescrite par la tranche (`pnpm test -- --include=…`) sort en erreur sous pnpm 10
+(`Unknown option ""` : pnpm transmet le `--` à `ng test`) ; forme exécutée : `pnpm test --include=…`.
+
+`pnpm test; echo $?` (après `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+`Test Files 6 failed | 230 passed (236)` ; `Tests 101 failed | 4050 passed (4151)` ; exit 1. Seuls fichiers
+en échec : les cinq specs neuves et le test ajouté à `app.config.spec.ts` (les trois tests existants du
+fichier restent verts) ; aucune régression. Typecheck et Prettier verts (le build du bundle de test passe) ;
+`eslint` sur les fichiers touchés : exit 0 ; grep d'archéologie : aucun résultat.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 18:45, 101 failed / 4151 total ; 2 garde-fous « aucun créneau / aucun jour » verts sur le
+squelette). Nature : tous les échecs sont des `AssertionError` (valeur neutre du squelette) ou
+« Expected one matching request … found none » (`HttpBookingGateway` n'émet aucune requête) ; aucune
+erreur de harnais, aucun délai dépassé. Le GREEN remplace les corps neutres, câble
+`{ provide: BookingGateway, useClass: HttpBookingGateway }` dans `app.config.ts`, et peut ajuster la
+forme interne des squelettes (pas les signatures publiques, figées par les tests).
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1072,6 +1162,7 @@ applicatif absent ; aucune erreur de harnais. Le GREEN doit créer `booking-sche
 - **Tranche A3 — invitations et annulation par le visiteur** : GREEN 249 passed / 249 total + 10 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 10 passed / 10 total sur Postgres 17 réel (exit 0), 4 emails vérifiés dans Mailpit · refactor : gabarits regénérés au format compact des gabarits contact (Prettier les avait éclatés), paramètres `ATTENDEE` réduits à `CN` + `PARTSTAT` (ligne repliée inutilement)
 - **Tranche A4 — l'admin gère plages, fermetures et rendez-vous** : GREEN 359 passed / 359 total + 14 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 14 passed / 14 total sur Postgres 17 réel (exit 0), application démarrée (`node dist/main.js`) : 8 routes admin mappées, 401 sans session, parcours admin complet et 4 emails dans Mailpit · refactor : `assertNotStarted` et `bookingNotFound` partagés entre annulation visiteur et propriétaire, `siteUrl()` du notifier partagé entre lien d'annulation et lien de réservation
 - **Tranche A5 — rappel la veille et purge** : GREEN 380 passed / 380 total + 28 skipped (`pnpm test -- src/booking`, exit 0 ; 392 avec `log-redact`, aussi sous `TZ=Pacific/Kiritimati`), intégration 28 passed / 28 total sur Postgres 17 réel (exit 0), rappel rendu dans Mailpit (1 email, pas de second au repassage) · refactor : aucun ; `pnpm lint` exit 1 sur 2 erreurs du fichier de test `booking-scheduler.service.spec.ts` (non modifié, à corriger par `qa`)
+- **Tranche F1 — la gateway parle le contrat de l'API** : GREEN 102 passed / 102 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4151 passed / 4151 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : champ `apiUrl` de la gateway renommé `bookingUrl` (il porte déjà le préfixe `/booking`)
 
 ### A1
 
@@ -1374,6 +1465,41 @@ Tests de `qa` inchangés.
 - Déclenchement réel par `ScheduleModule` et check-in Sentry Crons (pas de démarrage de l'application
   dans cette tranche : le provider ajouté à `BookingModule` et `LOG_REDACT_PATHS` dans `app.module.ts`
   ne sont couverts que par `pnpm build`).
+
+### F1
+
+GREEN le 2026-10-13, front branche `feat/024-prise-de-rendez-vous`, non commité. Tests et doublures de
+`qa` inchangés (`testing/`, cinq specs, ajout `app.config.spec.ts`).
+
+- `paris-format.ts` : six formateurs `Intl` `fr-FR` / `Europe/Paris` créés au chargement du module ;
+  clé de date par `formatToParts` (indépendante du format local), heure en `hourCycle: 'h23'` (jamais
+  « 24:00 »), libellés de jour calculés sur midi UTC de la date de Paris (même date quel que soit le
+  décalage). Ajout de `formatWeekLabel(mondayKey)` (« Semaine du 19 octobre »), consommé par
+  `groupDaysByWeek` : le libellé reste avec les autres formateurs.
+- `groupSlotsByDay` / `groupDaysByWeek` : regroupement par `Map` dans l'ordre d'arrivée (aucun jour ni
+  semaine vide inventé) ; lundi ISO par arithmétique UTC sur la clé de date.
+- Adapters : copie champ par champ (les champs en trop, `timeZone`, `cancelTokenHash`, ne passent pas) ;
+  `weekday` borné par l'API (`@Min(1) @Max(7)` + check SQL), typé `IsoWeekday` sans validation runtime
+  (profil : aucune lib front).
+- `HttpBookingGateway` : `silentErrors()` sur toutes les requêtes, compteur compris (pas de relance
+  bruyante façon `unreadCount$` : la page admin affiche son propre état) ; compteur partagé
+  `ReplaySubject(1)`, `resetOnError` (échec non mis en cache), relancé par `invalidateUpcomingCount()`.
+  Écritures en Result par un opérateur `toResult(toFailure)` ; trois tables statut → raison
+  (`toBookingFailure`, `toCancelFailure`, `toAdminFailure`) lisant le code métier dans `error` du corps.
+  Lectures : erreur propagée.
+- `app.config.ts` : `{ provide: BookingGateway, useClass: HttpBookingGateway }`.
+
+Sorties : ciblée `Test Files 5 passed (5)`, `Tests 102 passed (102)`, exit 0 ; `pnpm test`
+`Test Files 236 passed (236)`, `Tests 4151 passed (4151)`, exit 0 ; `pnpm lint` « All files pass
+linting. », exit 0 ; `pnpm run build --configuration production` exit 0 (postbuild CSP sur 9 pages).
+Chiffres relevés après le refactor.
+
+Verify runtime reportée : aucune surface atteignable restructurée (aucune page ne consomme encore la
+gateway ; `app.config.ts` gagne un provider non injecté).
+
+Point d'attention pour F2a : les libellés de jour suivent `Intl` (« dimanche 1 novembre »), figés ainsi
+par les tests ; l'admin applique `withFirstOfMonth` (« 1er ») dans `admin/application`. Si la page
+publique doit écrire « 1er », c'est une décision de `qa`/architecte, pas un écart de F1.
 
 ## Review code
 
