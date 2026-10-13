@@ -1461,6 +1461,105 @@ le 2026-10-13 20:23, 43 failed / 4298 total). Nature : 43 `AssertionError` (page
 absente rattrapée en `null`, `Seo` sans `robots`, location nginx absente) ; aucune erreur de harnais,
 aucun délai dépassé (attentes bornées par `settleBounded`).
 
+### Tranche F4 — points d'entrée et confidentialité
+
+Front, branche `feat/024-prise-de-rendez-vous` (sur `9ae654b`), 26 tests neufs + 6 tests existants recalés
+sur le nouveau contrat (32 rouges), plus 8 lignes neuves des `it.each` éditoriaux (vertes : la nouvelle
+source `CONTACT_BOOKING_INVITE` y est inscrite).
+
+**Squelettes de signature** (types et données vides, aucun comportement) : `HomeHeroSection.bookingOpened =
+output<void>()`, `HOME_HERO_CTA_LABELS.booking: ''`, `FOOTER_COPY.bookingLink: ''`, champ
+`link?: { label; href }` sur les étapes de `HomeMethod` **et** sur les questions de `HomeFaq`
+(`home-pitch.model.ts`), module neuf `features/contact/domain/contact-booking-invite.static-data.ts`
+(`CONTACT_BOOKING_INVITE = { prompt: '', link: '' }`), inscrit dans `testing/editorial-sources.ts`
+(typographie française et identité contrôlées).
+
+Signatures figées par les tests (non précisées au plan) :
+- Hero : `hero-booking-link` = `<a routerLink="/rendez-vous">` sans `appButton`, après `hero-cta-offers` ;
+  les seuls `[appButton]` du premier écran restent `hero-cta-contact` puis `hero-cta-offers` (CTA
+  inchangés) ; clic → URL `/rendez-vous`, `bookingOpened` une fois, ni contact ni offres. `Home` mesure
+  `trackCtaClick('home_hero_booking', HOME_HERO_CTA_LABELS.booking)` sans défilement.
+- Méthode : `HOME_METHOD.steps[frame].link = { label, href: '/rendez-vous' }`, aucune autre étape n'a de
+  lien ; rendu `home-method-step-link` (un seul, `A`, dans la première `home-method-step`), clic →
+  `/rendez-vous`. Pas de mesure (le lien `home-why-about-link`, de même nature, n'est pas mesuré).
+- FAQ : `link` porté par la question `application-price` seule, réponse mentionnant la réservation en
+  ligne ; `FaqList` (partagé) rend `faq-answer-link` dans le `<details>` de la question, **hors** du
+  paragraphe `faq-answer` (le test existant compare son texte à `answer` seul) ; aucun lien sur les FAQ
+  des offres (elles n'ont pas de `link`). Clic → `/rendez-vous`. Pas de mesure (`FaqList` n'a pas d'output).
+- Contact : l'encart vit dans `ContactForm` (plan : « sous les coordonnées »), donc sur l'accueil **et** les
+  pages d'offre ; `contact-booking` (texte `prompt` + `link`) après le dernier `contact-channel`, avant le
+  `<form>`, hors du formulaire ; `contact-booking-link` `<a routerLink="/rendez-vous">` ; clic →
+  `/rendez-vous` et `trackCtaClick('contact_booking_' + placement, CONTACT_BOOKING_INVITE.link)`
+  (`contact_booking_home`, `contact_booking_offer_site-vitrine`, sur le patron `offer_request_<slug>`).
+  Sur l'accueil, le lien est dans l'ancre `#contact`, rendu avec le bloc `@defer` (placeholder intact).
+- Pied de page : `footer-booking-link` (`A`, `/rendez-vous`) dans la navigation Contact, entre
+  `footer-contact-cta` et le premier `footer-social-link` ; clic → `/rendez-vous`,
+  `trackCtaClick('footer_booking', FOOTER_COPY.bookingLink)`, pas de `scrollToRequestForm`.
+- Confidentialité : `h2` « Prise de rendez-vous » entre « Formulaire de contact » et « Mesure d'audience »,
+  trois paragraphes `privacy-booking-data`, `privacy-booking-recipients`, `privacy-booking-retention` sous ce
+  titre ; paragraphe `privacy-audience-actions` étendu à la réservation (`trackContactSubmit('booking')`
+  existe depuis F2b) ; mise à jour datée du 13 octobre 2026 (à recaler sur la date de merge si besoin) ; les
+  droits restent dans « Vos droits ».
+- Icônes : `calendar` → `solid/calendar-days`, `video` → `solid/video` (sources présentes dans
+  `@fortawesome/fontawesome-free`) ; sprite et `SPRITE_VERSION` par `pnpm icons:build`, gardés par
+  `pnpm icons:check`, pas par un test Vitest.
+
+Copie proposée (golden, à relire par le propriétaire) : hero « ou réserver un appel de 30 min » (espace
+insécable) ; étape Cadrer « Réserver l'appel de cadrage » ; FAQ « Après un cadrage gratuit de 30 minutes,
+réservable en ligne, je vous envoie un devis ferme. Ce qui n'y figure pas fait l'objet d'un avenant que vous
+validez avant. » + lien « Réserver le cadrage gratuit » ; encart « Préférez en parler ? » (insécable fine) +
+« Réservez un appel de 30 min » ; pied de page « Réserver un appel de 30 min ». Confidentialité :
+- « Pour réserver un appel de cadrage, vous indiquez votre nom, votre adresse e-mail, votre numéro de
+  téléphone si vous choisissez d'être appelé, le nom de votre entreprise si vous le souhaitez et votre
+  besoin. Ces informations servent uniquement à organiser l'appel : confirmation, invitation d'agenda, lien
+  de visio, rappel la veille et annulation. Base légale : les mesures précontractuelles prises à votre
+  demande. »
+- « Elles sont enregistrées sur le serveur de l'éditeur, seul à les consulter, et transmises par e-mail à
+  l'éditeur et à vous-même par son prestataire d'envoi d'e-mails ; la liste publique des créneaux n'en
+  contient aucune. L'appel en visio a lieu sur Jitsi Meet, sans compte de votre côté. »
+- « Chaque rendez-vous et ses informations sont supprimés automatiquement 6 mois après sa date, qu'il ait
+  eu lieu ou ait été annulé. Vous pouvez l'annuler jusqu'à son début par le lien reçu dans l'e-mail de
+  confirmation. »
+- Audience : « … l'envoi réussi du formulaire de contact ou de la réservation d'un appel, … ».
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `features/home/application/home-hero-section.spec.ts` | 4 | lien de réservation | `A` `/rendez-vous` sans `appButton` ; après les CTA, seuls `[appButton]` = contact, offres ; URL après clic ; `bookingOpened` ×1, autres ×0 |
+| `features/home/domain/home-hero.static-data.spec.ts` | 1 recalé | golden | `HOME_HERO_CTA_LABELS` avec `booking` |
+| `features/home/domain/home-pitch.static-data.spec.ts` | 2 + 1 recalé | données | lien de l'étape `frame` seule ; lien FAQ `application-price` seul ; réponse FAQ recalée |
+| `features/home/pages/home/home.spec.ts` | 6 | page | `home_hero_booking` ×1 sans défilement ; `contact-booking-link` dans `#contact` ; lien de l'étape Cadrer et navigation ; lien de la FAQ dans le bon `<details>` et navigation |
+| `features/contact/application/contact-form.spec.ts` | 3 + 2 | encart | texte, lien unique ; position (après coordonnées, avant/hors formulaire) ; navigation ; `it.each` placements `home` / `offer_site-vitrine` → `contact_booking_<placement>` |
+| `features/contact/domain/contact-booking-invite.static-data.spec.ts` | 1 | golden | `CONTACT_BOOKING_INVITE` |
+| `layout/components/footer/footer.spec.ts` | 2 + 1 recalé | colonne Contact | lien, nav Contact, ordre CTA < réservation < réseaux ; navigation + `footer_booking` ×1, pas de défilement ; golden `FOOTER_COPY` |
+| `pages/legal-pages.spec.ts` | 4 + 3 recalés | confidentialité | 3 paragraphes exacts, sous le `h2` « Prise de rendez-vous » ; titres ; paragraphe audience ; date |
+| `shared/icons/icon-map.spec.ts` | 2 | correspondance | `calendar`, `video` |
+
+Balayages : ancien contrat (copie FAQ « cadrage gratuit de 30 minutes », « 11 octobre 2026 », « envoi
+réussi du formulaire », `HOME_HERO_CTA_LABELS`, `FOOTER_COPY`) cherché dans `src`, `e2e`, `ci` : seules
+occurrences hors des fichiers ci-dessus = `booking.routes.ts` (description SEO propre, inchangée) et la note
+« Mesurées depuis le 11 octobre 2026 » d'Audience (sans lien). Suites adaptées (construction des entrées
+seulement) : route `rendez-vous` ajoutée aux `provideRouter` de `home-hero-section.spec.ts`,
+`home.spec.ts`, `contact-form.spec.ts`. Adaptation mécanique : 3 fichiers — 3 configurations de routeur
+complétées, aucune valeur attendue modifiée. Non couverts par un test automatique : suppression de
+`src/prerender-routes.txt` (vérifier l'absence serait un test d'archéologie), régénération du sprite
+(`pnpm icons:check`), scénarios axe (F6).
+
+Sortie condensée (`pnpm test --include='src/app/features/{home,booking,contact}/**/*.spec.ts'` + footer,
+`pages`, `shared/icons`, `editorial-*`) : `Test Files 9 failed | 27 passed (36)`,
+`Tests 32 failed | 751 passed (783)`, exit 1.
+
+`pnpm test; echo $?` (après `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+`Test Files 9 failed | 235 passed (244)` ; `Tests 32 failed | 4300 passed (4332)` ; exit 1. Échecs :
+`legal-pages.spec.ts` 7, `home.spec.ts` 6, `contact-form.spec.ts` 5, `home-hero-section.spec.ts` 4,
+`home-pitch.static-data.spec.ts` 3, `footer.spec.ts` 3, `icon-map.spec.ts` 2,
+`home-hero.static-data.spec.ts` 1, `contact-booking-invite.static-data.spec.ts` 1. 4298 verts avant la
+tranche − 6 recalés + 8 lignes éditoriales neuves = 4300 verts : aucune régression. Typecheck vert ;
+`pnpm run format:check` exit 0 ; `eslint` des fichiers touchés exit 0 ; grep d'archéologie : aucun hit.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 20:45, 32 failed / 4332 total). Nature : 32 `AssertionError` (liens absents, copie vide,
+correspondances d'icônes absentes, section de confidentialité absente) ; aucune erreur de harnais.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1472,6 +1571,7 @@ aucun délai dépassé (attentes bornées par `settleBounded`).
 - **Tranche F2a — le visiteur choisit un jour et une heure** : GREEN partiel 136 passed / 137 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 1), suite complète 4192 passed / 4193 total (exit 1) : seul échec, délai dépassé du test « Given the slots are on their way » de `booking-flow.spec.ts` (contrat de test à revoir par `qa`, cf. `### F2a`) ; `pnpm lint` exit 0, build production exit 0, non commité · refactor : prédicat `offers` renommé `isOffered`
 - **Tranche F2b — le visiteur réserve** : GREEN 198 passed / 198 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4255 passed / 4255 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : aucun (passe qualité manuelle sur le diff, `simplify` indisponible en sous-agent)
 - **Tranche F3 — le visiteur annule par le lien** : GREEN 233 passed / 233 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4298 passed / 4298 total (exit 0), `pnpm lint` exit 0, build production exit 0, image docker construite et smoke `curl` vert, non commité · refactor : constante `IDLE` à un seul site inlinée ; texte de la région `booking-cancel-status` passé sous `@if` (sans lui, l'espace du gabarit empêchait `empty:hidden` : marge vide sous l'aperçu, constaté au navigateur)
+- **Tranche F4 — points d'entrée et confidentialité** : GREEN 4332 passed / 4332 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm icons:check` exit 0, build production exit 0, non commité · refactor : hauteurs du placeholder de la méthode recalées sur la section rendue (le lien de l'étape Cadrer l'allonge de 31 à 53 px selon la largeur)
 
 ### A1
 
@@ -1940,6 +2040,35 @@ Sorties : ciblée `Tests 233 passed (233)`, exit 0 ; `pnpm test` `Test Files 243
 `/rendez-vous/annulation/` 200 ; `curl -sI http://localhost:8089/rendez-vous` : `200 OK`, mêmes en-têtes
 de sécurité, pas de `X-Robots-Tag`, `<title>` prérendu de la page.
 
+### F4
+
+GREEN le 2026-10-13, front branche `feat/024-prise-de-rendez-vous`, non commité. Tests de `qa` inchangés.
+
+- Hero : `hero-booking-link`, lien texte souligné `text-sm text-muted` (`min-h-11`) sous la rangée des
+  deux CTA, inchangés ; disponibilité rapprochée (`mt-5` → `mt-3`) pour garder le rythme du premier
+  écran. `Home.trackBookingClick()` mesure `home_hero_booking`.
+- Méthode : `home-method-step-link` rendu par `@if (step.link)`, même grammaire que `home-why-about-link`
+  (semi-gras primaire, flèche). Placeholder `@defer` de la section recalé (`h-[95.25rem]`, `sm:h-[64rem]`,
+  `md:h-[65.125rem]`, `lg:h-[48.75rem]`, `xl:h-[47.3125rem]`) : écart mesuré au navigateur ≤ 1 px à
+  390, 640, 768, 1024, 1280 et 1440 px (avant recalage, la section dépassait de 31 à 53 px : CLS).
+- `FaqList` (partagé) : `FaqItem.link?`, `faq-answer-link` après le paragraphe `faq-answer`, dans le
+  `<details>`. La FAQ fermée par défaut ne change pas la hauteur du placeholder de la FAQ.
+- `ContactForm` : encart `contact-booking` (icône `calendar`, `prompt`, lien `contact-booking-link`) sous
+  `app-contact-info-panel`, colonne gauche, hors du `<form>` ; `trackBookingClick()` mesure
+  `contact_booking_<placement>`.
+- Pied de page : `footer-booking-link` (`footer-link`) entre le CTA et les réseaux, `footer_booking`.
+- Confidentialité : section « Prise de rendez-vous » (trois paragraphes de la copie), paragraphe
+  audience étendu, date au 13 octobre 2026.
+- Icônes `calendar` (`calendar-days`) et `video` dans `ICON_MAP`, `pnpm icons:build` (sprite 109 icônes,
+  empreinte `32d5e86e`). `video` n'a encore aucun usage dans le gabarit (prévu au plan, posé par le test).
+- `src/prerender-routes.txt` supprimé : aucune référence hors des specs (`grep -rn prerender-routes`
+  hors `node_modules`, `dist`, `.angular`).
+
+Sorties : `pnpm test` `Test Files 244 passed (244)`, `Tests 4332 passed (4332)`, exit 0 ; `pnpm lint`
+« All files pass linting. », exit 0 ; `pnpm run format:check` exit 0 ; `pnpm icons:check` « OK: sprite
+and fingerprint 32d5e86e are in sync (109 icons). », exit 0 ; `pnpm run build --configuration production`
+exit 0.
+
 ## Verify
 
 Tranche F2a, `pnpm start` (dev SSR, port 4200), créneaux servis par `page.route('**/api/booking/slots')`
@@ -1992,6 +2121,23 @@ Verdict : **PASS** sur desktop 1440×900 et mobile 390×844, clair et sombre. Ca
 `desktop-light-invalid.png`, `mobile-dark-invalid.png`. Console : aucune erreur applicative ; 502 du
 proxy de dev vers l'API locale absente (`/api/config`, `/api/analytics/track`, `/api/cv`,
 `/api/projects`), étrangères au booking.
+
+Tranche F4 (restructure l'accueil, le formulaire de contact, le pied de page et la confidentialité, déjà
+atteignables), `pnpm start` (dev, port 4220), doublure `ci/api-stub` sur le port 3000,
+`page.route('**/api/booking/slots')` (liste vide), script Playwright jetable `f4/verify.mjs`.
+
+1. Accueil : premier écran avec les deux boutons puis « ou réserver un appel de 30 min » ; méthode avec
+   « Réserver l'appel de cadrage » sous Cadrer ; FAQ « Comment est fixé le prix d'une application ? »
+   ouverte, lien « Réserver le cadrage gratuit » sous la réponse ; section contact avec l'encart
+   (1 lien `contact-booking-link`) entre les coordonnées et le formulaire ; pied de page.
+2. Retour en haut, clic sur `hero-booking-link` : URL `/rendez-vous`, `h1` « Prendre rendez-vous ».
+3. `/confidentialite` : section « Prise de rendez-vous » entre contact et audience, date 13 octobre 2026.
+4. Hauteur réelle de la méthode contre le placeholder recalé : ≤ 1 px d'écart aux six largeurs.
+
+Verdict : **PASS** sur desktop 1440×900 et mobile 390×844, clair et sombre. Captures :
+`/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f4/{desktop,mobile}-{light,dark}-{1-hero,2-method,3-faq-open,4-contact,5-footer,6-privacy}.png`,
+`mobile-{light,dark}-4-contact-viewport.png`. Console : aucune erreur applicative ; seul `404` de
+`/api/config`, que la doublure ne sert pas.
 
 ## Review code
 
