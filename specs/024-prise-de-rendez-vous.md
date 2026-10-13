@@ -895,11 +895,105 @@ GREEN par construction. Le GREEN doit créer `to-ics.ts`, `booking-notifier.serv
 `icalEvent` du mailer, `OWNER_EMAIL`, `PUBLIC_SITE_URL` + getter, `CancelTokenDto`,
 `previewCancellation`, `cancelByVisitor`, l'appel du notifier dans `create` et les deux routes.
 
+### Tranche A4 — l'admin gère plages, fermetures et rendez-vous
+
+API `nest-portfolio-app`, branche `feat/booking` (sur `26152d5`), 110 tests unitaires neufs dans 4 fichiers
+plus 4 tests d'intégration. Builder ajouté : `anAdminBooking` (`booking-test-builders.ts`, typé
+`AdminBooking` importé en type de `booking.service.ts`, instants en chaînes ISO).
+
+Signatures figées par les tests (non précisées au plan) :
+- `BookingAdminController` (`booking-admin.controller.ts`) : `@UseGuards(JwtAuthGuard)` de classe,
+  métadonnée exactement `[JwtAuthGuard]` ; injecte `AvailabilityService` et `BookingService`. Les huit
+  routes du contrat. Le contrôleur **projette** : plages → `{ weekday, startMinute, endMinute }`,
+  fermetures → `{ id, startsOn, endsOn, reason }` (le service rend des lignes complètes) ; enveloppe
+  `{ data }` sauf `POST closures` (fermeture seule, 201), `upcoming-count` (`{ count }` du service) et
+  `PATCH cancel` (`AdminBooking` du service, 200). `DELETE` → 204 sans corps. Aucun throttle asserté.
+- DTO (validation HTTP, `ValidationPipe` de `main.ts`) : règles du contrat (`weekday` entier 1-7,
+  minutes 0-1440 multiples de 30, `@ArrayMaxSize(50)`, champ inconnu imbriqué refusé, liste vide
+  acceptée) ; fermeture : dates `YYYY-MM-DD` **calendaires** (`2026-02-30`, mois 13, instant ISO,
+  `24/12/2026` refusés), `reason` facultatif **≤ 500** (borne absente du plan, alignée sur le motif
+  d'annulation) ; `scope` requis, `@IsIn(['upcoming', 'past'])`, paramètre inconnu refusé ; `reason`
+  d'annulation facultatif ≤ 500 ; `ParseUUIDPipe` sur les deux `:id`.
+- `AvailabilityService.replaceRules(rules)` : `end <= start` → `BadRequestException` (code libre) et
+  chevauchement le même jour (adjacent accepté) → `BadRequestException({ error: 'rules_overlap' })`,
+  tous deux **avant** toute transaction ; sinon dans `db.transaction(tx)` : `tx.delete(availabilityRules)`
+  puis `tx.insert(availabilityRules).values([...])` (aucun insert pour `[]`), rien sur la connexion
+  partagée ; rend les plages triées jour puis début.
+- `createClosure({ startsOn, endsOn, reason? })` : `values({ startsOn, endsOn, reason })` exact, motif
+  absent ou vide → `null`, fin = début acceptée, fin < début → `BadRequestException` sans insertion ;
+  rend la ligne `returning()`. `deleteClosure(id)` : `delete … where id … returning()`, aucune ligne →
+  `NotFoundException` (code libre), sinon `undefined`.
+- `BookingService.listBookings(scope)` → `AdminBooking[]` (instants ISO, `null` gardés, ni
+  `cancelTokenHash` ni `updatedAt`) ; terminateur `orderBy` ; `upcoming` : `"ends_at" > now`, `"starts_at"
+  asc` ; `past` : `"ends_at" <= now`, `"starts_at" desc` ; aucun filtre de statut.
+  `countUpcoming()` → `{ count }` (terminateur `where`, `status = 'confirmed'` et `ends_at > now`).
+- `cancelByOwner(id, reason?)` → `AdminBooking` : lecture `where id` ; inconnu → 404
+  `booking_not_found` ; déjà annulé (même passé) → sa ligne inchangée, sans écriture ni email, motif non
+  écrasé, **avant** le contrôle d'heure ; `now >= startsAt` → 409 `cancel_too_late` ; sinon `set({ status,
+  cancelledAt: now, cancelledBy: 'owner', cancelReason: motif || null })` gardé par id + `confirmed`,
+  `bookingCancelled(ligne annulée)` en `fireAndForget` (échec journalisé avec l'id) ; course perdue
+  (`returning()` vide) → ligne **relue** par id (troisième appel de `where`) rendue, sans email.
+- `BookingNotifier.bookingCancelled(row)` inchangé en signature, décliné sur `row.cancelledBy` : avec
+  motif, les deux emails contiennent `Motif` et le motif échappé ; sans motif (ou annulation visiteur),
+  aucun ne contient `Motif` ; l'email de chaque destinataire diffère entre annulation visiteur et
+  propriétaire ; l'email propriétaire d'une annulation propriétaire ne contient pas « a annulé son
+  rendez-vous » (attribution au visiteur) ; `CANCEL` / `SEQUENCE:1` aux deux, sans lien d'annulation.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `booking-admin.controller.spec.ts` | 58 | supertest, garde remplacée, `ValidationPipe` et `HttpExceptionFilter` de `main.ts` | garde de classe `[JwtAuthGuard]` ; 8 routes déclarées ; corps exacts projetés ; demande transmise ; 400 sans appel (10 plages invalides, 4 corps invalides, 8 fermetures invalides, 3 query, 3 annulations invalides) ; bornes 50 plages / 500 caractères acceptées ; `rules_overlap`, 404, 409 `booking_not_found` / `cancel_too_late` avec `error` et `path` ; 204 sans corps |
+| `availability.service.spec.ts` (écriture) | 20 | `replaceRules`, `createClosure`, `deleteClosure` (transaction doublée par un second `createMockDb`) | suppression avant insertion sur `tx`, rien sur `db` ; tri ; liste vide ; 4 chevauchements → `rules_overlap` sans transaction ; adjacent et autre jour acceptés ; fin ≤ début refusée ; motif `null` ; fin < début refusée ; suppression par id (paramètres SQL) ; 404 |
+| `booking.service.spec.ts` (administration) | 23 | horloge simulée | lignes admin exactes ; filtre, tri, sans statut (SQL rendu) ; liste vide ; compteur et sa condition ; `set` du propriétaire ; réponse sans empreinte ; motif `null` ; lecture et garde par id ; notification après `update`, sans attente, échec journalisé ; déjà annulé ×2 ; 409 ×3, 1 ms avant → annulé ; 404 ; course perdue |
+| `booking-notifier.service.spec.ts` (annulation propriétaire) | 9 | emails et invitations | deux `CANCEL` du même UID datés ; motif dans les deux, échappé ; pas de `Motif` sans motif ni pour le visiteur ; rédaction différente par destinataire ; pas d'attribution au visiteur ; pas de lien d'annulation |
+| `booking.integration.spec.ts` | 4 | Postgres réel | plages remplacées → créneaux tous à 10:00/10:30 puis 14:00/14:30 de Paris, 7 lignes ; chevauchement refusé, bloc intact ; annulation propriétaire : motif, `owner`, une notification, même horaire réservable ; listes `upcoming` (croissant, annulé compris) / `past` (décroissant) et compteur 1 |
+
+Adaptation mécanique : `booking.integration.spec.ts` — 1 site (`availability = module.get(AvailabilityService)`
+ajouté au `beforeAll`), aucune valeur attendue modifiée.
+
+Sweep : écart A3 (intro propriétaire rédigée pour le visiteur) couvert par les tests du notifier ;
+aucun test existant n'encode `cancelledBy: 'visitor'` comme seule valeur possible hors des cas visiteur.
+Assertions vérifiées contre une implémentation de référence jetable (contrôleur, DTO, méthodes, notifier,
+gabarit : 373 verts sous `src/booking`, intégration 14 verts), supprimée avant la preuve.
+
+Non couverts par un test automatique : câblage de `BookingAdminController` dans `BookingModule`
+(`pnpm build` et démarrage), `@ApiBearerAuth`, rendu Mailpit de l'annulation propriétaire (manuel).
+
+Sortie condensée (`pnpm test -- src/booking; echo $?`) :
+
+```
+FAIL src/booking/booking-admin.controller.spec.ts  Cannot find module './booking-admin.controller'
+FAIL src/booking/availability.service.spec.ts      20 × TypeError: service.replaceRules / createClosure / deleteClosure is not a function ; 3 A1 verts
+FAIL src/booking/booking.service.spec.ts           23 × TypeError: service.listBookings / countUpcoming / cancelByOwner is not a function ; A1-A3 verts
+FAIL src/booking/booking-notifier.service.spec.ts  5 × toContain / not.toContain / not.toEqual ; 4 gardes vertes, 16 A3 verts
+Test Suites: 4 failed, 1 skipped, 8 passed, 12 of 13 total
+Tests:       48 failed, 14 skipped, 253 passed, 315 total
+EXIT 1
+```
+
+Intégration (`docker run … postgres:17-alpine` sur 55433) : `Tests: 4 failed, 10 passed, 14 total`,
+exit 1 ; `availability.replaceRules is not a function` ×2, `service.cancelByOwner is not a function` ×2 ;
+les 10 cas A2-A3 restent verts.
+
+`pnpm test; echo $?` : `Test Suites: 4 failed, 2 skipped, 56 passed` ; `Tests: 48 failed, 19 skipped,
+1171 passed, 1238 total` ; exit 1 ; seuls échecs : les quatre suites ci-dessus. `tsc --noEmit` : seules
+erreurs nouvelles TS2307 (`booking-admin.controller`), TS2305 (`AdminBooking`), TS2339 (méthodes
+absentes) ; TS2345 préexistantes inchangées. Prettier vert ; eslint ne signale que des cascades de
+types non résolus (`no-unsafe-*`).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 17:38, 48 failed / 1238 total, plus 1 suite non chargée (58 tests) et 4 failed / 14 total
+en intégration). Nature : module ou membre applicatif absent et assertions de contenu d'email ; aucune
+erreur de harnais. Quatre gardes du notifier sont vertes avant le GREEN par construction. Le GREEN doit
+créer `booking-admin.controller.ts` et ses DTO, `replaceRules`, `createClosure`, `deleteClosure`,
+`listBookings`, `countUpcoming`, `cancelByOwner`, le type `AdminBooking`, la déclinaison propriétaire de
+`bookingCancelled` (et du gabarit) et le câblage dans `BookingModule`.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
 - **Tranche A2 — une réservation est confirmée, jamais en double** : GREEN 153 passed / 153 total + 9 skipped (`pnpm test -- src/booking`, exit 0), intégration 9 passed / 9 total sur Postgres 17 réel (exit 0) · refactor : test de battement extrait de `computeFreeSlots` en `overlapsBooking` (partagé avec le 409), lecture des entrées du calcul factorisée entre `getSlots` et `create`, marche `cause` d'`isUniqueViolation` partagée avec `isExclusionViolation`
 - **Tranche A3 — invitations et annulation par le visiteur** : GREEN 249 passed / 249 total + 10 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 10 passed / 10 total sur Postgres 17 réel (exit 0), 4 emails vérifiés dans Mailpit · refactor : gabarits regénérés au format compact des gabarits contact (Prettier les avait éclatés), paramètres `ATTENDEE` réduits à `CN` + `PARTSTAT` (ligne repliée inutilement)
+- **Tranche A4 — l'admin gère plages, fermetures et rendez-vous** : GREEN 359 passed / 359 total + 14 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 14 passed / 14 total sur Postgres 17 réel (exit 0), application démarrée (`node dist/main.js`) : 8 routes admin mappées, 401 sans session, parcours admin complet et 4 emails dans Mailpit · refactor : `assertNotStarted` et `bookingNotFound` partagés entre annulation visiteur et propriétaire, `siteUrl()` du notifier partagé entre lien d'annulation et lien de réservation
 
 ### A1
 
@@ -1065,3 +1159,74 @@ Tests de `qa` inchangés.
   propriétaire reste à trancher sur ce résultat.
 - Démarrage de l'application (câblage DI de `BookingNotifier`) : couvert par compilation et par les
   modules de test, pas par un `nest start`.
+
+### A4
+
+GREEN le 2026-10-13, API `nest-portfolio-app` branche `feat/booking` (sur `26152d5`), non commité.
+Tests de `qa` inchangés.
+
+**Fichiers**
+- Créés : `src/booking/booking-admin.controller.ts` (`@ApiTags('Booking (admin)')`,
+  `@ApiBearerAuth()`, `@UseGuards(JwtAuthGuard)` de classe, projection des plages et fermetures),
+  `src/booking/dto/replace-availability-rules.dto.ts` (`AvailabilityRuleDto` +
+  `ReplaceAvailabilityRulesDto` : `@IsArray @ArrayMaxSize(50) @ValidateNested @Type`),
+  `dto/create-availability-closure.dto.ts` (`@Matches(/^\d{4}-\d{2}-\d{2}$/)` + `@IsISO8601({ strict:
+  true })`, motif ≤ 500), `dto/list-bookings-query.dto.ts` (`@IsIn(['upcoming', 'past'])`),
+  `dto/cancel-booking-by-owner.dto.ts` (motif ≤ 500), `mail-templates/booking-cancelled-reason.html`
+  (ligne « Motif » du récapitulatif).
+- Modifiés : `availability.service.ts` (`replaceRules` validé avant la transaction puis `delete` +
+  `insert` sur `tx`, relu trié par `listRules(tx)` ; `createClosure` ; `deleteClosure`),
+  `booking.service.ts` (type `AdminBooking`, `BookingScope`, `listBookings`, `countUpcoming`,
+  `cancelByOwner`, `toAdminBooking`), `booking-notifier.service.ts` (`bookingCancelled` décliné sur
+  `cancelledBy` et le motif), `mail-templates/booking-cancelled.html` (emplacement `{{reasonRow}}`),
+  `booking.module.ts` (second contrôleur).
+
+**Écarts au plan**
+- Throttle des routes admin : aucun décorateur, comme les routes admin de `contact.controller.ts`
+  (limite globale `ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }])`). Le `ThrottlerGuard` compte
+  par IP **et par handler** (clé classe + méthode) : 10 lectures / min **par route**, pas 10 au total
+  (constaté au démarrage : 14 appels admin en moins d'une seconde, sur 8 routes, aucun 429). Un écran
+  qui recharge souvent la même route (compteur `upcoming-count` à chaque navigation admin, F5a) peut
+  atteindre 429 ; politique globale inchangée, à surveiller en F5a.
+- Ligne « Motif » composée **avant** le rendu (fragment inséré à la place de `{{reasonRow}}`, puis
+  `renderTemplate`) : le motif passe par l'échappement commun, aucune chaîne HTML n'est injectée après
+  rendu. Motif retenu seulement si `cancelledBy === 'owner'`.
+- Rédactions : visiteur annulé par le propriétaire « Je dois malheureusement annuler notre rendez-vous
+  […] Vous pouvez réserver un autre créneau sur <site>/rendez-vous. » ; propriétaire « Vous avez annulé
+  le rendez-vous de <nom> (<email>) ; un email d'annulation lui a été envoyé. ».
+- `replaceRules` n'appelle pas `returning()` sur l'insertion : la réponse est relue triée sous la même
+  transaction.
+
+**Preuves**
+- `pnpm test -- src/booking; echo $?` → `Test Suites: 1 skipped, 12 passed` ; `Tests: 14 skipped,
+  359 passed, 373 total` ; exit 0. Idem sous `TZ=Pacific/Kiritimati`, exit 0.
+- Intégration (`postgres:17-alpine` sur 55433, `pg_isready`) : `Tests: 14 passed, 14 total`, exit 0.
+- `pnpm test; echo $?` → `Test Suites: 2 skipped, 60 passed` ; `Tests: 19 skipped, 1277 passed,
+  1296 total` ; exit 0. `pnpm lint` exit 0 ; `pnpm build` exit 0 ; `dist/booking/mail-templates/`
+  contient les quatre gabarits.
+- **Démarrage réel** (première preuve du câblage DI depuis A1) : base `app` dans le conteneur, Mailpit,
+  env minimal (`DATABASE_URL`, `JWT_SECRET` local, S3 factice, SMTP `127.0.0.1:1025`,
+  `PUBLIC_SITE_URL=http://localhost:4200`, `PORT=3077`), `pnpm db:migrate` exit 0, `node dist/main.js` :
+  - journal : `BookingAdminController {/api/booking}` et ses 8 routes mappées, aucune erreur ;
+  - `GET /api/health` → `{"status":"ok","db":{"status":"up",…}}` ;
+  - `GET /api/booking/slots` → 200 `{"timeZone":"Europe/Paris","slots":[]}` ;
+  - règle insérée en SQL (mardi 10:00-12:00 Paris) → 12 créneaux, `2026-10-20T08:00Z` (heure d'été)
+    puis `2026-10-27T09:00Z` et `2026-11-03T09:00Z` (heure d'hiver) ;
+  - `POST /api/booking/bookings` (visio, 20/10 10:00) → 201 `{ id, startsAt, endsAt, format,
+    videoUrl: "https://meet.jit.si/nedellec-…" }` ; Mailpit : 2 messages (« Rendez-vous confirmé :
+    mardi 20 octobre 2026 à 10:00 » au visiteur, « Nouveau rendez-vous : … » au propriétaire), une
+    pièce jointe chacun ;
+  - même créneau, autre email → 409 `slot_taken` ;
+  - 6 routes admin sans cookie (GET ×4, PUT rules, PATCH cancel) → 401.
+  - avec un JWT signé localement (utilisateur de test inséré en base) : `PUT rules` chevauchantes →
+    400 `rules_overlap` ; `PUT rules` → 200 trié ; `POST closures` 27/10 → 201 et le 27/10 disparaît
+    des créneaux ; `2026-02-30` → 400 ; `DELETE` → 204 puis 404 ; `upcoming-count` → `{"count":1}` ;
+    `bookings?scope=upcoming` → la ligne admin complète sans empreinte ; `scope=all` → 400 ; `PATCH
+    cancel` avec motif `Imprévu <b>de mon côté</b>.` → 200 `cancelledBy: "owner"`, second `PATCH` →
+    même ligne, motif non écrasé ; compteur → 0 ; Mailpit : 2 emails « Rendez-vous annulé », motif
+    échappé (`&lt;b&gt;`) dans les deux, rédaction propriétaire distincte, aucun lien d'annulation,
+    `METHOD:CANCEL`, `SEQUENCE:1`, `STATUS:CANCELLED`, même `UID`.
+  - process node et conteneurs arrêtés.
+
+**Non vérifié**
+- Import réel du `CANCEL` propriétaire dans Google Agenda / Outlook (même réserve qu'en A3).
