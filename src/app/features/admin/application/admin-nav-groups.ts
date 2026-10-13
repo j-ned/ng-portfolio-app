@@ -7,6 +7,7 @@ type AdminNavKey =
   | 'audience'
   | 'messages'
   | 'bookings'
+  | 'availability'
   | 'settings';
 
 type AdminNavItem = {
@@ -73,6 +74,7 @@ export function adminNavGroups(counts: AdminNavCounts): readonly AdminNavGroup[]
           counts.upcoming,
           counts.upcoming === null ? '' : 'à venir',
         ),
+        link('availability', '/admin/disponibilites', 'clock', 'Disponibilités'),
       ],
     },
     { label: 'Compte', items: [link('settings', '/admin/settings', 'cog', 'Paramètres')] },

@@ -36,6 +36,12 @@ describe('adminNavGroups', () => {
         label: 'Rendez-vous',
         items: [
           { key: 'bookings', route: '/admin/rendez-vous', label: 'Rendez-vous', exact: false },
+          {
+            key: 'availability',
+            route: '/admin/disponibilites',
+            label: 'Disponibilités',
+            exact: false,
+          },
         ],
       },
       {
@@ -59,6 +65,7 @@ describe('adminNavGroups', () => {
       { key: 'audience', count: null, countSuffix: '' },
       { key: 'messages', count: 3, countSuffix: 'non lus' },
       { key: 'bookings', count: 2, countSuffix: 'à venir' },
+      { key: 'availability', count: null, countSuffix: '' },
       { key: 'settings', count: null, countSuffix: '' },
     ]);
   });
@@ -117,6 +124,7 @@ describe('adminNavGroups', () => {
         audience: null,
         messages: 3,
         bookings: 2,
+        availability: null,
         settings: null,
         [key]: null,
       });
@@ -157,6 +165,14 @@ describe('adminNavGroups: Rendez-vous', () => {
 
     expect(bookings?.icon).toBe('calendar');
   });
+
+  it('Given counts When the groups are built Then « Disponibilités » is drawn with the clock icon', () => {
+    const availability = adminNavGroups(COUNTS)
+      .flatMap((group) => group.items)
+      .find((item) => item.route === '/admin/disponibilites');
+
+    expect(availability?.icon).toBe('clock');
+  });
 });
 
 describe('adminNavGroups: Parcours', () => {
@@ -181,6 +197,7 @@ describe('activeNavLabel', () => {
     { url: '/admin/settings/security', label: 'Paramètres' },
     { url: '/admin/rendez-vous', label: 'Rendez-vous' },
     { url: '/admin/rendez-vous?scope=past', label: 'Rendez-vous' },
+    { url: '/admin/disponibilites', label: 'Disponibilités' },
     { url: '/admin/projects/new', label: 'Projets' },
     { url: '/admin#top', label: "Vue d'ensemble" },
     { url: '/admin/blogroll', label: 'Administration' },

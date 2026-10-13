@@ -1666,6 +1666,121 @@ Tous les tests de cette tranche échouent à ce stade (RED confirmé via la comm
 le 2026-10-13 21:15, 81 failed / 4404 total). Nature : 81 `AssertionError` (vue neutre, page vide, groupe
 de navigation et route absents) ; aucune erreur de harnais, aucun délai dépassé.
 
+### Tranche F5b — l'admin règle ses disponibilités
+
+Front, branche `feat/024-prise-de-rendez-vous` (sur `72595a0`), 96 tests neufs + 9 tests existants recalés
+sur le nouveau contrat de navigation et de routes (102 rouges, 3 garde-fous verts sur le squelette).
+`admin-availability-rows` et `admin-closures` n'ont pas de spec isolé : composants couverts par la page
+(la dérivation pure vit dans `availability-draft`). Pas de résumé « Créneaux proposés » : le plan ne le
+prévoit pas.
+
+**Squelettes de signature** (types et corps neutres, aucun comportement) :
+`admin/application/availability-draft.ts` (types ; `toTimeOfDay` → `''`, `toMinuteOfDay` → `NaN`,
+`toAvailabilityDraft` → sept jours vides, `toAvailabilityRules` → `[]`, `findOverlappedRange` → `-1`) ;
+page `admin/pages/admin-availability/admin-availability.ts` (`AdminAvailability`, gabarit vide,
+`canLeave()` → `true`).
+
+Signatures figées par les tests (non précisées au plan) :
+- `AvailabilityRangeRow = { start: string; end: string }` (`HH:MM`, `''` tant que non choisi) ;
+  `AvailabilityDraft = Record<'monday' | … | 'sunday', AvailabilityRangeRow[]>`, clés dans l'ordre lundi →
+  dimanche : `countChangedFields` compte donc **un changement par jour modifié** (« 2 modifications » pour
+  lundi et jeudi, ajouter puis retirer une plage → « Aucune modification »).
+- `toTimeOfDay(minute)` / `toMinuteOfDay(time)` : `0` ⇄ `00:00`, `1440` ⇄ `24:00`.
+- `toAvailabilityDraft(rules | null)` : plages de chaque jour triées par début, copies modifiables ;
+  `toAvailabilityRules(draft)` : jours lundi → dimanche, lignes dans l'ordre affiché, copie champ par champ
+  (ni symbole ni champ en trop).
+- `findOverlappedRange(rows, index): number | null` : indice de la plage antérieure (début plus tôt,
+  ou même début et rang plus petit) que chevauche la ligne `index` ; plages adjacentes, incomplètes ou à
+  fin ≤ début ignorées. Le message va donc sur le **début de la plage qui commence le plus tard**.
+- Page : `admin-availability-weekly` (section, `h2` « Plages hebdomadaires ») contient
+  `admin-availability-loading` (`role="status"`) / `load-error` (Réessayer relit les plages) / le
+  formulaire `admin-availability-rules` (`form#availability-form`) ; sans grille, pas de barre
+  d'enregistrement. Sept `fieldset` `admin-availability-day` (`legend` « Lundi » … « Dimanche ») ; par plage
+  `admin-availability-rule` avec deux `select` `admin-availability-rule-start` (00:00 → 23:30) et
+  `admin-availability-rule-end` (00:30 → 24:00), option vide en tête, libellés « Début / Fin de la plage
+  N du lundi », ids uniques ; `admin-availability-rule-remove` (« Retirer la plage N du lundi ») ;
+  `admin-availability-rule-add` par jour (nom accessible « Ajouter une plage le lundi ») ;
+  `admin-availability-day-empty` « Aucun créneau ce jour-là » ; `admin-availability-none` quand aucune plage.
+  Erreurs `admin-availability-rule-{start,end}-error` (`role="alert"`, reliées par `aria-describedby`,
+  `aria-invalid="true"`). Barre `app-admin-save-bar` (`formId` `availability-form`, annuler `/admin`) ;
+  envoi de toute la grille par `replaceAvailabilityRules` ; réponse de l'API réaffichée (ordre trié) ;
+  échec → toast, brouillon gardé (la fonction passée à `DocumentDraft.save` lève sur un Result en échec).
+  Fermetures : `admin-closures` (section, `h2` `admin-closures-heading` « Fermetures ») avec
+  `admin-closures-loading` / `load-error` / `admin-closures-empty` / `admin-closures-list` (`ul role="list"`,
+  `li` `admin-closure` : `admin-closure-period`, `admin-closure-reason` absent si nul,
+  `admin-closure-delete`) ; formulaire propre (jamais imbriqué) : `admin-closure-starts-on` et
+  `admin-closure-ends-on` (`type="date"`, `aria-required="true"`), `admin-closure-reason` (`maxLength` 500),
+  `admin-closure-submit` ; erreurs `admin-closure-{starts-on,ends-on}-error`. Le formulaire des fermetures ne
+  touche pas le brouillon des plages. Suppression : dialogue, puis focus sur `admin-closures-heading`.
+- Route `disponibilites`, titre « Disponibilités | Admin », `canDeactivate: [unsavedChangesGuard]`,
+  `loadComponent` → `AdminAvailability`. Navigation : item `availability`, `/admin/disponibilites`,
+  « Disponibilités », icône `clock`, sans compte, après `bookings` dans le groupe « Rendez-vous ».
+
+Copie proposée (à relire par le propriétaire ; insécable avant « : » et « ? ») : titre « Disponibilités » ;
+introduction « Les créneaux de 30 minutes proposés sur la page de réservation découlent de ces plages, à
+l'heure de Paris, moins les fermetures et les rendez-vous déjà pris. » ; « Aucune plage : la page de
+réservation n'affiche aucun créneau. » ; erreurs « Choisissez l'heure de début », « Choisissez l'heure de
+fin », « La fin doit suivre le début », « Chevauche la plage 1 » ; chargement « Les disponibilités n'ont pas
+pu être chargées. Vérifiez votre connexion, puis réessayez. » ; succès « Disponibilités enregistrées » ;
+`overlap` « Deux plages du même jour se chevauchent : corrigez-les, puis enregistrez. », `invalid` « Les
+plages ont été refusées : vérifiez les heures, puis réessayez. », `network` / `server` « Enregistrement
+impossible : vérifiez votre connexion, puis réessayez. » / « … : le serveur n'a pas répondu. Réessayez dans
+un instant. » ; quitter « Les modifications non enregistrées des disponibilités seront perdues. ».
+Fermetures : « Mercredi 11 novembre 2026 », « Du jeudi 24 décembre 2026 au vendredi 1er janvier 2027 » ;
+« Supprimer la fermeture du jeudi 24 décembre 2026 au vendredi 1er janvier 2027 » ; « Aucune fermeture à
+venir. » ; « Les fermetures n'ont pas pu être chargées. … » ; « Premier jour », « Dernier jour », « Motif
+(facultatif) », « Ajouter la fermeture » ; « Choisissez le premier jour », « Choisissez le dernier jour »,
+« Le dernier jour ne peut pas précéder le premier » ; « Fermeture ajoutée » ; `invalid` « La fermeture a
+été refusée : vérifiez les dates, puis réessayez. », « Ajout impossible : … » ; dialogue « Supprimer cette
+fermeture ? », « <période>. Les créneaux redeviennent réservables. », « Supprimer la fermeture » / « Garder
+la fermeture » ; « Fermeture supprimée » ; `not-found` « Cette fermeture n'existe plus. Rechargez la
+page. », « Suppression impossible : … ».
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `admin/application/availability-draft.spec.ts` | 6 + 6 | minutes ⇄ `HH:MM` | `00:00`, `09:30`, `23:30`, `24:00` exacts |
+| | 5 | `toAvailabilityDraft` : `null`, `[]` (garde-fous), semaine, désordre, copie | `toEqual` exact, clés lundi → dimanche, règles intactes |
+| | 4 | `toAvailabilityRules` : vide (garde-fou), ordre, symbole et champ en trop, aller-retour | règles exactes, 3 clés, 0 symbole |
+| | 9 | `findOverlappedRange` (`it.each`) : début dedans, adjacentes, ordre inverse, même début, incluse, trois plages, incomplète, fin ≤ début, disjointes | indice exact par ligne |
+| `admin/pages/admin-availability/admin-availability.spec.ts` | 6 | ouverture | 1 lecture chacune ; `h1` unique, deux `h2` ; introduction ; formulaire et 7 `fieldset` ; plages par jour, jours vides ; dimanche 00:00–24:00 ; aucune plage |
+| | 3 | libellés | libellés de `select`, ids uniques ; options 00:00–23:30 / 00:30–24:00 ; noms des boutons |
+| | 3 | chargement, erreur, Réessayer | `role="status"`, ni grille ni barre ; message, fermetures affichées ; 2 lectures |
+| | 5 | édition | ajout (plage vide, 1 modification) ; retrait (renumérotation) ; jour vidé ; 2 jours → 2 ; ajout puis retrait → aucune |
+| | 2 + 4 | validation | fin = / < début (message, `role`, `aria-invalid`, `aria-describedby`) ; chevauchement à la saisie ; à l'envoi ; plage vide ; adjacentes et autre jour → envoyé |
+| | 4 + 4 + 1 | enregistrement | barre (`form`, `/admin`) ; grille complète, toast, propre ; ordre trié de l'API réaffiché ; grille vidée → `[]` ; 4 échecs (toast, brouillon gardé) ; en cours → désactivé |
+| | 1 + 1 + 2 + 1 + 1 | quitter | sans changement ; dialogue ; confirmer / renoncer ; après enregistrement ; `beforeunload` |
+| | 2 + 3 | liste des fermetures | ordre, périodes (« 1er », jour seul), motif ; noms de suppression ; chargement ; erreur puis Réessayer ; vide + formulaire |
+| | 1 + 1 + 2 + 1 + 1 + 1 + 3 | ajout | champs (`date`, libellés, 500, formulaire propre) ; motif rogné, tri, toast, formulaire vidé, aucune écriture des plages ; motif blanc / absent → `null` ; brouillon intact ; vide ; fin < début ; 3 échecs (valeurs gardées) |
+| | 1 + 1 + 2 + 3 | suppression | dialogue sans appel ; confirmée (id, ligne retirée, toast, focus) ; renoncer, Échap ; 3 échecs |
+| `admin/application/admin-nav-groups.spec.ts` | 2 + 6 recalés | groupe | structure, comptes, compte inconnu (`availability: null`) ; icône `clock` ; `activeNavLabel('/admin/disponibilites')` |
+| `admin/application/components/admin-nav.spec.ts` | 1 + 2 recalés | rendu | groupe « Rendez-vous » à deux liens ; lien « Disponibilités » ; page courante |
+| `admin/pages/admin-layout/admin-layout.spec.ts` | 1 | barre mobile | « Disponibilités » |
+| `admin/admin.routes.spec.ts` | 2 + 1 recalé | route | titres ; adresse et titre ; `AdminAvailability`, garde `[unsavedChangesGuard]` |
+
+Balayages : contrat de navigation (`AdminNavKey`, `adminNavGroups(`, `nav-link-*`, groupe « Rendez-vous »)
+cherché dans `src`, `e2e`, `ci` : seuls consommateurs = les trois specs ci-dessus et `admin-layout.ts`.
+Titres des routes admin : seul `admin.routes.spec.ts`. `disponibilites` / « Disponibilités » : aucune
+occurrence avant la tranche. Aucun état seedé ni constante recalibrée. Adaptation mécanique : aucune (les
+9 recalés changent de valeur attendue au titre du nouveau contrat ; dans `admin-nav.spec.ts`, la clé
+`availability` ajoutée à `NAV_KEYS` laisse les cas « page courante » existants inchangés). Non couverts
+par Vitest : scénario axe `/admin/disponibilites` et doublure `ci/api-stub` (F6).
+
+Sortie condensée (`pnpm test --include='src/app/features/{admin,booking}/**/*.spec.ts'; echo $?`) :
+`Test Files 6 failed | 70 passed (76)`, `Tests 102 failed | 1930 passed (2032)`, exit 1.
+
+`pnpm test; echo $?` (après `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+`Test Files 6 failed | 242 passed (248)` ; `Tests 102 failed | 4401 passed (4503)` ; exit 1. Échecs :
+`admin-availability.spec.ts` 60, `availability-draft.spec.ts` 27, `admin-nav-groups.spec.ts` 8,
+`admin-nav.spec.ts` 3, `admin.routes.spec.ts` 3, `admin-layout.spec.ts` 1. 4407 tests avant la tranche
+(4503 − 96 neufs) − 9 recalés + 3 garde-fous = 4401 verts : aucune régression. Typecheck vert
+(`tsc -p tsconfig.spec.json --noEmit` exit 0, bundle de test construit) ; Prettier des fichiers touchés
+vert ; `eslint` des fichiers touchés exit 0 ; grep d'archéologie : aucun hit.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 21:47, 102 failed / 4503 total ; 3 garde-fous « aucune règle / liste vide / semaine vide »
+verts sur le squelette). Nature : 102 `AssertionError` (vue neutre, page vide, route et entrée de
+navigation absentes) ; aucune erreur de harnais, aucun délai dépassé.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1679,6 +1794,7 @@ de navigation et route absents) ; aucune erreur de harnais, aucun délai dépass
 - **Tranche F3 — le visiteur annule par le lien** : GREEN 233 passed / 233 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4298 passed / 4298 total (exit 0), `pnpm lint` exit 0, build production exit 0, image docker construite et smoke `curl` vert, non commité · refactor : constante `IDLE` à un seul site inlinée ; texte de la région `booking-cancel-status` passé sous `@if` (sans lui, l'espace du gabarit empêchait `empty:hidden` : marge vide sous l'aperçu, constaté au navigateur)
 - **Tranche F4 — points d'entrée et confidentialité** : GREEN 4332 passed / 4332 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm icons:check` exit 0, build production exit 0, non commité · refactor : hauteurs du placeholder de la méthode recalées sur la section rendue (le lien de l'étape Cadrer l'allonge de 31 à 53 px selon la largeur)
 - **Tranche F5a — l'admin voit et annule les rendez-vous** : GREEN 4404 passed / 4404 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, build production exit 0, non commité · refactor : séparateur du motif rendu (`Motif : ` : l'espace entre les deux `span` était supprimé par le compilateur, constaté au navigateur) ; passe qualité manuelle sur le diff (`simplify` indisponible en sous-agent), rien d'autre à reprendre
+- **Tranche F5b — l'admin règle ses disponibilités** : GREEN 4503 passed / 4503 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, build production exit 0, sprite inchangé (`clock` déjà présent), non commité · refactor : `toDraft` passé directement (`toAvailabilityDraft`) au lieu d'une flèche ; passe qualité manuelle sur le diff (`simplify` indisponible en sous-agent)
 
 ### A1
 
@@ -2205,6 +2321,40 @@ Sorties : `pnpm test` `Test Files 246 passed (246)`, `Tests 4404 passed (4404)`,
 « All files pass linting. », exit 0 ; `pnpm run format:check` exit 0 ;
 `pnpm run build --configuration production` exit 0.
 
+
+### F5b
+
+GREEN le 2026-10-13, front branche `feat/024-prise-de-rendez-vous` (sur `72595a0`), non commité. Tests de
+`qa` inchangés (`git diff --stat -- '*.spec.ts'` identique avant et après).
+
+- `availability-draft.ts` : conversions minutes ⇄ `HH:MM`, brouillon trié par début (copies), règles
+  copiées champ par champ lundi → dimanche, `findOverlappedRange` (indice de la plage antérieure
+  chevauchée). `AVAILABILITY_WEEKDAYS` (clé, jour ISO, libellé) partagé par la page et les lignes.
+- Page `AdminAvailability` : `DocumentDraft<readonly AvailabilityRule[], AvailabilityDraft>`, Signal Form
+  sur `draft.value` (`applyEach` par jour : `required` début / fin, `validate` fin > début,
+  `validateTree` sur la ligne avec `index()` qui pose « Chevauche la plage N » sur le début de la plage
+  la plus tardive), barre d'enregistrement, dialogue de sortie, `beforeunload`. La fonction passée à
+  `draft.save` lève une `AvailabilitySaveFailure` portant la raison quand la gateway renvoie un échec.
+  Avis « Aucune plage » lu sur les plages enregistrées (ce que voit la page de réservation).
+- `AdminAvailabilityRows` (`fieldset[app-admin-availability-rows]`) : `select` liés par `[formField]`,
+  options `@for` (patron `admin-project-identity-fields`, aucun `[value]` ni `[selected]` posé à la main),
+  option vide désactivée, libellés « Début / Fin » visibles complétés en `sr-only`, ajout et retrait
+  par `value.update`.
+- `AdminClosures` (`section[app-admin-closures]`, présentation) : formulaire Signal Forms propre
+  (`resetToken` + `effect` nommé), liste, dialogue de suppression, focus sur le titre de section
+  (`AdminSectionHead` gagne `tabindex="-1"` et `focusHeading()`, sur le modèle de
+  `AdminPageHeader.focusTitle()`). La page fait les écritures (liste mise à jour localement, triée).
+- `paris-format.ts` gagne `formatLongDate(dateKey)` (« mercredi 11 novembre 2026 », « 1er »).
+- Navigation `availability` (icône `clock`, déjà au sprite) et route `disponibilites` gardée.
+- Écart à signaler à `qa` (non bloquant, tests verts) : `data-testid="admin-closure-reason"` désigne à la
+  fois le champ du formulaire et le motif affiché dans chaque ligne. Le spec lit le champ par le premier
+  élément de la section : le formulaire est donc placé **au-dessus** de la liste ; le placer dessous
+  casse cinq tests. Un testid distinct pour l'un des deux lèverait cette contrainte d'ordre.
+
+Sorties : `pnpm test` `Test Files 248 passed (248)`, `Tests 4503 passed (4503)`, exit 0 ; `pnpm lint`
+« All files pass linting. », exit 0 ; `pnpm run format:check` exit 0 ;
+`pnpm run build --configuration production` exit 0.
+
 ## Verify
 
 Tranche F2a, `pnpm start` (dev SSR, port 4200), créneaux servis par `page.route('**/api/booking/slots')`
@@ -2295,6 +2445,34 @@ Verdict : **PASS** sur desktop 1440×1000 et mobile 390×844, clair et sombre. C
 `/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f5a/{desktop,mobile}-{light,dark}-{1-upcoming,2-dialog,3-cancelled,4-past}.png`,
 `mobile-{light,dark}-0-nav.png` ; relevés dans `f5a/verify.json`. Console : aucune erreur applicative ;
 seul `404` de `/api/config`, que la doublure ne sert pas.
+
+
+Tranche F5b (restructure la navigation admin déjà atteignable ; la page est neuve), `pnpm exec ng serve
+--port 4240`, doublure `ci/api-stub` sur le port 3000 avec `STUB_ADMIN_SESSION=1`, routes
+`/api/booking/**` servies par `page.route` (plages et fermetures en mémoire, vides au départ) ; script
+jetable `f5b/verify.mjs`.
+
+1. Ouvrir `/admin/disponibilites` : 1 `GET availability/rules`, 1 `GET availability/closures` ; avis
+   « Aucune plage : … », sept jours « Aucun créneau ce jour-là », « Aucune fermeture à venir. ».
+2. Mardi 18:00–20:00, samedi 09:00–12:00 puis 2ᵉ plage du samedi 11:00–13:00 : « Chevauche la plage 1 »
+   sous le début de la 2ᵉ plage, `aria-invalid="true"` ; début corrigé à 12:00 : plus aucune erreur,
+   « 2 modifications non enregistrées ».
+3. Enregistrer : 1 `PUT availability/rules` au corps `{"rules":[{"weekday":2,"startMinute":1080,
+   "endMinute":1200},{"weekday":6,"startMinute":540,"endMinute":720},{"weekday":6,"startMinute":720,
+   "endMinute":780}]}`, toast « Disponibilités enregistrées », « Aucune modification ».
+4. Plage ajoutée le lundi puis « Annuler » : dialogue « Quitter sans enregistrer ? » ouvert ; « Continuer
+   l'édition » : adresse inchangée.
+5. Fermeture 24/12/2026 → 01/01/2027, motif entouré d'espaces : 1 `POST availability/closures` au motif
+   rogné, ligne « Du jeudi 24 décembre 2026 au vendredi 1er janvier 2027 », toast « Fermeture ajoutée » ;
+   suppression : dialogue nommant la période, confirmation, 1 `DELETE availability/closures/c-1`, toast
+   « Fermeture supprimée », focus sur `admin-closures-heading`, « Aucune fermeture à venir. ».
+
+Verdict : **PASS** sur desktop 1440×1000 et mobile 390×844, clair et sombre. Captures :
+`/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f5b/{desktop,mobile}-{light,dark}-{1-empty,2-overlap,3-saved,4-leave,5-closure,6-delete-dialog,7-deleted}.png` ;
+relevés dans `f5b/verify.json`. Console : aucune erreur applicative ; seul `404` de `/api/config`, que la
+doublure ne sert pas. Note de harnais : `selectOption` de Playwright ne donne pas le focus au `select`,
+le `blur` qui marque le champ touché n'a lieu qu'après un `focus()` explicite (comportement du
+navigateur, pas de l'application).
 
 ## Review code
 

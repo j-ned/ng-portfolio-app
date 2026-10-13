@@ -211,6 +211,7 @@ describe('AdminLayout: barre mobile et tiroir', () => {
     { url: '/admin', title: "Vue d'ensemble" },
     { url: '/admin/messages', title: 'Messages' },
     { url: '/admin/rendez-vous', title: 'Rendez-vous' },
+    { url: '/admin/disponibilites', title: 'Disponibilités' },
     { url: '/admin/settings/security', title: 'Paramètres' },
   ])(
     'Given the page $url When the mobile bar renders Then it names the current page « $title »',

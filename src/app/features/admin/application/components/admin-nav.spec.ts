@@ -20,6 +20,7 @@ const NAV_KEYS = [
   'audience',
   'messages',
   'bookings',
+  'availability',
   'settings',
 ] as const;
 
@@ -84,7 +85,7 @@ describe('AdminNav: structure', () => {
           links: ['nav-link-projects', 'nav-link-posts', 'nav-link-profile', 'nav-link-cv'],
         },
         { label: 'Audience', links: ['nav-link-audience', 'nav-link-messages'] },
-        { label: 'Rendez-vous', links: ['nav-link-bookings'] },
+        { label: 'Rendez-vous', links: ['nav-link-bookings', 'nav-link-availability'] },
         { label: 'Compte', links: ['nav-link-settings'] },
       ],
       headings: 0,
@@ -112,6 +113,7 @@ describe('AdminNav: structure', () => {
       audience: { href: '/admin/audience', text: 'Audience' },
       messages: { href: '/admin/messages', text: 'Messages' },
       bookings: { href: '/admin/rendez-vous', text: 'Rendez-vous' },
+      availability: { href: '/admin/disponibilites', text: 'Disponibilités' },
       settings: { href: '/admin/settings', text: 'Paramètres' },
     });
   });
@@ -126,6 +128,7 @@ describe('AdminNav: page courante', () => {
     { url: '/admin/audience', current: 'audience' },
     { url: '/admin/messages', current: 'messages' },
     { url: '/admin/rendez-vous', current: 'bookings' },
+    { url: '/admin/disponibilites', current: 'availability' },
     { url: '/admin/settings/security', current: 'settings' },
   ])(
     'Given the page $url When the navigation renders Then only the $current link is the current page',

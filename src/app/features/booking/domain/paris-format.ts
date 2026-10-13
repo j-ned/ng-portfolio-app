@@ -71,3 +71,7 @@ export function formatDayShortLabel(dateKey: string): string {
 export function formatWeekLabel(mondayKey: string): string {
   return `Semaine du ${withFirstOfMonth(DAY_MONTH, fromDateKey(mondayKey))}`;
 }
+
+export function formatLongDate(dateKey: string): string {
+  return withFirstOfMonth(LONG_DATE, fromDateKey(dateKey));
+}
