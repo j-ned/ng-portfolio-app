@@ -1374,3 +1374,80 @@ Tests de `qa` inchangés.
 - Déclenchement réel par `ScheduleModule` et check-in Sentry Crons (pas de démarrage de l'application
   dans cette tranche : le provider ajouté à `BookingModule` et `LOG_REDACT_PATHS` dans `app.module.ts`
   ne sont couverts que par `pnpm build`).
+
+## Review code
+
+### API (A1-A5)
+
+Revue du 2026-10-13, repo `nest-portfolio-app`, branche `feat/booking`, `git diff origin/master...HEAD`
+(5 commits, tête `e02c2b9`, 64 fichiers).
+
+**Verdict** : REJECTED
+**Gates CI locaux** : install ✅ (`pnpm install --frozen-lockfile`, exit 0) / tests ✅ (`pnpm test`, exit 0 : 62 suites passées, 3 ignorées, 1310 tests passés, 33 ignorés) / lint ✅ (`pnpm lint`, exit 0, aucun fichier modifié par `--fix`) / build ✅ (`pnpm build`, exit 0) / intégration ✅ (`BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration booking-scheduler.integration`, Postgres 17 réel, exit 0 : 28 tests passés sur 28) / image ✅ (`docker build -t nest-portfolio-app:review .`, exit 0). Typecheck : `jest` (ts-jest) passe, et `tsc --noEmit -p tsconfig.json` sort en 2 sur 4 erreurs TS2345 déjà présentes, toutes hors diff (`analytics-tracker.service.spec.ts`, `referrer.spec.ts`, `auth.service.spec.ts`, `update-profile.dto.spec.ts`).
+**Checks mécaniques** : `aak-checks.sh` non joué (checker Angular, sans objet pour un repo NestJS). Greps faits à la main : aucun `toMatchSnapshot`, `.only`, `.skip` (hors `describe.skip` d'intégration prévu), boucle générant des `it` ; 13 commentaires citent ADR-0026, spec 024 ou une RFC (style du repo : 29 références ADR déjà présentes sur `master`) ; 7 exports sans consommateur hors de leur fichier.
+**Warnings de gate** : (b) déjà présents, hors diff : les 4 erreurs `tsc` ci-dessus ; avertissements pnpm de l'image (`4 deprecated subdependencies`, scripts de build ignorés) ; NOTICE `42P07 relation "__drizzle_migrations" already exists` à chaque `db:migrate`. Aucun warning nouveau (a).
+**Rendu compilé** : N/A (API)
+**Preuve de verify runtime** : ✅ image de prod démarrée (`--network host`, env minimal **sans** `PUBLIC_SITE_URL` ni `BOOKING_VIDEO_URL_BASE`) sur une base migrée jusqu'à `master` (22 migrations) : `db:migrate` au démarrage applique 0022 et 0023 (24 lignes au journal, `booking_no_overlap` = `EXCLUDE USING gist (tstzrange(starts_at, ends_at, '[)'::text) WITH &&) WHERE ((status = 'confirmed'::text))`), un second `migrate` ne fait rien, `BookingModule` et ses 12 routes sont chargés. `GET slots` → 200 `no-store` ; plages 10:00–12:00 de Paris tous les jours → 80 créneaux (20 jours × 4, préavis de 24 h respecté) ; `POST bookings` (téléphone) → 201 ; même créneau → 409 `slot_taken` (`statusCode`, `error`, `path`) ; preview avec un jeton inconnu → 404 `booking_not_found` ; jeton de 5 caractères → 400 ; `GET bookings?scope=upcoming` sans session → 401 ; champ piège → 201 de même forme et un seul `warn` sans donnée. Logs : ni jeton ni téléphone ; ICU de l'image : `02:30 02:30 03:00` (heure répétée et trou de mars).
+**Score de mutation** : N/A (profil sans outil côté API)
+**Conventions** : ❌ (point 2)
+**Cross-platform** : N/A
+**Tests** : ✅
+**Sécurité** : ❌ (point 1)
+**Alignement spec** : ✅ (contrat d'API, codes et corps d'erreur, schéma, migrations, politique, crons conformes ; écarts du journal justifiés)
+
+Constats vérifiés et conformes : absence de double réservation (verrou `pg_advisory_xact_lock` dans la transaction, plafond et créneaux relus sur `tx` sous le verrou, contrainte d'exclusion en dernier recours, `23P01` traduit en 409, intégration à 10 créations concurrentes) ; heures justes au changement d'heure (`Intl` seul, deux décalages essayés, aucune méthode locale de `Date`) ; jeton : 32 octets, seule l'empreinte SHA-256 est en base, recherche par empreinte, jeton dans le fragment du lien puis dans un corps `POST`, absent des `.ics`, de l'email du propriétaire et des logs, `req.body.token` masqué par pino et par Sentry ; aucune donnée personnelle sur `GET slots` ni sur la preview ; échappement HTML de toutes les variables, motif compris (composé avant `renderTemplate`) ; en-têtes protégés (nodemailer remplace les sauts de ligne) ; `JwtAuthGuard` de classe sur les 8 routes admin ; migrations sûres (tables neuves, aucune donnée en conflit, ordre 0022 puis 0023 dans le journal, `when` croissant ; retour à l'image précédente sans risque, son migrateur ignore les deux entrées plus récentes et les tables restent inertes) ; nouvelles variables avec valeurs par défaut (démarrage prouvé sans elles) ; crons idempotents (réclamation par un seul `UPDATE … WHERE reminder_sent_at IS NULL … RETURNING`, réévaluée sous verrou de ligne en `READ COMMITTED` ; purge par `DELETE` borné).
+
+**Tests notables** :
+- ✨ `src/booking/booking.integration.spec.ts` — concurrence sur Postgres réel (10 créations simultanées, battement, plafond en trois casses, `23P01` direct) : c'est la preuve de l'Exigence 1.
+- ✨ `src/booking/booking-scheduler.integration.spec.ts` — deux passages concurrents du rappel, mutant « `select` puis `update` » tué.
+- ⚠️ Les deux suites d'intégration sont `describe.skip` sans `BOOKING_IT_DATABASE_URL` et le repo API n'a pas de workflow CI : la garantie anti-double ne fait partie d'aucune gate automatique (relance manuelle, commande au README).
+
+**Duplication / dérivation** :
+- ⚠️ `src/database/drizzle.types.ts:6` — `Transaction` redéfinit `ProfileTransaction` (`src/profile/profile-document.ts:13`) à l'identique ; à unifier (non bloquant).
+
+**Risque résiduel** :
+- Profil API absent : livraison et monitoring non renseignés. Réversibilité du code : un retour à l'image précédente ne défait pas les deux tables (inertes) ; aucune donnée existante migrée.
+- Non couvert par les gates : import réel du `.ics` dans Google Agenda et Outlook, dont la copie `REQUEST` du propriétaire organisateur (journal A3) ; déclenchement réel des crons par `ScheduleModule` et check-in Sentry ; limite globale de 10 requêtes par minute et par route sur l'admin (compteur `upcoming-count` rechargé à chaque navigation, F5a).
+
+**Points à corriger** :
+1. **Bloquant, sécurité / RGPD** — `src/instrument.ts:27-45` (hors diff, mais c'est la route du diff qui l'expose) : Sentry 10 joint le corps des requêtes entrantes aux événements (`httpIntegration`, `maxIncomingRequestBodySize` à `'medium'` par défaut), et `beforeSend` ne filtre que les secrets (`password`, `token`…), pas `name`, `email`, `phone`, `company`, `message`. Or `fireAndForget` tourne dans le contexte de la requête `POST /api/booking/bookings` : à chaque panne SMTP, les logs `error` émis (vérifié au démarrage de l'image : `req.id 3`, `MailerService` puis `BookingService`) remontent à Sentry par `Sentry.captureMessage` (`src/app.module.ts:77`) avec le corps de la réservation, téléphone compris. Même chose pour toute 5xx de la route. Cela contredit l'Exigence 7 (téléphone masqué) que `LOG_REDACT_PATHS` ne couvre que pour pino. Correctif attendu : filtrer ces clés dans `beforeSend`, dérivées d'une liste partagée avec `LOG_REDACT_PATHS` plutôt qu'une seconde liste écrite à la main, ou bien `maxIncomingRequestBodySize: 'none'` ; et un test qui passe un événement porteur de ces clés dans `beforeSend`. Le message `Failed to send email to <destinataire>` de `src/mailer/mailer.service.ts:57` (déjà présent, cas (c)) envoie lui aussi l'email du visiteur à Sentry à chaque échec SMTP : à trancher par la session principale (retirer le destinataire du message, ou le garder hors du niveau `error`).
+2. **Bloquant mineur, code mort / source de vérité unique** — `src/booking/booking-policy.ts:23-25` : `reminderLeadHours`, `reminderMinCreatedAheadHours` et `retentionMonths` ne sont lus nulle part (seuls la constante et son test golden les citent). Le scheduler code ses bornes en dur (`src/booking/booking-scheduler.service.ts:44`, `:45`, `:70` : `'24 hours'`, `'30 hours'`, `'6 months'`) : modifier la politique serait sans effet, sans aucun signal. Correctif attendu : dériver ces bornes de `BOOKING_POLICY` (`make_interval(hours => ${BOOKING_POLICY.reminderLeadHours})`, `make_interval(months => ${BOOKING_POLICY.retentionMonths})`), ou retirer les trois champs du type, de la constante et du golden.
+
+Remarques non bloquantes : exports sans consommateur hors de leur fichier (`BookingPolicy`, `FreeSlot`, `FreeSlotsInput`, `AvailabilityRuleInput`, `AvailabilityClosureInput`, `IcsPerson`, `IcalEvent`) ; `name` et `message` ne contenant que des espaces passent `@IsNotEmpty` (le front les filtre déjà) ; les références « ADR-0026 » des commentaires renvoient à un ADR qui vit dans le repo front.
+
+#### Correctifs
+
+Session du 2026-10-13, repo `nest-portfolio-app`, branche `feat/booking` (sur `e02c2b9`, non commité). TDD : 11 tests rouges d'abord (6 suites en échec, dont `sentry-before-send` introuvable et `SENSITIVE_BODY_FIELDS` absent), puis verts.
+
+1. **PII vers Sentry (point 1)** — `src/common/log-redact.ts` exporte `SENSITIVE_BODY_FIELDS` (secrets existants + `jwt`, `name`, `email`, `phone`, `company`, `message`, `website`), source unique : `LOG_REDACT_PATHS` en dérive `req.body.<champ>` (chemins existants conservés, `req.body.jwt`/`name`/`company`/`message`/`website` ajoutés) et le filtre Sentry aussi. Nouveau `src/common/sentry-before-send.ts` : `sentryBeforeSend`, fonction pure sans mutation, branchée dans `src/instrument.ts` ; filtre `request.data` objet (à toute profondeur, tableaux compris) ou chaîne JSON (re-sérialisée), masque en entier une chaîne non JSON (formulaire encodé : impossible à filtrer champ par champ), rend tel quel un événement sans `request`, retire toujours cookies et en-têtes `authorization`/`cookie`. Tests : `sentry-before-send.spec.ts` (liste, objet, imbriqué, chaîne JSON, chaîne non JSON, sans requête, en-têtes, non-mutation) ; `log-redact.spec.ts` vérifie le masque pino de chaque champ de la liste. Connexe : `MailerService` journalise `c***@example.com` (`maskEmail` dans `mailer.utils.ts`, destinataires multiples gérés) et masque aussi l'adresse dans la trace, une réponse SMTP la citant souvent (`550 … <camille@example.com>`) ; tests dans `mailer.service.spec.ts` et `mailer.utils.spec.ts`.
+2. **Source de vérité de la politique (point 2)** — `BookingScheduler` dérive ses bornes de `BOOKING_POLICY` par paramètres SQL : `make_interval(hours => $n)` pour `reminderLeadHours` et `reminderMinCreatedAheadHours`, `make_interval(months => $n)` pour `retentionMonths` (le log de purge cite aussi la valeur). L'assertion de `booking-scheduler.service.spec.ts` qui figeait `interval '6 months'` est remplacée par deux tests qui lisent dans le SQL rendu l'index de chaque paramètre et vérifient sa valeur contre la politique ; la fenêtre exacte reste prouvée par l'intégration sur Postgres 17 (28/28).
+3. **Espaces seuls (remarque)** — `CreateBookingDto` rogne `name` et `message` par `@Transform` avant `@IsNotEmpty` : un texte fait d'espaces est refusé, un texte entouré d'espaces est stocké rogné. Tests ajoutés dans `create-booking.dto.spec.ts`.
+
+Gates : `pnpm test` exit 0 (63 suites passées, 3 ignorées ; 1354 tests passés, 33 ignorés) ; `pnpm lint` exit 0 ; `pnpm build` exit 0 ; intégration `BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration booking-scheduler.integration` exit 0 (2 suites, 28 tests).
+
+#### Re-revue des correctifs (`e02c2b9..1d03096`)
+
+Revue du 2026-10-13, limitée à `git diff e02c2b9..1d03096` (13 fichiers, commit `1d03096`).
+
+**Verdict** : APPROVED
+**Gates CI locaux** : tests ✅ (`pnpm test`, exit 0 : 63 suites passées, 3 ignorées ; 1354 tests passés, 33 ignorés) / lint ✅ (`pnpm lint`, exit 0, arbre propre après `--fix`) / build ✅ (`pnpm build`, exit 0) / intégration ✅ (`BOOKING_IT_DATABASE_URL=postgres://postgres:it@127.0.0.1:55433/postgres pnpm test -- booking.integration booking-scheduler.integration` sur `postgres:17-alpine`, exit 0, 28 tests sur 28). `tsc --noEmit` : toujours les mêmes 4 erreurs, déjà présentes et hors diff.
+**Checks mécaniques** : greps à la main sur le diff : aucun snapshot, `.only`, `.skip` ni littéral `interval '` restant dans le scheduler ; aucun nouvel export sans consommateur (`SENSITIVE_BODY_FIELDS`, `sentryBeforeSend` et `maskEmail` ont chacun un consommateur hors de leur fichier).
+**Warnings de gate** : aucun nouveau (a).
+**Rendu compilé** : N/A (API)
+**Preuve de verify runtime** : ✅ preuve de la revue initiale, toujours valable : le diff ne touche ni le câblage des modules ni les migrations ni les routes. La fenêtre SQL est revérifiée sur Postgres réel (ci-dessous).
+**Score de mutation** : N/A (profil sans outil côté API)
+**Conventions** : ✅
+**Cross-platform** : N/A
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+Constats :
+- **Point 1 levé.** `SENSITIVE_BODY_FIELDS` alimente à la fois pino et `sentryBeforeSend`. Le filtre est pur (aucune mutation, test dédié), traite le corps en objet, en tableau ou en chaîne JSON, masque en entier une chaîne non JSON, et garde les autres en-têtes. Ce que le filtre retire au diagnostic reste acceptable : les valeurs de ces champs dans le corps de la requête, à toute profondeur et sur toutes les routes (une clé imbriquée `name` ou `message` d'un corps admin est aussi masquée), plus le corps entier d'une chaîne non JSON. Les clés restent visibles, et la trace, l'URL, la méthode, les breadcrumbs et le contexte Sentry ne sont pas touchés. Le masquage de `MailerService` couvre le message et la trace (test avec une réponse `550` qui cite l'adresse).
+- **Correction de ma revue initiale, par honnêteté** : le chemin « log `error` de panne SMTP → `Sentry.captureMessage` » que j'avais cité n'existe pas. Le hook pino (`src/app.module.ts:72-75`) ignore les logs porteurs d'`err`, ce qui est le cas des logs `Logger.error(msg, stack)`. L'exposition réelle passait par les événements 5xx, qui joignent le corps de la requête, et le correctif la couvre.
+- **Point 2 levé.** Les trois bornes viennent de `BOOKING_POLICY`. `make_interval(hours => 24)`, `make_interval(months => 6)` et les littéraux `interval` donnent des valeurs identiques en base : `t|t|t`, y compris pour une soustraction de 6 mois depuis un 31 mars, où l'arithmétique de mois tronque en fin de mois. La fenêtre reste prouvée de bout en bout par l'intégration (31 h et 29 h, 25 h, 6 mois ± 7 j). Le paramètre est envoyé non typé par postgres-js et résolu en `int` ; un paramètre typé `numeric` serait refusé (`function make_interval(hours => numeric) does not exist`). C'est sans risque tant que la politique garde des entiers (`as const`, golden).
+- Remarque espaces seuls traitée (`@Transform(trim)`, et `transform: true` dans le `ValidationPipe` global : la valeur rognée est bien celle stockée).
+
+**Risque résiduel** (non bloquant) :
+- `fireAndForget` (`src/common/utils.ts:10`) journalise la pile brute de l'erreur relancée par `MailerService`. Si une réponse SMTP cite l'adresse du destinataire (`550 … <camille@example.com>`), celle-ci apparaît donc **en clair dans les logs stdout** de `BookingService` et `ContactService`, sans passer par le masque de `MailerService`. Elle ne part pas à Sentry (log porteur d'`err`, ignoré par le hook). Cette fuite existait déjà pour le contact et ne concerne que l'email, jamais le téléphone ni le jeton ; à traiter dans un suivi (masquer dans `fireAndForget`, ou relancer une erreur déjà masquée).
+- Les autres risques de la revue initiale restent ouverts : intégration absente de toute CI, import réel du `.ics` dans les agendas, déclenchement réel des crons.
