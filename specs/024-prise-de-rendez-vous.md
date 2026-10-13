@@ -1560,6 +1560,112 @@ Tous les tests de cette tranche échouent à ce stade (RED confirmé via la comm
 le 2026-10-13 20:45, 32 failed / 4332 total). Nature : 32 `AssertionError` (liens absents, copie vide,
 correspondances d'icônes absentes, section de confidentialité absente) ; aucune erreur de harnais.
 
+### Tranche F5a — l'admin voit et annule les rendez-vous
+
+Front, branche `feat/024-prise-de-rendez-vous` (sur `fe51a08`), 72 tests neufs + 9 tests existants recalés
+sur le nouveau contrat de navigation et de routes (81 rouges). Limite F5a/F5b tenue : ni route
+`disponibilites`, ni entrée `availability` (F5b les ajoute au groupe « Rendez-vous »). Aucune carte au
+tableau de bord : le plan n'en prévoit pas.
+
+**Squelettes de signature** (types et corps neutres, aucun comportement) : `AdminNavKey` gagne
+`'bookings'` et `AdminNavCounts` gagne `upcoming: number | null` (`AdminLayout` passe `upcoming: null`) ;
+module `admin/application/admin-bookings-view.ts` (types, `ADMIN_BOOKINGS_FILTERS = []`,
+`toAdminBookingRows` → `[]`, `bookingsOverline` → `''`) ; page `admin/pages/admin-bookings/admin-bookings.ts`
+(`AdminBookings`, gabarit vide). `admin-booking-row` n'a pas de spec isolé : composant de présentation
+couvert par la page.
+
+Signatures figées par les tests (non précisées au plan) :
+- Vue pure : `ADMIN_BOOKINGS_FILTERS: readonly FilterOption<BookingScope>[]` = `[{ upcoming, 'À venir' },
+  { past, 'Passés' }]` sans compte (une seule portée est chargée) ;
+  `toAdminBookingRows(bookings, scope, now: Date): readonly AdminBookingRowView[]` (ordre de l'API conservé)
+  avec `AdminBookingRowView = { id, startsAt, when, name, email, mailto, company, format, contact, message,
+  status, cancelReason, cancellable, cancelLabel }` ; `when` = `formatParisDateTime` (« 1er », DST) ;
+  `format` « Visio » / « Téléphone » ; `contact` = `{ kind: 'video', href: videoUrl }` ou
+  `{ kind: 'phone', href: 'tel:' + numéro sans espace, point ni tiret, label: numéro saisi }`, `null` sans
+  lien ni numéro ; `status` « Confirmé », « Annulé par vous », « Annulé par le visiteur », « Annulé »
+  (`cancelledBy` nul) ; `cancelReason` seulement si annulé ; `cancellable` = portée `upcoming`, statut
+  `confirmed` et `startsAt > now` (l'API répond 409 dès `now >= startsAt`) ;
+  `cancelLabel` = « Annuler le rendez-vous de <nom> le <when> » ;
+  `bookingsOverline(count, scope)` = `counted` avec accord, 0 au singulier comme le surtitre des messages :
+  « 0 / 1 / 3 rendez-vous à venir », « 0 rendez-vous passé », « 1 rendez-vous passé », « 3 rendez-vous passés ».
+- Navigation : groupe « Rendez-vous » entre Audience et Compte, item `bookings`, `/admin/rendez-vous`,
+  libellé « Rendez-vous », icône `calendar`, compteur `upcoming` suffixé « à venir » (invariable, « 0 à
+  venir » affiché), sans compte ni suffixe si inconnu. `AdminLayout` lit `getUpcomingCount()` (flux suivi :
+  `invalidateUpcomingCount` de la gateway rejoue le compteur partagé) ; échec → lien sans compte.
+- Route `rendez-vous`, titre « Rendez-vous | Admin », `loadComponent` → `AdminBookings`, sans garde.
+- Page : `getBookings('upcoming')` au chargement, `getBookings(scope)` à chaque changement du filtre
+  `app-filter-group` « Filtrer les rendez-vous » (présent dans les quatre états, sinon une erreur sur
+  « Passés » enfermerait l'admin) ; `@switch` `admin-bookings-loading` (`role="status"`) / `load-error`
+  (Réessayer relance la même portée) / `empty-state` / `admin-bookings-list` (`ul role="list"`, un `li`
+  `admin-booking-row` par rendez-vous). Ligne : `admin-booking-when` (`<time datetime>`),
+  `admin-booking-name`, `admin-booking-email` (`a` `mailto:`), `admin-booking-company` (absent si nul),
+  `admin-booking-format`, `admin-booking-video` (`a` `target="_blank"` `rel` avec `noopener`) ou
+  `admin-booking-phone` (`a` `tel:`), `admin-booking-message`, `admin-booking-status`,
+  `admin-booking-cancel-reason`, `admin-booking-cancel` (`button type="button"`, nom accessible
+  `cancelLabel`). Dialogue `app-confirm-dialog` : titre « Annuler le rendez-vous de <nom> ? » (fine
+  insécable), confirmer « Annuler le rendez-vous », renoncer « Garder le rendez-vous » ; `admin-booking-reason`
+  = `textarea` dans le `<dialog>`, libellé « Motif (facultatif) », `maxLength` 500 (posé par `[formField]`
+  et `maxLength(…, 500)`), vide à chaque ouverture ; motif rogné, blanc → `null`. Succès : la ligne est
+  remplacée par le rendez-vous rendu par l'API, `invalidateUpcomingCount()` une fois, toast exact, focus
+  sur `admin-page-title`. Échec : ligne inchangée, compteur non relancé, toast d'erreur exact (le toast
+  porte `{ severity, detail }` seulement). Horloge du test : `vi.useFakeTimers({ toFake: ['Date'] })` au
+  2026-10-15T10:00Z.
+
+Copie proposée (à relire par le propriétaire) : titre « Rendez-vous » ; filtres « À venir » / « Passés » ;
+chargement en échec « Les rendez-vous n'ont pas pu être chargés. Vérifiez votre connexion, puis
+réessayez. » ; vide « Agenda libre » + « Aucun rendez-vous à venir pour le moment. Chaque réservation arrive
+ici et par e-mail. », « Historique vide » + « Aucun rendez-vous passé pour le moment. » ; succès « Rendez-vous
+annulé : un e-mail a prévenu <nom> » ; `too-late` « Ce rendez-vous a commencé : il ne peut plus être
+annulé. », `not-found` « Ce rendez-vous est introuvable. Rechargez la page. », `invalid` « Le motif dépasse
+500 caractères. », `network` « Annulation impossible : vérifiez votre connexion, puis réessayez. »,
+`server` « Annulation impossible : le serveur n'a pas répondu. Réessayez dans un instant. » (insécable
+avant « : »).
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `admin/application/admin-bookings-view.spec.ts` | 1 | filtres | `toEqual` exact |
+| | 1 + 3 + 2 + 1 | visio complète ; téléphone (3 graphies) ; sans lien ni numéro ; sans entreprise | ligne `toEqual` exacte ; `tel:` normalisé, libellé tel quel ; `contact` nul |
+| | 3 + 1 | annulé par vous / le visiteur / inconnu ; sans motif | statut, motif, non annulable |
+| | 4 | dans une minute, à l'instant, commencé, liste « Passés » | `cancellable` exact (borne `startsAt > now`) |
+| | 3 + 1 | 1er novembre, 02:30 répété, minuit de Paris ; ordre | `when` exact ; ordre de l'API |
+| | 7 | surtitre | 0, 1, 3 à venir ; 0 passé, 1 passé, 3 passés, 1 200 passés |
+| `admin/pages/admin-bookings/admin-bookings.spec.ts` | 4 | liste | `ul`/`li`, ordre ; ligne visio (heure de Paris, `mailto:`, entreprise, lien visio) ; ligne téléphone (`tel:`, pas d'entreprise ni de visio) ; annulée par le visiteur (motif, pas de bouton) |
+| | 3 | filtre | « À venir » pressé, `[['upcoming']]` ; « Passés » → `past`, aucune annulation, surtitre ; retour → `upcoming` |
+| | 1 | en-tête | `h1` unique « Rendez-vous », « 3 rendez-vous à venir » |
+| | 4 + 1 + 1 + 2 | états | un seul état + filtres présents ; `role="status"` ; Réessayer relance `upcoming` et affiche ; vides « À venir » / « Passés » |
+| | 1 + 1 | boutons et dialogue | noms accessibles des seuls confirmés à venir ; dialogue (titre, libellés, motif vide, 500, libellé) sans appel |
+| | 5 | réponses au dialogue | motif rogné, blanc → `null`, aucun → `null` ; renoncer, Échap → aucun appel ; dialogue ouvert puis fermé |
+| | 1 + 1 | succès ; réouverture | statut « Annulé par vous », motif, bouton retiré, `invalidate` ×1, toast, focus titre ; motif vidé, titre de l'autre rendez-vous |
+| | 5 | échecs `too-late`, `not-found`, `invalid`, `network`, `server` | « Confirmé », `invalidate` ×0, toast d'erreur exact |
+| `admin/application/admin-nav-groups.spec.ts` | 8 + 5 recalés | groupe, compteur | structure et comptes recalés ; compte inconnu `upcoming` ; « à venir » à 0, 1, 5 ; inconnu sans suffixe ; icône `calendar` ; `activeNavLabel` `/admin/rendez-vous` (± query) |
+| `admin/application/components/admin-nav.spec.ts` | 1 + 3 recalés | rendu | quatre groupes ; lien `/admin/rendez-vous` « Rendez-vous » ; page courante ; « 2 à venir » dont « à venir » en `sr-only` |
+| `admin/admin.routes.spec.ts` | 2 + 1 recalé | route | titres ; `/admin/rendez-vous` → titre ; `AdminBookings`, sans garde |
+| `admin/pages/admin-layout/admin-layout.spec.ts` | 4 | coquille | « 2 à venir » ; flux poussé 2 → 1 ; échec → lien sans compte ; barre mobile « Rendez-vous » |
+
+Balayages : contrat de navigation (`AdminNavCounts`, `adminNavGroups(`, `nav-link-*`, `nav-count-*`,
+groupes « Audience » / « Compte ») cherché dans `src`, `e2e`, `ci` : seuls consommateurs = les trois specs
+ci-dessus et `admin-layout.ts`. Titres des routes admin : seul `admin.routes.spec.ts`. Aucun état seedé ni
+constante recalibrée. Adaptation mécanique : `admin-layout.spec.ts` (fournisseur `BookingGateway` par
+`stubBookingGateway` et source `upcoming` dans `renderShell`), `admin-nav-groups.spec.ts` et
+`admin-nav.spec.ts` (littéraux `AdminNavCounts` complétés de `upcoming`) — construction des entrées
+seulement, aucune valeur attendue modifiée hors des 9 tests recalés listés. Non couverts par un test
+Vitest : scénario axe `/admin/rendez-vous` et dialogue d'annulation (F6), doublure `ci/api-stub` (F6).
+
+Sortie condensée (`pnpm test --include='src/app/features/{admin,booking}/**/*.spec.ts'; echo $?`) :
+`Test Files 6 failed | 68 passed (74)`, `Tests 81 failed | 1852 passed (1933)`, exit 1.
+
+`pnpm test; echo $?` (après `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+`Test Files 6 failed | 240 passed (246)` ; `Tests 81 failed | 4323 passed (4404)` ; exit 1. Échecs :
+`admin-bookings.spec.ts` 30, `admin-bookings-view.spec.ts` 27, `admin-nav-groups.spec.ts` 13,
+`admin-nav.spec.ts` 4, `admin-layout.spec.ts` 4, `admin.routes.spec.ts` 3. 4332 verts avant la tranche
+− 9 recalés = 4323 verts : aucune régression. Typecheck vert (bundle de test construit,
+`tsc -p tsconfig.spec.json --noEmit` exit 0) ; `pnpm run format:check` exit 0 ; `eslint` des fichiers
+touchés exit 0 ; grep d'archéologie : aucun hit.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 21:15, 81 failed / 4404 total). Nature : 81 `AssertionError` (vue neutre, page vide, groupe
+de navigation et route absents) ; aucune erreur de harnais, aucun délai dépassé.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1572,6 +1678,7 @@ correspondances d'icônes absentes, section de confidentialité absente) ; aucun
 - **Tranche F2b — le visiteur réserve** : GREEN 198 passed / 198 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4255 passed / 4255 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : aucun (passe qualité manuelle sur le diff, `simplify` indisponible en sous-agent)
 - **Tranche F3 — le visiteur annule par le lien** : GREEN 233 passed / 233 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4298 passed / 4298 total (exit 0), `pnpm lint` exit 0, build production exit 0, image docker construite et smoke `curl` vert, non commité · refactor : constante `IDLE` à un seul site inlinée ; texte de la région `booking-cancel-status` passé sous `@if` (sans lui, l'espace du gabarit empêchait `empty:hidden` : marge vide sous l'aperçu, constaté au navigateur)
 - **Tranche F4 — points d'entrée et confidentialité** : GREEN 4332 passed / 4332 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm icons:check` exit 0, build production exit 0, non commité · refactor : hauteurs du placeholder de la méthode recalées sur la section rendue (le lien de l'étape Cadrer l'allonge de 31 à 53 px selon la largeur)
+- **Tranche F5a — l'admin voit et annule les rendez-vous** : GREEN 4404 passed / 4404 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, build production exit 0, non commité · refactor : séparateur du motif rendu (`Motif : ` : l'espace entre les deux `span` était supprimé par le compilateur, constaté au navigateur) ; passe qualité manuelle sur le diff (`simplify` indisponible en sous-agent), rien d'autre à reprendre
 
 ### A1
 
@@ -2069,6 +2176,35 @@ Sorties : `pnpm test` `Test Files 244 passed (244)`, `Tests 4332 passed (4332)`,
 and fingerprint 32d5e86e are in sync (109 icons). », exit 0 ; `pnpm run build --configuration production`
 exit 0.
 
+
+### F5a
+
+GREEN le 2026-10-13, front branche `feat/024-prise-de-rendez-vous` (sur `fe51a08`), non commité. Tests de
+`qa` inchangés (`git diff --stat -- '*.spec.ts'` identique avant et après).
+
+- Vue pure `admin-bookings-view.ts` : `formatParisDateTime` (« 1er », heure d'hiver) et
+  `BOOKING_FORMAT_LABELS` du domaine booking réutilisés ; surtitre par `counted` (passés) et
+  `groupedNumber` (« à venir » invariable) ; `tel:` sans espace, point ni tiret.
+- Page `AdminBookings` sur le patron d'`AdminMessages` : `rxResource` paramétré par le signal `scope`
+  (lié en `[(active)]` au `app-filter-group`, rendu hors du `@switch` pour rester présent dans les quatre
+  états), `loadState`, `@switch`, `app-confirm-dialog` avec la zone de texte `[formField]` d'un
+  Signal Form (`maxLength(…, 500)`, remis à vide à chaque ouverture), focus sur le titre à la
+  confirmation, ligne remplacée par la réponse de l'API, `invalidateUpcomingCount()`, toasts. Les
+  échecs sans copie propre (`overlap`, impossible ici) retombent sur la copie `server`.
+- `AdminBookingRow` (`li[app-admin-booking-row]`), grammaire d'`admin-message-row` : date en mono et
+  tampon de statut à gauche, nom · entreprise, email `mailto:`, format, lien de visio (icône `video`,
+  `target="_blank"`, `rel="noopener noreferrer"`, complément `sr-only` « avec <nom> (nouvel onglet) ») ou
+  numéro (icône `phone`), besoin, motif ; bouton `outlined-danger` « Annuler » dont le nom accessible
+  `cancelLabel` contient le libellé visible.
+- Navigation : groupe « Rendez-vous » (item `bookings`, icône `calendar`, suffixe « à venir » seulement si
+  le compte est connu) ; `AdminLayout` lit `getUpcomingCount()` en `rxResource` ; route lazy `rendez-vous`.
+- Écart signalé, non corrigé (hors tests) : une ligne annulée ou passée garde son lien de visio si l'API le
+  renvoie (vu sur les captures « Passés ») ; à trancher par le propriétaire.
+
+Sorties : `pnpm test` `Test Files 246 passed (246)`, `Tests 4404 passed (4404)`, exit 0 ; `pnpm lint`
+« All files pass linting. », exit 0 ; `pnpm run format:check` exit 0 ;
+`pnpm run build --configuration production` exit 0.
+
 ## Verify
 
 Tranche F2a, `pnpm start` (dev SSR, port 4200), créneaux servis par `page.route('**/api/booking/slots')`
@@ -2138,6 +2274,27 @@ Verdict : **PASS** sur desktop 1440×900 et mobile 390×844, clair et sombre. Ca
 `/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f4/{desktop,mobile}-{light,dark}-{1-hero,2-method,3-faq-open,4-contact,5-footer,6-privacy}.png`,
 `mobile-{light,dark}-4-contact-viewport.png`. Console : aucune erreur applicative ; seul `404` de
 `/api/config`, que la doublure ne sert pas.
+
+Tranche F5a (restructure la navigation et la coquille admin, déjà atteignables), `pnpm exec ng serve
+--port 4230`, doublure `ci/api-stub` sur le port 3000 avec `STUB_ADMIN_SESSION=1` (indice `auth:session`
+posé dans le navigateur), routes `/api/booking/**` servies par `page.route` (la doublure ne sert pas
+encore le booking, F6), rendez-vous générés relativement à l'heure courante ; script jetable
+`f5a/verify.mjs`.
+
+1. Ouvrir `/admin/rendez-vous` : 1 `GET bookings/upcoming-count`, 1 `GET bookings?scope=upcoming` ;
+   surtitre « 3 rendez-vous à venir », lignes visio (Camille Martin, entreprise, lien de visio), téléphone
+   (Léo Petit, `tel:`), annulée par le visiteur avec motif (Inès Roux, sans bouton) ; navigation « 2 à venir »
+   (tiroir sur mobile).
+2. « Annuler » sur Camille Martin, motif saisi avec espaces autour, « Annuler le rendez-vous » : 1 `PATCH
+   bookings/<id>/cancel` au motif rogné, toast « Rendez-vous annulé : un e-mail a prévenu Camille Martin »,
+   ligne « Annulé par vous » avec motif et sans bouton, focus sur `admin-page-title`, compteur relu
+   (2ᵉ `upcoming-count`) : navigation « 1 à venir ».
+3. « Passés » : 1 `GET bookings?scope=past`, surtitre « 2 rendez-vous passés », aucun bouton d'annulation.
+
+Verdict : **PASS** sur desktop 1440×1000 et mobile 390×844, clair et sombre. Captures :
+`/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f5a/{desktop,mobile}-{light,dark}-{1-upcoming,2-dialog,3-cancelled,4-past}.png`,
+`mobile-{light,dark}-0-nav.png` ; relevés dans `f5a/verify.json`. Console : aucune erreur applicative ;
+seul `404` de `/api/config`, que la doublure ne sert pas.
 
 ## Review code
 

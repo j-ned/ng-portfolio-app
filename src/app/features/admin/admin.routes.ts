@@ -75,6 +75,12 @@ export const ADMIN_ROUTES: Routes = [
           import('./pages/admin-messages/admin-messages').then((m) => m.AdminMessages),
       },
       {
+        path: 'rendez-vous',
+        title: 'Rendez-vous | Admin',
+        loadComponent: () =>
+          import('./pages/admin-bookings/admin-bookings').then((m) => m.AdminBookings),
+      },
+      {
         path: 'audience',
         title: 'Audience | Admin',
         loadComponent: () =>
