@@ -459,7 +459,7 @@ vérifiée (profil : aucune lib côté front).
   - `_model = signal<BookingDraft>(EMPTY_BOOKING)` (défauts non `null` : `startsAt: ''`,
     `format: 'video'`, `phone: ''`, `company: ''`, `website: ''`) ;
     `form = form(this._model, schema, { submission: { action, onInvalid: focusFirstInvalid } })`.
-    Schéma : `required(startsAt, { message: 'Choisissez un horaire.' })`, nom (requis, 2 à 200),
+    Schéma : `required(startsAt, { message: 'Choisissez un horaire' })`, nom (requis, 2 à 200),
     email (requis, `pattern` du contact, ≤ 320), `required(phone, { when: ({ valueOf }) =>
     valueOf(path.format) === 'phone', message })` + `pattern` téléphone, entreprise ≤ 200, message
     requis 10 à 1000.
@@ -1265,6 +1265,106 @@ Ces cas sont verts contre l'implémentation GREEN existante (elle appliquait dé
 RED à rendre. Ciblée : `Test Files 9 passed (9)`, `Tests 139 passed (139)`, exit 0 ; `pnpm test` (cache
 vidé) : `Test Files 241 passed (241)`, `Tests 4195 passed (4195)`, exit 0 ; `eslint` du fichier : exit 0.
 
+### Tranche F2b — le visiteur réserve
+
+Front, branche `feat/024-prise-de-rendez-vous` (sur `46ab9e6`), 60 tests neufs : 30 dans
+`booking-flow.spec.ts`, 27 dans `booking.spec.ts`, 2 dans `booking-copy.static-data.spec.ts`, 1 ligne
+ajoutée à l'`it.each` de `audience-conversions-view.spec.ts`. Aucun spec isolé pour
+`booking-details-fields`, `booking-summary`, `booking-confirmation` : composants de présentation,
+rendu, liaisons et focus prouvés par la page.
+
+**Squelettes de signature** (bundle unique, comme en F1/F2a) : `BookingFlow` reçoit le modèle complet à
+défauts non `null` (sans schéma), `outcome` constant à `null`, `submitBooking()` sans effet ;
+`booking-copy.static-data.ts` reçoit `BOOKING_FORMAT_LABELS` et `BOOKING_FAILURE_MESSAGES` vides ;
+`ContactPlacement` gagne `'booking'` (membre de type seul : le libellé Audience reste rouge).
+
+Signatures figées par les tests (non précisées au plan) :
+- `BookingFlow.form` : `FieldTree` de `{ startsAt, name, email, format, phone, company, message,
+  website }`, défauts `''` sauf `format: 'video'`. Erreurs (`kind`) : `startsAt`, `name`, `email`,
+  `message` requis ; `name` 2 à 200, `email` motif et ≤ 320, `company` ≤ 200, `message` 10 à 1000 ;
+  `phone` requis **et** au motif de l'API (`/^\+?[0-9][0-9 .-]{5,19}$/`) **seulement** en format
+  téléphone (un numéro malformé laissé en visio est ignoré, il n'est pas envoyé).
+- `BookingFlow.submitBooking(): Promise<void>` (point d'entrée partagé avec `FormRoot`) ;
+  `BookingFlow.outcome: Signal<BookingOutcome | null>`, `BookingOutcome` exporté de `booking-flow.ts` :
+  `{ kind: 'confirmed', confirmation, email } | { kind: 'failed', reason }`.
+- Payload : `phone` à `null` en visio, `company` vide → `null`, `website` transmis tel quel ;
+  `trackContactSubmit('booking')` une fois, après `createBooking`, seulement sur succès.
+- `slot-taken` **et** `slot-unavailable` (consigne de la session) : `getSlots` relancé, `startsAt` remis
+  à `''` même si le créneau reste listé, jour et coordonnées gardés, focus sur `booking-time-heading`.
+  Autres raisons : message seul, heure et coordonnées intactes, aucun rechargement ; un nouvel envoi
+  reste possible. Une seule requête en vol (second `submitBooking` pendant l'envoi sans effet).
+- Page : formulaire (`booking-form`) rendu dès l'état `ready`, avant tout choix ; `booking-start-error`
+  unique et visible même sans jour choisi ; `booking-time-heading` est le titre de l'étape horaire
+  présent quel que soit le jour (un jour peut disparaître au rechargement) ; récapitulatif absent tant
+  qu'aucune heure n'est choisie ; région `booking-status` `role="status"` présente et vide avant envoi ;
+  confirmation qui remplace le formulaire, titre focalisé.
+- `data-testid` ajoutés à la liste : `booking-form`, `booking-summary-when`, `booking-summary-format`,
+  `booking-confirmation-when`, `booking-confirmation-format`, `booking-confirmation-email`,
+  `booking-confirmation-video`, et les erreurs `booking-{name,email,phone,company,message}-error`.
+- Champs : `name` `text`/`name`, `email` `email`/`email`, `phone` `tel`/`tel`, `company`
+  `text`/`organization`, `message` `textarea` ; chacun un seul `label[for]` ; `aria-required="true"` sur
+  nom, email, message, et sur le téléphone seulement en format téléphone ; piège `tabindex="-1"`,
+  `autocomplete="off"`, dans un ancêtre `aria-hidden="true"` ; un seul lien dans la mention RGPD,
+  `/confidentialite`.
+
+Copie proposée (golden pour les deux constantes, messages de schéma figés par les assertions de
+page) : `BOOKING_FORMAT_LABELS` = « Visio », « Téléphone » ; `BOOKING_FAILURE_MESSAGES` (cf.
+`booking-copy.static-data.spec.ts`, phrases complètes avec point final) ; erreurs de champ sans point
+final, convention du site (`contact-form`, `password-change-form`), arbitré le 2026-10-13 :
+« Choisissez un horaire », « Indiquez votre nom », « Indiquez votre email », « Décrivez votre besoin en
+quelques mots », « Indiquez le numéro auquel vous joindre » ; libellé Audience « Prise de rendez-vous »
+(plan). Pas d'`aria-live` supplémentaire sur la confirmation (arbitré : le focus sur son titre suffit).
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `pages/booking/booking-flow.spec.ts` | 1 | défauts | valeur du brouillon et `kind` de chaque champ |
+| | 9 | `it.each` borne acceptée / refusée (nom 2 et 200, email motif et 320, téléphone 6 chiffres et séparateurs, entreprise 200, message 10 et 1000) | `[[], true]` puis `[[kind], false]` |
+| | 1 + 4 + 1 | téléphone : requis seulement en format téléphone (aller-retour) ; 4 numéros acceptés, vide refusé ; malformé ignoré en visio, refusé en téléphone | `kind` et validité à chaque étape |
+| | 1 | envoi vide | aucun appel, `outcome` `null`, quatre champs requis touchés |
+| | 3 | payload | visio : `phone`/`company` `null` ; téléphone avec entreprise ; champ piège transmis | `createBooking.mock.calls` exact (builder) |
+| | 1 | succès | `outcome` confirmé (confirmation, email), `[['booking']]`, envoi avant suivi |
+| | 5 + 2 | `it.each` échecs | message seul, valeur intacte, 1 requête de créneaux ; `slot-taken`/`slot-unavailable` : 2 requêtes, `startsAt` `''`, jour gardé, coordonnées gardées ; aucun suivi |
+| | 1 + 1 | réessai après `network` ; double envoi pendant `NEVER` | 2 appels puis confirmé ; 1 appel, `submitting()` |
+| `pages/booking/booking.spec.ts` | 6 | champs | types, `autocomplete`, labels ; radios de format (noms, coché, groupe) ; `aria-required` qui suit le format ; piège ; lien RGPD ; région de statut vide |
+| | 1 | récapitulatif | absent sans heure ; « lundi 19 octobre 2026 à 09:00 », « Téléphone » |
+| | 7 | envoi incomplet | sans jour → une `booking-start-error` ; jour sans heure → erreur et focus sur un `booking-time-option` ; erreur levée au choix de l'heure ; sans coordonnées → trois alertes exactes, focus `booking-name` ; `aria-invalid`/`aria-describedby` posés puis levés ; téléphone manquant → message et focus ; bouton actif |
+| | 13 | envoi | demande saisie au DOM = `createBooking` ; bouton désactivé pendant l'envoi ; confirmation visio (focus, date, format, email, lien) ; confirmation téléphone sans lien ; `it.each` 7 raisons → `booking-status` = `BOOKING_FAILURE_MESSAGES[raison]` ; `slot-taken` → 2 requêtes, aucune heure cochée, coordonnées gardées, focus `booking-time-heading` ; réessai après `network` |
+| `domain/booking-copy.static-data.spec.ts` | 2 | golden | `BOOKING_FORMAT_LABELS`, `BOOKING_FAILURE_MESSAGES` |
+| `admin/application/audience-conversions-view.spec.ts` | 1 ligne ajoutée | libellé | `booking` → « Prise de rendez-vous » |
+
+Adaptation mécanique : `booking-flow.spec.ts`, `booking.spec.ts` — 2 sites (`openFlow`, `renderPage`)
+gagnent le fournisseur `AnalyticsGateway` (doublure partagée `stubAnalyticsGateway`) et des surcharges de
+gateway facultatives, aucune valeur attendue modifiée.
+
+Balayage du contrat `ContactPlacement` : `grep` de `ContactPlacement`, `trackContactSubmit` et
+`contact_submit` sur `src/` ; seul `audience-conversions-view.spec.ts` énumère les emplacements nommés
+(la gateway d'analytics transmet l'emplacement sans le connaître, ses tests `home`/`offer_*` restent
+valides).
+
+Non couverts par un test automatique : champ piège visuellement caché
+(classe, non mesurable sous happy-dom, F6 en navigateur) ; aucun focus quand on soumet sans jour choisi
+(aucun contrôle lié à `startsAt` : `focusFirstInvalid` ne déplace rien).
+
+Sortie condensée (`pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?`) :
+
+```
+Test Files  3 failed | 6 passed (9)
+     Tests  59 failed | 139 passed (198)
+EXIT 1
+```
+
+`pnpm test; echo $?` (après `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+`Test Files 4 failed | 237 passed (241)` ; `Tests 60 failed | 4195 passed (4255)` ; exit 1. Échecs :
+`booking-flow.spec.ts` 30, `booking.spec.ts` 27, `booking-copy.static-data.spec.ts` 2,
+`audience-conversions-view.spec.ts` 1 ; les 4195 tests verts avant la tranche le restent. Typecheck
+vert (le bundle de test se construit) ; `pnpm run format:check` exit 0 ; `eslint` des fichiers touchés
+exit 0 ; grep d'archéologie : aucun résultat.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 19:34, 60 failed / 4255 total). Nature : 60 `AssertionError` (squelette sans schéma ni
+envoi, page sans formulaire, copie vide) ; aucune erreur de harnais, aucun délai dépassé (attentes de
+page bornées par `settleBounded`, `flush()` borné dans la facade).
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1274,6 +1374,7 @@ vidé) : `Test Files 241 passed (241)`, `Tests 4195 passed (4195)`, exit 0 ; `es
 - **Tranche A5 — rappel la veille et purge** : GREEN 380 passed / 380 total + 28 skipped (`pnpm test -- src/booking`, exit 0 ; 392 avec `log-redact`, aussi sous `TZ=Pacific/Kiritimati`), intégration 28 passed / 28 total sur Postgres 17 réel (exit 0), rappel rendu dans Mailpit (1 email, pas de second au repassage) · refactor : aucun ; `pnpm lint` exit 1 sur 2 erreurs du fichier de test `booking-scheduler.service.spec.ts` (non modifié, à corriger par `qa`)
 - **Tranche F1 — la gateway parle le contrat de l'API** : GREEN 102 passed / 102 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4151 passed / 4151 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : champ `apiUrl` de la gateway renommé `bookingUrl` (il porte déjà le préfixe `/booking`)
 - **Tranche F2a — le visiteur choisit un jour et une heure** : GREEN partiel 136 passed / 137 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 1), suite complète 4192 passed / 4193 total (exit 1) : seul échec, délai dépassé du test « Given the slots are on their way » de `booking-flow.spec.ts` (contrat de test à revoir par `qa`, cf. `### F2a`) ; `pnpm lint` exit 0, build production exit 0, non commité · refactor : prédicat `offers` renommé `isOffered`
+- **Tranche F2b — le visiteur réserve** : GREEN 198 passed / 198 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4255 passed / 4255 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : aucun (passe qualité manuelle sur le diff, `simplify` indisponible en sous-agent)
 
 ### A1
 
@@ -1651,6 +1752,52 @@ Sorties : ciblée `Tests 1 failed | 136 passed (137)`, exit 1 ; `pnpm test` `Tes
 `dist/angular-portfolio-app/browser/rendez-vous/index.html` (48 Ko) contient `booking-fiche` et
 `booking-slots-loading`, aucun instant ISO, aucun `startsAt`, aucune URL `booking/slots`.
 
+### F2b
+
+GREEN le 2026-10-13, front branche `feat/024-prise-de-rendez-vous`, non commité. Tests et doublures de
+`qa` inchangés.
+
+- `BookingFlow` : schéma Signal Forms complet (messages sans point final) ; téléphone requis et au motif
+  de l'API par `applyWhen(path.phone, format === 'phone', …)` (validation croisée lue par `valueOf`) ;
+  `submission.action` copie le brouillon champ par champ (`phone` à `null` en visio, `company` vide →
+  `null`), `onInvalid` → `focusFirstInvalid`. Une seule requête en vol : garde native de `submit()`
+  (`submitting` déjà vrai → sans effet). Succès → `outcome` confirmé puis
+  `trackContactSubmit('booking')`. `slot-taken` / `slot-unavailable` (prédicat `domain/is-slot-lost.ts`,
+  partagé facade + page) → `form.startsAt().reset('')` (valeur vidée **et** non touchée : pas d'alerte
+  « Choisissez un horaire » en plus du message) puis `_slots.reload()`. `outcome` remis à `null` au
+  départ de chaque envoi (un même message est réannoncé).
+- `BookingDraft` déplacé dans `domain/models/booking.model.ts` : consommé par la facade et par
+  `application/booking-details-fields.ts` (règle de dépendance).
+- Page : la colonne de droite devient `@if` confirmé → `BookingConfirmationPanel`, sinon section
+  « Choisir un créneau » (jours, titre `booking-time-heading` en `h3 tabindex="-1"` présent dès `ready`,
+  sélecteur d'heures ou consigne « Choisissez d'abord un jour », `app-field-error` unique de `startsAt`)
+  puis section « Vos coordonnées » (rendue en `ready` seulement) : `<form [formRoot]>`, champs,
+  récapitulatif dès qu'une heure est choisie, région `booking-status` `role="status"`, mention RGPD
+  (`routerLink` `/confidentialite`), bouton désactivé sur `submitting()` seul. Focus sur l'étape horaire
+  par `afterRenderEffect({ write })` qui lit `outcome` (référence neuve à chaque échec, refocalise même
+  sur deux 409 consécutifs) ; `rxResource` reste `hasValue()` pendant le rechargement, l'état reste
+  `ready` et le titre ne disparaît pas.
+- `BookingDetailsFields` (dumb, entrée `FieldTree<BookingDraft>`) : patron du contact (`form-label`,
+  `form-input`, `form-textarea`, `aria-invalid`/`aria-describedby` sur erreur touchée, `app-field-error`
+  avec `testId`) ; format en radios-cartes (grammaire des heures) dans un `fieldset` avec le numéro ;
+  libellé du numéro « (requis) » en téléphone, « (seulement pour un appel téléphonique) » en visio ;
+  champ piège dans un conteneur `aria-hidden` positionné hors écran (`absolute -left-[100vw] size-px
+  overflow-hidden`, hôte `relative`), `tabindex="-1"`, `autocomplete="off"`.
+- `BookingSummary` (« Votre rendez-vous », date longue de Paris + format) et `BookingConfirmationPanel`
+  (titre focalisé par `afterNextRender({ write })`, date, format, email d'invitation, lien de visio en
+  `appButton` seulement si `videoUrl`).
+- Libellé Audience `booking` → « Prise de rendez-vous ». Copie ajoutée à `BOOKING_PAGE_COPY` (titres
+  d'étape, consigne, mention RGPD « supprimées six mois après le rendez-vous », libellés du bouton), à
+  relire par le propriétaire. Espaces insécables avant « : » (golden de `qa`).
+
+Écart signalé : `EMAIL_PATTERN` recopié de `contact-form.ts` (constante privée là-bas). Deux sites
+désormais : extraction vers `shared/forms/` possible, hors périmètre de la tranche (code voisin).
+
+Sorties : ciblée `Test Files 9 passed (9)`, `Tests 198 passed (198)`, exit 0 ; `pnpm test`
+`Test Files 241 passed (241)`, `Tests 4255 passed (4255)`, exit 0 ; `pnpm lint` « All files pass
+linting. », exit 0 ; Prettier des fichiers touchés vert ; `pnpm run build --configuration production`
+exit 0, « Prerendered 9 static routes ».
+
 ## Verify
 
 Tranche F2a, `pnpm start` (dev SSR, port 4200), créneaux servis par `page.route('**/api/booking/slots')`
@@ -1667,6 +1814,24 @@ Verdict : **PASS** sur les quatre combinaisons. Captures :
 `/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f2a/{desktop,mobile}-{light,dark}-{1-days,2-time-chosen,3-next-week}.png`.
 Console : aucune erreur applicative ; seules deux 502 du proxy de dev vers une API locale absente
 (`/api/config`, `/api/analytics/track`), étrangères au booking.
+
+
+Tranche F2b (restructure la page `/rendez-vous` déjà atteignable), même montage : `pnpm start`,
+`page.route` sur `**/api/booking/slots` et `**/api/booking/bookings` (201 simulé, puis 409
+`slot_taken`), script `verify-f2b.mjs` jetable.
+
+1. Jour puis 2ᵉ horaire, nom, email, format Téléphone, besoin, sans numéro ; Confirmer : « Indiquez le
+   numéro auquel vous joindre », `aria-invalid="true"`, focus sur `booking-phone`, 0 requête,
+   récapitulatif « Jeudi 15 octobre 2026 à 09:30 · Téléphone ».
+2. Numéro saisi : `aria-invalid="false"` ; Confirmer : 1 `POST` (`phone` renseigné, `company: null`,
+   `website: ""`), écran de confirmation, focus sur `booking-confirmation-heading`, formulaire retiré.
+3. Parcours 409 : message `slot-taken` dans `booking-status`, 2 requêtes de créneaux, aucune heure
+   cochée, nom et besoin conservés, focus sur `booking-time-heading`, aucune alerte d'horaire.
+
+Verdict : **PASS** sur desktop 1440×1000 et mobile 375×812, clair et sombre. Captures :
+`/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f2b/{desktop,mobile}-{light,dark}-{1-phone-error,2-confirmed,3-slot-taken}.png`.
+Console : aucune erreur applicative ; 502 du proxy de dev (`/api/config`, `/api/analytics/track`, API
+locale absente) et la 409 simulée du parcours 3.
 
 ## Review code
 

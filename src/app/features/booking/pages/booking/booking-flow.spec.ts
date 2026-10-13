@@ -2,9 +2,20 @@ import { ApplicationRef, PLATFORM_ID, type Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NEVER, defer, of, throwError, type Observable } from 'rxjs';
 import { describe, expect, it, vi, type Mock } from 'vitest';
+import { AnalyticsGateway } from '@features/analytics/domain/gateways/analytics.gateway';
+import { stubAnalyticsGateway } from '@features/analytics/testing/stub-analytics-gateway';
 import { BookingGateway } from '../../domain/gateways/booking.gateway';
-import type { BookingSlot } from '../../domain/models/booking.model';
-import { aBookingSlot } from '../../testing/booking-builders';
+import type {
+  BookingFailureReason,
+  BookingRequest,
+  BookingSlot,
+  BookingSubmission,
+} from '../../domain/models/booking.model';
+import {
+  aBookingConfirmation,
+  aBookingRequest,
+  aBookingSlot,
+} from '../../testing/booking-builders';
 import { stubBookingGateway } from '../../testing/stub-booking-gateway';
 import { BookingFlow } from './booking-flow';
 
@@ -45,11 +56,16 @@ async function flush(): Promise<void> {
   TestBed.tick();
 }
 
-async function openFlow(getSlots: GetSlots, extraProviders: Provider[] = []): Promise<BookingFlow> {
+async function openFlow(
+  getSlots: GetSlots,
+  extraProviders: Provider[] = [],
+  gatewayOverrides: Partial<BookingGateway> = {},
+): Promise<BookingFlow> {
   TestBed.configureTestingModule({
     providers: [
       BookingFlow,
-      { provide: BookingGateway, useValue: stubBookingGateway({ getSlots }) },
+      { provide: BookingGateway, useValue: stubBookingGateway({ getSlots, ...gatewayOverrides }) },
+      { provide: AnalyticsGateway, useValue: stubAnalyticsGateway() },
       ...extraProviders,
     ],
   });
@@ -59,6 +75,69 @@ async function openFlow(getSlots: GetSlots, extraProviders: Provider[] = []): Pr
 }
 
 const weekKeys = (flow: BookingFlow): readonly string[] => flow.weeks().map((week) => week.key);
+
+type CreateBooking = Mock<BookingGateway['createBooking']>;
+type TrackContactSubmit = Mock<AnalyticsGateway['trackContactSubmit']>;
+
+const answering = (...results: readonly BookingSubmission[]): CreateBooking => {
+  let call = 0;
+  return vi.fn<BookingGateway['createBooking']>(() =>
+    later(results[Math.min(call++, results.length - 1)]),
+  );
+};
+
+const refusing = (reason: BookingFailureReason): BookingSubmission => ({ success: false, reason });
+
+const CONFIRMED: BookingSubmission = { success: true, data: aBookingConfirmation() };
+
+const PHONE_REQUEST = aBookingRequest({ format: 'phone', phone: '06 12 34 56 78' });
+
+type SendingDoubles = {
+  readonly getSlots?: GetSlots;
+  readonly createBooking: CreateBooking;
+};
+
+type SendingFlow = {
+  readonly flow: BookingFlow;
+  readonly getSlots: GetSlots;
+  readonly trackContactSubmit: TrackContactSubmit;
+};
+
+async function openSendingFlow({
+  getSlots = serving(later(TWO_WEEKS)),
+  createBooking,
+}: SendingDoubles): Promise<SendingFlow> {
+  const trackContactSubmit = vi.fn<AnalyticsGateway['trackContactSubmit']>();
+  const flow = await openFlow(
+    getSlots,
+    [{ provide: AnalyticsGateway, useValue: stubAnalyticsGateway({ trackContactSubmit }) }],
+    { createBooking },
+  );
+  return { flow, getSlots, trackContactSubmit };
+}
+
+function fillDetails(flow: BookingFlow, request: BookingRequest): void {
+  flow.form.name().value.set(request.name);
+  flow.form.email().value.set(request.email);
+  flow.form.format().value.set(request.format);
+  flow.form.phone().value.set(request.phone ?? '');
+  flow.form.company().value.set(request.company ?? '');
+  flow.form.message().value.set(request.message);
+  flow.form.website().value.set(request.website);
+}
+
+function chooseMonday9(flow: BookingFlow): void {
+  flow.selectDay('2026-10-19');
+  flow.form.startsAt().value.set(MONDAY_19_AT_9.startsAt);
+}
+
+async function send(flow: BookingFlow): Promise<void> {
+  await flow.submitBooking();
+  await flush();
+}
+
+const kinds = (state: { errors: () => readonly { kind: string }[] }): readonly string[] =>
+  state.errors().map((error) => error.kind);
 
 describe('BookingFlow', () => {
   describe('loading the free slots', () => {
@@ -296,6 +375,349 @@ describe('BookingFlow', () => {
         date: '2026-10-20',
         time: TUESDAY_20_AT_10.startsAt,
       });
+    });
+  });
+
+  describe('validating the booking details', () => {
+    it('Given a fresh flow When nothing is entered Then the draft holds the defaults and only the time, name, email and message are required', async () => {
+      const flow = await openFlow(serving(later(TWO_WEEKS)));
+
+      expect({
+        value: flow.form().value(),
+        errors: {
+          startsAt: kinds(flow.form.startsAt()),
+          name: kinds(flow.form.name()),
+          email: kinds(flow.form.email()),
+          format: kinds(flow.form.format()),
+          phone: kinds(flow.form.phone()),
+          company: kinds(flow.form.company()),
+          message: kinds(flow.form.message()),
+          website: kinds(flow.form.website()),
+        },
+      }).toEqual({
+        value: {
+          startsAt: '',
+          name: '',
+          email: '',
+          format: 'video',
+          phone: '',
+          company: '',
+          message: '',
+          website: '',
+        },
+        errors: {
+          startsAt: ['required'],
+          name: ['required'],
+          email: ['required'],
+          format: [],
+          phone: [],
+          company: [],
+          message: ['required'],
+          website: [],
+        },
+      });
+    });
+
+    it.each([
+      { field: 'name', bound: 'two letters', accepted: 'Al', refused: 'A', kind: 'minLength' },
+      {
+        field: 'name',
+        bound: '200 characters',
+        accepted: 'a'.repeat(200),
+        refused: 'a'.repeat(201),
+        kind: 'maxLength',
+      },
+      {
+        field: 'email',
+        bound: 'an address shape',
+        accepted: 'camille@example.com',
+        refused: 'not-an-email',
+        kind: 'pattern',
+      },
+      {
+        field: 'email',
+        bound: '320 characters',
+        accepted: `${'a'.repeat(308)}@example.com`,
+        refused: `${'a'.repeat(309)}@example.com`,
+        kind: 'maxLength',
+      },
+      {
+        field: 'phone',
+        bound: 'six digits',
+        accepted: '123456',
+        refused: '12345',
+        kind: 'pattern',
+      },
+      {
+        field: 'phone',
+        bound: 'digits and separators only',
+        accepted: '06 12 34 56 78',
+        refused: '06 12 ab 56 78',
+        kind: 'pattern',
+      },
+      {
+        field: 'company',
+        bound: '200 characters',
+        accepted: 'a'.repeat(200),
+        refused: 'a'.repeat(201),
+        kind: 'maxLength',
+      },
+      {
+        field: 'message',
+        bound: '10 characters',
+        accepted: 'a'.repeat(10),
+        refused: 'a'.repeat(9),
+        kind: 'minLength',
+      },
+      {
+        field: 'message',
+        bound: '1000 characters',
+        accepted: 'a'.repeat(1000),
+        refused: 'a'.repeat(1001),
+        kind: 'maxLength',
+      },
+    ] as const)(
+      'Given a phone booking otherwise valid When $field crosses its bound of $bound Then it carries a $kind error past it only',
+      async ({ field, accepted, refused, kind }) => {
+        const flow = await openFlow(serving(later(TWO_WEEKS)));
+        chooseMonday9(flow);
+        fillDetails(flow, PHONE_REQUEST);
+        const judge = (value: string): readonly [readonly string[], boolean] => {
+          flow.form[field]().value.set(value);
+          return [kinds(flow.form[field]()), flow.form().valid()];
+        };
+
+        expect([judge(accepted), judge(refused)]).toEqual([
+          [[], true],
+          [[kind], false],
+        ]);
+      },
+    );
+
+    it('Given a valid video booking without a phone When the visitor switches to a phone call and back Then the phone is required only while the call is by phone', async () => {
+      const flow = await openFlow(serving(later(TWO_WEEKS)));
+      chooseMonday9(flow);
+      fillDetails(flow, aBookingRequest());
+      const snapshot = (): readonly [readonly string[], boolean] => [
+        kinds(flow.form.phone()),
+        flow.form().valid(),
+      ];
+      const byVideo = snapshot();
+
+      flow.form.format().value.set('phone');
+      const byPhone = snapshot();
+      flow.form.format().value.set('video');
+
+      expect([byVideo, byPhone, snapshot()]).toEqual([
+        [[], true],
+        [['required'], false],
+        [[], true],
+      ]);
+    });
+
+    it.each(['+33 6 12 34 56 78', '06.12.34.56.78', '0612345678', '+44-20-7946-0958'])(
+      'Given a phone booking When the number is %j Then the booking is valid, where an empty number is not',
+      async (phone) => {
+        const flow = await openFlow(serving(later(TWO_WEEKS)));
+        chooseMonday9(flow);
+        fillDetails(flow, aBookingRequest({ format: 'phone', phone: '' }));
+        const empty = [kinds(flow.form.phone()), flow.form().valid()];
+
+        flow.form.phone().value.set(phone);
+
+        expect({ empty, filled: [kinds(flow.form.phone()), flow.form().valid()] }).toEqual({
+          empty: [['required'], false],
+          filled: [[], true],
+        });
+      },
+    );
+
+    it('Given a malformed number When the call is by video Then it is ignored, though the same number is refused for a phone call', async () => {
+      const flow = await openFlow(serving(later(TWO_WEEKS)));
+      chooseMonday9(flow);
+      fillDetails(flow, aBookingRequest({ phone: 'abc' }));
+      const byVideo = [kinds(flow.form.phone()), flow.form().valid()];
+
+      flow.form.format().value.set('phone');
+
+      expect({ byVideo, byPhone: [kinds(flow.form.phone()), flow.form().valid()] }).toEqual({
+        byVideo: [[], true],
+        byPhone: [['pattern'], false],
+      });
+    });
+  });
+
+  describe('sending the booking', () => {
+    it('Given nothing entered When the visitor submits Then nothing is sent and every required field is revealed', async () => {
+      const createBooking = answering(CONFIRMED);
+      const { flow } = await openSendingFlow({ createBooking });
+
+      await send(flow);
+
+      expect({
+        calls: createBooking.mock.calls.length,
+        outcome: flow.outcome(),
+        touched: [flow.form.startsAt, flow.form.name, flow.form.email, flow.form.message].map(
+          (field) => field().touched(),
+        ),
+      }).toEqual({ calls: 0, outcome: null, touched: [true, true, true, true] });
+    });
+
+    it('Given a video booking with a leftover phone and no company When sent Then the request carries no phone and no company', async () => {
+      const createBooking = answering(CONFIRMED);
+      const { flow } = await openSendingFlow({ createBooking });
+      chooseMonday9(flow);
+      fillDetails(flow, aBookingRequest());
+      flow.form.phone().value.set('06 12 34 56 78');
+
+      await send(flow);
+
+      expect(createBooking.mock.calls).toEqual([[aBookingRequest()]]);
+    });
+
+    it('Given a phone booking with a company When sent Then the request carries the number and the company', async () => {
+      const createBooking = answering(CONFIRMED);
+      const { flow } = await openSendingFlow({ createBooking });
+      const request = aBookingRequest({
+        format: 'phone',
+        phone: '06 12 34 56 78',
+        company: 'Atelier Martin',
+      });
+      chooseMonday9(flow);
+      fillDetails(flow, request);
+
+      await send(flow);
+
+      expect(createBooking.mock.calls).toEqual([[request]]);
+    });
+
+    it('Given a robot filled the hidden field When sent Then the request carries it untouched for the API to discard', async () => {
+      const createBooking = answering(CONFIRMED);
+      const { flow } = await openSendingFlow({ createBooking });
+      const request = aBookingRequest({ website: 'https://spam.example' });
+      chooseMonday9(flow);
+      fillDetails(flow, request);
+
+      await send(flow);
+
+      expect(createBooking.mock.calls).toEqual([[request]]);
+    });
+
+    it('Given a valid booking When the API confirms it Then the outcome holds the confirmation and the email, and one booking submission is counted after the send', async () => {
+      const createBooking = answering(CONFIRMED);
+      const { flow, trackContactSubmit } = await openSendingFlow({ createBooking });
+      chooseMonday9(flow);
+      fillDetails(flow, aBookingRequest());
+
+      await send(flow);
+
+      expect({
+        outcome: flow.outcome(),
+        tracked: trackContactSubmit.mock.calls,
+        sentFirst:
+          createBooking.mock.invocationCallOrder[0] <
+          (trackContactSubmit.mock.invocationCallOrder[0] ?? 0),
+      }).toEqual({
+        outcome: {
+          kind: 'confirmed',
+          confirmation: aBookingConfirmation(),
+          email: 'camille@example.com',
+        },
+        tracked: [['booking']],
+        sentFirst: true,
+      });
+    });
+
+    it.each<BookingFailureReason>([
+      'limit-reached',
+      'rate-limited',
+      'invalid',
+      'network',
+      'server',
+    ])(
+      'Given a valid booking When the API answers %s Then the outcome says so and the time and details stay as entered',
+      async (reason) => {
+        const createBooking = answering(refusing(reason));
+        const { flow, getSlots, trackContactSubmit } = await openSendingFlow({ createBooking });
+        chooseMonday9(flow);
+        fillDetails(flow, PHONE_REQUEST);
+        const entered = flow.form().value();
+
+        await send(flow);
+
+        expect({
+          outcome: flow.outcome(),
+          value: flow.form().value(),
+          slotRequests: getSlots.mock.calls.length,
+          tracked: trackContactSubmit.mock.calls.length,
+        }).toEqual({
+          outcome: { kind: 'failed', reason },
+          value: entered,
+          slotRequests: 1,
+          tracked: 0,
+        });
+      },
+    );
+
+    it.each<BookingFailureReason>(['slot-taken', 'slot-unavailable'])(
+      'Given a valid booking When the API answers %s Then the slots are reloaded, the time is cleared and the day and details are kept',
+      async (reason) => {
+        const createBooking = answering(refusing(reason));
+        const { flow, getSlots, trackContactSubmit } = await openSendingFlow({
+          getSlots: serving(later(TWO_WEEKS), later(TWO_WEEKS)),
+          createBooking,
+        });
+        chooseMonday9(flow);
+        fillDetails(flow, PHONE_REQUEST);
+        const entered = flow.form().value();
+
+        await send(flow);
+
+        expect({
+          outcome: flow.outcome(),
+          value: flow.form().value(),
+          date: flow.selectedDate(),
+          slotRequests: getSlots.mock.calls.length,
+          tracked: trackContactSubmit.mock.calls.length,
+        }).toEqual({
+          outcome: { kind: 'failed', reason },
+          value: { ...entered, startsAt: '' },
+          date: '2026-10-19',
+          slotRequests: 2,
+          tracked: 0,
+        });
+      },
+    );
+
+    it('Given the network failed once When the visitor sends again Then the booking is confirmed on the second request', async () => {
+      const createBooking = answering(refusing('network'), CONFIRMED);
+      const { flow } = await openSendingFlow({ createBooking });
+      chooseMonday9(flow);
+      fillDetails(flow, aBookingRequest());
+      await send(flow);
+
+      await send(flow);
+
+      expect({ calls: createBooking.mock.calls.length, outcome: flow.outcome()?.kind }).toEqual({
+        calls: 2,
+        outcome: 'confirmed',
+      });
+    });
+
+    it('Given a booking is on its way When the visitor submits again Then a single request is in flight', async () => {
+      const createBooking = vi.fn<BookingGateway['createBooking']>(() => NEVER);
+      const { flow } = await openSendingFlow({ createBooking });
+      chooseMonday9(flow);
+      fillDetails(flow, aBookingRequest());
+
+      void flow.submitBooking();
+      void flow.submitBooking();
+      await flush();
+
+      expect({
+        calls: createBooking.mock.calls.length,
+        submitting: flow.form().submitting(),
+      }).toEqual({ calls: 1, submitting: true });
     });
   });
 });

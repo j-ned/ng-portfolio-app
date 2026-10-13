@@ -1,3 +1,5 @@
+import type { BookingFailureReason, BookingFormat } from './models/booking.model';
+
 export type BookingFicheRow = { readonly label: string; readonly value: string };
 
 export type BookingFiche = { readonly title: string; readonly rows: readonly BookingFicheRow[] };
@@ -23,4 +25,32 @@ export const BOOKING_PAGE_COPY = {
   emptyTitle: 'Aucun créneau libre pour le moment.',
   emptyDetail: 'Écrivez-moi via le formulaire de contact\u00a0: je vous réponds sous 48 h ouvrées.',
   emptyAction: 'Écrire un message',
+  timeHeading: 'Heure du rendez-vous',
+  timeHint: 'Choisissez d’abord un jour pour voir ses horaires.',
+  detailsHeading: 'Vos coordonnées',
+  detailsLead: 'Pour vous envoyer l’invitation et préparer l’appel.',
+  privacyNotice:
+    'Vos coordonnées servent uniquement à organiser ce rendez-vous et sont supprimées six mois après le rendez-vous.',
+  privacyLink: 'Politique de confidentialité',
+  submit: 'Confirmer le rendez-vous',
+  submitting: 'Réservation en cours...',
 } as const;
+
+export const BOOKING_FORMAT_LABELS: Readonly<Record<BookingFormat, string>> = {
+  video: 'Visio',
+  phone: 'Téléphone',
+};
+
+export const BOOKING_FAILURE_MESSAGES: Readonly<Record<BookingFailureReason, string>> = {
+  'slot-taken':
+    'Ce créneau vient d’être réservé. Choisissez un autre horaire\u00a0: vos coordonnées sont conservées.',
+  'slot-unavailable':
+    'Ce créneau n’est plus disponible. Choisissez un autre horaire\u00a0: vos coordonnées sont conservées.',
+  'limit-reached':
+    'Vous avez déjà deux rendez-vous à venir avec cette adresse. Annulez-en un depuis son email de confirmation pour en réserver un autre.',
+  'rate-limited': 'Trop de tentatives en peu de temps. Réessayez dans quelques minutes.',
+  invalid: 'Certaines informations n’ont pas été acceptées. Vérifiez le formulaire puis réessayez.',
+  network: 'La connexion a échoué. Vérifiez votre réseau puis réessayez.',
+  server:
+    'Le service de réservation ne répond pas. Réessayez dans un instant ou écrivez-moi via le formulaire de contact.',
+};

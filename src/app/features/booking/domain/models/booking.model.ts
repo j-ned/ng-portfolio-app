@@ -28,6 +28,17 @@ export type BookingRequest = {
   readonly website: string;
 };
 
+export type BookingDraft = {
+  readonly startsAt: string;
+  readonly name: string;
+  readonly email: string;
+  readonly format: BookingFormat;
+  readonly phone: string;
+  readonly company: string;
+  readonly message: string;
+  readonly website: string;
+};
+
 export type BookingConfirmation = {
   readonly id: string;
   readonly startsAt: string;
