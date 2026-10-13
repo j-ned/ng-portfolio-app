@@ -988,12 +988,90 @@ créer `booking-admin.controller.ts` et ses DTO, `replaceRules`, `createClosure`
 `listBookings`, `countUpcoming`, `cancelByOwner`, le type `AdminBooking`, la déclinaison propriétaire de
 `bookingCancelled` (et du gabarit) et le câblage dans `BookingModule`.
 
+### Tranche A5 — rappel la veille et purge
+
+API `nest-portfolio-app`, branche `feat/booking` (sur `e293fcc`), 33 tests unitaires neufs dans 3 fichiers
+plus 14 tests d'intégration dans un fichier neuf.
+
+Signatures figées par les tests (non précisées au plan) :
+- `BookingScheduler` (`booking-scheduler.service.ts`) injecte `DRIZZLE` et `BookingNotifier`. Deux méthodes :
+  `sendReminders()` (`@Cron('*/15 * * * *', { timeZone: 'UTC' })`, `SentryCron('booking-reminders', {
+  schedule: { type: 'crontab', value: '*/15 * * * *' }, timezone: 'UTC', … })`) et `purgeExpired()` (`30 3 * *
+  *` UTC, `SentryCron('booking-purge', …)`, même rythme). Autres options libres (`checkinMargin`,
+  `maxRuntime`, `name`).
+- Rappel : **une seule** requête `db.update(bookings).set({ reminderSentAt })` (seule clé posée, valeur non
+  nulle) `.where(…).returning()`, sans `select` préalable ; la condition porte `"status" = 'confirmed'`,
+  `"reminder_sent_at" is null`, `"starts_at"` et `"created_at"` (fenêtre exacte du plan prouvée en
+  intégration). La ligne rendue (camelCase, `reminderSentAt` posé) va à
+  `BookingNotifier.bookingReminder(row)` ; `sendReminders()` attend tous les envois et se résout même si
+  l'un échoue ; chaque échec → un `Logger.error` contenant l'id, **sans** nom, email, téléphone, lien de
+  visio, empreinte, **ni le message de l'erreur** (une erreur SMTP cite souvent le destinataire) ; la
+  réclamation n'est jamais défaite (aucune autre écriture).
+- Purge : `db.delete(bookings).where("ends_at" < now - 6 mois).returning(…)`, sans filtre de statut ; borne
+  écrite `interval '6 months'` en SQL ou instant JS équivalent ; un seul `Logger.log` contenant le nombre de
+  lignes supprimées (0 compris).
+- `BookingNotifier.bookingReminder(row: Booking): Promise<void>` : un seul email, au visiteur ; sujet et
+  corps datés par `formatParisLong` ; lien de visio ou numéro ; ni `/rendez-vous/annulation` ni
+  `cancelTokenHash` (sujet, corps, invitation éventuelle) ; échappement ; échec rejeté à l'appelant.
+  `.ics` libre.
+- `LOG_REDACT_PATHS` exporté de `src/common/log-redact.ts` (liste de `redact` de pino, extraite d'`app.module.ts`
+  qui la consomme) : les huit chemins existants plus `req.body.phone` et `req.body.email`. Écart au plan : la
+  liste inline de `useFactory` n'est pas testable sans démarrer `AppModule`.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `booking-scheduler.service.spec.ts` | 13 | planification, rappel, purge (`createMockDb`, horloge `2026-10-13T03:30Z`, `@sentry/nestjs` doublé pour lire `SentryCron`) | métadonnées `@Cron` exactes et `SentryCron` (nom, crontab, UTC) pour les deux méthodes ; une `update(bookings)`, aucun `select`, `set` = `{ reminderSentAt }` avant tout envoi ; SQL rendu (statut, `reminder_sent_at is null`, `starts_at`, `created_at`) ; un rappel par ligne réclamée, aucun sans ligne ; échec : les autres partent, résolution, un `error` avec l'id sans PII ni message, aucune écriture de plus ; aucun log de PII ; purge sur `bookings` par `ends_at`, sans statut, borne de six mois ; nombre journalisé (11, 0) |
+| `booking-notifier.service.spec.ts` (`bookingReminder`) | 8 | email de rappel | visiteur seul ; date de Paris (hiver, été) dans sujet et corps ; visio → lien ; téléphone → numéro sans visio ; ni lien d'annulation ni empreinte ; nom échappé ; échec rejeté |
+| `common/log-redact.spec.ts` | 12 | vrai `pino` avec `LOG_REDACT_PATHS` | 11 chemins masqués (`phone`, `email`, `token`, mots de passe, `code`, `refreshToken`, `authorization`, `cookie`, `set-cookie`) ; `url` et champ non sensible lisibles, aucun `[Redacted]` |
+| `booking-scheduler.integration.spec.ts` | 14 | Postgres réel, base dédiée `booking_scheduler_it` recréée (la suite A2-A4 vide `booking` en parallèle), pool `max: 10` | RDV dans 23 h réservé il y a 2 j + deux passages concurrents → un rappel ; trois RDV + deux passages concurrents → chacun une fois ; second passage → pas de nouveau rappel ; ligne complète (`phone`, `reminderSentAt` `Date`) ; réservé 25 h avant → jamais, `reminder_sent_at` nul ; 31 h avant → rappelé, 29 h avant → non ; annulé, dans 25 h, commencé → non ; envoi raté → marqué, pas rejoué ; purge 7 mois supprimé / 5 mois gardé ; 6 mois ± 7 j ; annulé de 7 mois supprimé, à venir gardé |
+
+Sweep : `reminderSentAt` / `reminder_sent_at` dans les tests → builders (`null` par défaut) et
+`anAdminBooking`, aucun invariant à recaler ; `redact` → aucun test existant ; aucun test n'appelle
+`ScheduleModule` ni ne compte les providers de `BookingModule`. `pnpm test -- booking.integration` ne
+charge pas le nouveau fichier : commande d'intégration complète `pnpm test -- booking.integration
+booking-scheduler.integration`. Assertions vérifiées contre une implémentation de référence jetable
+(scheduler, `bookingReminder`, `LOG_REDACT_PATHS` : 392 verts sous `src/booking` + `log-redact`, intégration
+28 verts), supprimée avant la preuve ; mutant « `select` puis `update` par ligne » tué par le test des trois
+RDV concurrents et par la ligne complète (le test à un RDV seul ne le tue pas à coup sûr : course).
+
+Non couverts par un test automatique : câblage de `BookingScheduler` dans `BookingModule` et de
+`LOG_REDACT_PATHS` dans `app.module.ts` (`pnpm build` et démarrage), déclenchement réel par
+`ScheduleModule`, check-in Sentry, rendu Mailpit du rappel, README (crons, purge).
+
+Sortie condensée (`pnpm test -- src/booking; echo $?`) :
+
+```
+FAIL src/booking/booking-scheduler.service.spec.ts      Cannot find module './booking-scheduler.service'
+FAIL src/booking/booking-scheduler.integration.spec.ts  Cannot find module './booking-scheduler.service'
+FAIL src/booking/booking-notifier.service.spec.ts       8 × TypeError: notifier.bookingReminder is not a function ; 25 A3/A4 verts
+Test Suites: 3 failed, 1 skipped, 11 passed, 14 of 15 total
+Tests:       8 failed, 14 skipped, 359 passed, 381 total
+EXIT 1
+```
+
+Intégration (`docker run … postgres:17-alpine` sur 55433) : `pnpm test -- booking.integration` →
+`Tests: 14 passed, 14 total`, exit 0 (A2-A4 verts) ; `pnpm test -- booking-scheduler.integration` →
+`Cannot find module './booking-scheduler.service'`, exit 1.
+
+`pnpm test; echo $?` : `Test Suites: 4 failed, 2 skipped, 59 passed` ; `Tests: 8 failed, 19 skipped, 1277
+passed, 1304 total` ; exit 1 ; seuls échecs : les trois suites ci-dessus et `log-redact.spec.ts` (`Cannot find
+module './log-redact'`) ; les 1277 tests verts d'A4 le restent. `tsc --noEmit` : seules erreurs nouvelles
+TS2307 (`booking-scheduler.service`, `log-redact`) et TS2339 (`bookingReminder`) ; TS2345 préexistantes
+inchangées. Prettier vert ; eslint ne signale que des cascades de types non résolus (`no-unsafe-*`).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 17:58, 8 failed / 1304 total, plus 3 suites non chargées (39 tests)). Nature : module ou membre
+applicatif absent ; aucune erreur de harnais. Le GREEN doit créer `booking-scheduler.service.ts`,
+`bookingReminder` et le gabarit `booking-reminder.html`, `src/common/log-redact.ts` consommé par
+`app.module.ts`, le provider dans `BookingModule` et la section README.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
 - **Tranche A2 — une réservation est confirmée, jamais en double** : GREEN 153 passed / 153 total + 9 skipped (`pnpm test -- src/booking`, exit 0), intégration 9 passed / 9 total sur Postgres 17 réel (exit 0) · refactor : test de battement extrait de `computeFreeSlots` en `overlapsBooking` (partagé avec le 409), lecture des entrées du calcul factorisée entre `getSlots` et `create`, marche `cause` d'`isUniqueViolation` partagée avec `isExclusionViolation`
 - **Tranche A3 — invitations et annulation par le visiteur** : GREEN 249 passed / 249 total + 10 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 10 passed / 10 total sur Postgres 17 réel (exit 0), 4 emails vérifiés dans Mailpit · refactor : gabarits regénérés au format compact des gabarits contact (Prettier les avait éclatés), paramètres `ATTENDEE` réduits à `CN` + `PARTSTAT` (ligne repliée inutilement)
 - **Tranche A4 — l'admin gère plages, fermetures et rendez-vous** : GREEN 359 passed / 359 total + 14 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 14 passed / 14 total sur Postgres 17 réel (exit 0), application démarrée (`node dist/main.js`) : 8 routes admin mappées, 401 sans session, parcours admin complet et 4 emails dans Mailpit · refactor : `assertNotStarted` et `bookingNotFound` partagés entre annulation visiteur et propriétaire, `siteUrl()` du notifier partagé entre lien d'annulation et lien de réservation
+- **Tranche A5 — rappel la veille et purge** : GREEN 380 passed / 380 total + 28 skipped (`pnpm test -- src/booking`, exit 0 ; 392 avec `log-redact`, aussi sous `TZ=Pacific/Kiritimati`), intégration 28 passed / 28 total sur Postgres 17 réel (exit 0), rappel rendu dans Mailpit (1 email, pas de second au repassage) · refactor : aucun ; `pnpm lint` exit 1 sur 2 erreurs du fichier de test `booking-scheduler.service.spec.ts` (non modifié, à corriger par `qa`)
 
 ### A1
 
@@ -1230,3 +1308,69 @@ Tests de `qa` inchangés.
 
 **Non vérifié**
 - Import réel du `CANCEL` propriétaire dans Google Agenda / Outlook (même réserve qu'en A3).
+
+### A5
+
+GREEN le 2026-10-13, API `nest-portfolio-app` branche `feat/booking` (sur `e293fcc`), non commité.
+Tests de `qa` inchangés.
+
+**Fichiers**
+- Créés : `src/booking/booking-scheduler.service.ts` (`BookingScheduler` : `sendReminders`
+  `@Cron('*/15 * * * *', { timeZone: 'UTC' })` + `SentryCron('booking-reminders', …)`, `purgeExpired`
+  `@Cron('30 3 * * *', …)` + `SentryCron('booking-purge', …)`, `checkinMargin: 5`, `maxRuntime: 5`),
+  `src/booking/mail-templates/booking-reminder.html` (dérivé de la confirmation, bloc d'annulation retiré),
+  `src/common/log-redact.ts` (`LOG_REDACT_PATHS`, `as const`).
+- Modifiés : `booking-notifier.service.ts` (`bookingReminder(row)` : un email au visiteur, sujet « Rappel
+  de rendez-vous : <date Paris> », sans `.ics`), `booking.module.ts` (provider `BookingScheduler`),
+  `app.module.ts` (`redact: [...LOG_REDACT_PATHS]`, liste inline retirée), `README.md` (section
+  « Rendez-vous » : routes, emails, `OWNER_EMAIL`, `BOOKING_VIDEO_URL_BASE`/`PUBLIC_SITE_URL`, tableau
+  des deux crons, purge 6 mois, commande d'intégration ; ligne « Redaction » de « Logging » mise à jour).
+
+**Implémentation**
+- Réclamation : une seule requête `update(bookings).set({ reminderSentAt: sql\`now()\` })` où
+  `status = 'confirmed'`, `reminder_sent_at is null`, `starts_at > now()`, `starts_at <= now() + interval
+  '24 hours'`, `created_at <= starts_at - interval '30 hours'`, `.returning()` ; bornes calculées par
+  l'horloge de Postgres (pas de dérive entre processus). Envois en `Promise.all`, chaque échec capté :
+  `Logger.error('Booking reminder failed for booking <id>')`, sans le message de l'erreur.
+- Purge : `delete(bookings).where(ends_at < now() - interval '6 months').returning({ id })`, un
+  `Logger.log` « Purged <n> bookings ended more than 6 months ago ».
+
+**Écarts au plan**
+- Rédaction du rappel : « notre appel de cadrage de 30 minutes a lieu dans moins de 24 heures » plutôt que
+  « demain » (un rendez-vous réservé tard ou un cron rattrapé peut tomber le jour même) ; la date exacte
+  figure au récapitulatif et au sujet.
+- `pnpm lint` (avec `--fix`) sort en 1 sur **deux erreurs du fichier de test RED**
+  `src/booking/booking-scheduler.service.spec.ts`, que le GREEN ne doit pas modifier :
+  ligne 22 `@typescript-eslint/no-unsafe-assignment` (spread de `mock.calls`, typé `any[]`) et ligne 102
+  `@typescript-eslint/unbound-method` (`BookingScheduler.prototype[method]`). Le journal RED les
+  croyait des cascades de types non résolus ; elles subsistent une fois le module présent. Correctif
+  `qa` proposé : typer le double (`jest.Mock<unknown, [string, Record<string, unknown>]>`) et
+  `// eslint-disable-next-line @typescript-eslint/unbound-method` sur la lecture de métadonnées (la
+  méthode n'est pas appelée). `eslint` sur les fichiers applicatifs et les deux autres specs : exit 0.
+- Risque préexistant hors tranche : `MailerService.sendMail` journalise lui-même, après trois échecs,
+  `Failed to send email to <destinataire>` avec la pile. Le log du scheduler est sans PII, mais un rappel
+  raté écrit quand même l'email du visiteur via le mailer (comme le contact et les emails A3/A4).
+
+**Preuves**
+- `pnpm test -- src/booking; echo $?` → `Test Suites: 2 skipped, 13 passed` ; `Tests: 28 skipped, 380
+  passed, 408 total` ; exit 0. Avec `src/common/log-redact` sous `TZ=Pacific/Kiritimati` : `392 passed`,
+  exit 0.
+- Intégration (`postgres:17-alpine` sur 55433, `pg_isready`) : `pnpm test -- booking.integration
+  booking-scheduler.integration` → `Test Suites: 2 passed` ; `Tests: 28 passed, 28 total` ; exit 0.
+- `pnpm test; echo $?` → `Test Suites: 3 skipped, 62 passed` ; `Tests: 33 skipped, 1310 passed, 1343
+  total` ; exit 0. `pnpm build` exit 0, `dist/booking/mail-templates/booking-reminder.html` présent.
+  `pnpm lint` exit 1 (voir écarts).
+- **Rendu réel du rappel** : même Postgres + Mailpit, script jetable hors repo instanciant
+  `BookingScheduler`, `BookingNotifier` et `MailerService` du build (transport `127.0.0.1:1025`), RDV visio
+  inséré en SQL (début dans 23 h, créé il y a 2 jours, nom `Camille <b>Martin</b>`) :
+  - 1er `sendReminders()` → Mailpit `total 1` : à `camille@example.com`, sujet « Rappel de rendez-vous :
+    mercredi 14 octobre 2026 à 17:05 » (16:05Z + 23 h, heure d'été), 0 pièce jointe ; corps : lien
+    `https://meet.jit.si/…`, nom échappé (`&lt;b&gt;`), ni `/rendez-vous/annulation` ni empreinte ;
+    `reminder_sent_at` posé ;
+  - 2e `sendReminders()` → toujours `total 1`, `reminder_sent_at` inchangé.
+  - Conteneurs arrêtés, script supprimé.
+
+**Non vérifié**
+- Déclenchement réel par `ScheduleModule` et check-in Sentry Crons (pas de démarrage de l'application
+  dans cette tranche : le provider ajouté à `BookingModule` et `LOG_REDACT_PATHS` dans `app.module.ts`
+  ne sont couverts que par `pnpm build`).
