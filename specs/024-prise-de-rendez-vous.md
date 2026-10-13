@@ -716,7 +716,95 @@ applicatif introuvable à l'import (aucune erreur de harnais) ; le GREEN doit cr
 `booking-policy.ts`, `paris-time.ts`, `compute-free-slots.ts`, `availability.service.ts`,
 `booking.service.ts`, `booking.controller.ts` et les types du schéma.
 
+### Tranche A2 — une réservation est confirmée, jamais en double
+
+API `nest-portfolio-app`, branche `feat/booking` (sur `06a96dc`), 111 tests dans 9 fichiers. Builder
+ajouté : `booking-request-test-builder.ts` (`aBookingRequest`, typé `CreateBookingDto`), séparé de
+`booking-test-builders.ts` pour que les suites A1 qui l'importent restent vertes tant que le DTO
+n'existe pas.
+
+Signatures figées par les tests (non précisées au plan) :
+- `BookingService.create(dto: CreateBookingDto)` → `{ id, startsAt, endsAt, format, videoUrl }`
+  (chaînes ISO, rien d'autre) ; `BookingService` injecte aussi `AppConfigService`
+  (`bookingVideoUrlBase`), salle tirée par `videoRoomUrl(base, randomBytes(16))`.
+- Dans `db.transaction(tx)` : `tx.execute(sql\`select pg_advisory_xact_lock(hashtext('booking:create'))\`)`
+  avant toute lecture (rendez-vous **et** `availability.listRules/listClosures`) ; puis, sur `tx`,
+  le plafond en premier (terminateur `where`, résultat `[{ count }]`), puis les rendez-vous
+  confirmés de la fenêtre (terminateur `where`), puis `tx.insert(bookings).values(…).returning()`.
+  Aucune lecture ni écriture de rendez-vous sur la connexion partagée.
+- Exceptions : `UnprocessableEntityException({ error: 'booking_limit_reached' | 'slot_unavailable', message })`,
+  `ConflictException({ error: 'slot_taken', message })` ; toute autre erreur d'insertion remonte
+  telle quelle.
+- Champ piège : réponse de même forme sans verrou, lecture ni écriture, même pour un créneau
+  indisponible (un robot n'apprend rien) : `id` UUID aléatoire, `startsAt` normalisé, `endsAt` +30 min,
+  `format` demandé, `videoUrl` générée sur la base (visio) ou `null` ; un seul `warn`, sans valeur saisie.
+- `videoRoomUrl(base, random)` : aléa de 16 octets, chaque octet influe sur la salle ;
+  `isExclusionViolation(err, constraintHint?)` exporté de `common/utils.ts`.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `dto/create-booking.dto.spec.ts` | 35 | validation avec `whitelist` + `forbidNonWhitelisted` | visio, téléphone, champ piège rempli acceptés ; champ inconnu rejeté ; 14 entrées invalides → la seule propriété en erreur ; 4 bornes acceptées (200, 1000, décalage `+01:00`) ; téléphone requis en format téléphone, 4 numéros acceptés, 5 refusés, non contrôlé en visio |
+| `cancel-token.spec.ts` | 6 | jeton et empreinte | 43 car. `[A-Za-z0-9_-]`, 32 octets décodés, empreinte hex 64 = `hashCancelToken(token)`, deux jetons distincts ; SHA-256 de référence (`abc`, chaîne vide) |
+| `video-room-url.spec.ts` | 8 | salle de visio | `…/nedellec-[a-z0-9]{16}` pour trois aléas extrêmes ; barre finale non doublée ; base avec chemin ; déterministe ; deux aléas (dont dernier octet seul) → deux salles |
+| `booking.service.spec.ts` (`BookingService.create`) | 29 | création, horloge simulée, transaction doublée par un second `createMockDb` | confirmation exacte ; valeurs insérées (fin +30 min, salle sur la base configurée, empreinte, `phone` `null` en visio, `company` `null`) ; téléphone gardé sans salle ; deux créations → salles et empreintes distinctes ; instant `+01:00` comparé comme instant ; jeton absent des logs (fenêtres de 43 car. hachées comparées à l'empreinte insérée) ; verrou SQL exact, avant toute lecture, sur `tx` ; plafond 2 et 3 → 422 sans insertion, 0 et 1 → insertion, plafond prioritaire ; 409 `slot_taken` (même instant, battement avant/après, hors grille en conflit) ; 422 `slot_unavailable` (hors grille, avant la plage, jour sans plage, jour fermé, préavis 23 h 30) ; 23P01 → 409 ; autre erreur remontée ; champ piège (forme, format téléphone, aucun accès base, un `warn` sans donnée), champ piège vide → insertion |
+| `booking.controller.spec.ts` (`POST bookings`) | 9 | supertest, `ValidationPipe` et `HttpExceptionFilter` de `main.ts` | 201 corps exact, demande transmise ; champ piège jusqu'au service ; 400 sans appel (champ inconnu, téléphone manquant, instant non ISO) ; 409 / 422 / 422 avec `statusCode`, `error` métier, `path` ; aucune garde, throttle 5 / 600 000 ms |
+| `common/utils.spec.ts` (`isExclusionViolation`) | 11 | marche dans `cause` | brute, enveloppée une et deux fois ; indice de contrainte juste / faux ; 23505, sans code, `null`, chaîne refusés ; 23P01 non pris pour une unicité |
+| `config/env.validation.spec.ts` | 3 | `BOOKING_VIDEO_URL_BASE` | défaut `https://meet.jit.si`, valeur fournie gardée, non-URL rejetée |
+| `config/app-config.service.spec.ts` | 1 | getter | `bookingVideoUrlBase` rend la valeur de l'env |
+| `booking.integration.spec.ts` | 9 | Postgres réel (`describe.skip` sans `BOOKING_IT_DATABASE_URL`), pool `max: 20`, plages 00:00–24:00 tous les jours | migration `0023_booking_no_overlap` au journal et contrainte `x` en base ; 10 créations simultanées → 1 succès, 9 `slot_taken`, 1 ligne ; 12:00 et 12:30 UTC simultanés → 1 succès, `slot_taken` ; 3 créneaux, même email en trois casses → 2 succès, `booking_limit_reached`, 2 lignes ; chevauchement confirmé en SQL direct → `isExclusionViolation(…, 'booking_no_overlap')` ; plages adjacentes acceptées (`[)`) ; chevauchement d'une ligne annulée accepté ; annuler libère le créneau ; champ piège → aucune ligne |
+
+Adaptation mécanique : `booking.service.spec.ts` (suite A1) — 1 site, provider `AppConfigService`
+ajouté au module de test, aucune valeur attendue modifiée.
+
+Non couverts par un test automatique : `MailerService` (aucun email en A2, notifier en A3 : le
+doublage prévu aux consignes viendra avec lui, et le module de test de l'intégration gagnera ce
+provider) ; câblage `AppConfigModule` dans `BookingModule` (`pnpm build` et démarrage).
+`@MaxLength(320)` de l'email n'est pas testable : `@IsEmail` refuse déjà toute adresse de plus de
+319 caractères (partie locale ≤ 64, domaine ≤ 254). Les deux tests d'intégration « plages adjacentes »
+et « ligne annulée » sont verts avant la contrainte (aucune contrainte ne refuse) : ils gardent la
+forme `[)` et la clause `WHERE status = 'confirmed'` de la migration une fois posée.
+
+Sortie condensée (`pnpm test -- src/booking; echo $?`) :
+
+```
+FAIL src/booking/video-room-url.spec.ts           Cannot find module './video-room-url'
+FAIL src/booking/cancel-token.spec.ts             Cannot find module './cancel-token'
+FAIL src/booking/dto/create-booking.dto.spec.ts   Cannot find module './create-booking.dto'
+FAIL src/booking/booking.service.spec.ts          29 × TypeError: service.create is not a function (5 tests A1 verts)
+FAIL src/booking/booking.controller.spec.ts       8 × expect(...).toBe (404 au lieu de 201/400/409/422), 1 × toBeDefined (route absente) ; 2 tests A1 verts
+Test Suites: 5 failed, 1 skipped, 4 passed, 9 of 10 total
+Tests:       38 failed, 9 skipped, 66 passed, 113 total
+EXIT 1
+```
+
+Intégration (`docker run … postgres:17-alpine` sur 55433,
+`BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration; echo $?`) : `Tests: 7 failed, 2 passed,
+9 total`, exit 1 ; 5 × `service.create is not a function`, 1 × `isExclusionViolation is not a
+function`, 1 × `toContain` (`0023_booking_no_overlap` absent du journal) ; verts : plages adjacentes,
+ligne annulée.
+
+`pnpm test; echo $?` : `Test Suites: 8 failed, 2 skipped, 49 passed` ; `Tests: 52 failed, 14 skipped,
+964 passed` ; exit 1 ; seuls échecs : les fichiers ci-dessus plus `utils.spec.ts` (10 ×
+`isExclusionViolation is not a function`), `env.validation.spec.ts` (3 × `toMatchObject` / `toThrow`)
+et `app-config.service.spec.ts` (1 × `toBe`) ; les 66 tests A1 et toutes les suites existantes
+restent verts. `tsc --noEmit` : seules erreurs nouvelles TS2307 (`cancel-token`, `video-room-url`,
+`dto/create-booking.dto`), TS2305 (`isExclusionViolation`), TS2339 (`create`,
+`bookingVideoUrlBase`) ; les erreurs TS2345 préexistantes (`analytics`, `auth`, `profile`) sont
+inchangées. Prettier vert ; eslint ne signale que des cascades de types non résolus.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 16:55, 52 failed / 1030 total, plus 3 suites non chargées et 7 failed / 9 total en
+intégration). Nature : module ou membre applicatif absent (`Cannot find module`, `is not a
+function`) et assertions d'HTTP, d'env et de journal de migrations ; aucune erreur de harnais. Le
+GREEN doit créer `cancel-token.ts`, `video-room-url.ts`, `dto/create-booking.dto.ts`,
+`BookingService.create`, la route `POST bookings`, `BOOKING_CREATE_THROTTLE` /
+`BookingCreateThrottle`, `isExclusionViolation`, `BOOKING_VIDEO_URL_BASE` + getter et
+`drizzle/0023_booking_no_overlap.sql`.
+
 ## Journal des tranches
+
+- **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
+- **Tranche A2 — une réservation est confirmée, jamais en double** : GREEN 153 passed / 153 total + 9 skipped (`pnpm test -- src/booking`, exit 0), intégration 9 passed / 9 total sur Postgres 17 réel (exit 0) · refactor : test de battement extrait de `computeFreeSlots` en `overlapsBooking` (partagé avec le 409), lecture des entrées du calcul factorisée entre `getSlots` et `create`, marche `cause` d'`isUniqueViolation` partagée avec `isExclusionViolation`
 
 ### A1
 
@@ -759,3 +847,51 @@ inchangés.
   9 (09:30, 10:00, 10:30 retirés) ; fermeture passée filtrée par `listClosures`.
 - ICU dans `node:24-alpine` (image de l'API) : `02:30` ; libellé long
   « dimanche 25 octobre 2026 à 02:30 ».
+
+### A2
+
+GREEN le 2026-10-13, API `nest-portfolio-app` branche `feat/booking` (sur `06a96dc`), non commité.
+Tests de `qa` inchangés (horodatages antérieurs au GREEN vérifiés).
+
+**Fichiers**
+- Créés : `drizzle/0023_booking_no_overlap.sql` et `drizzle/meta/0023_snapshot.json`
+  (`pnpm drizzle-kit generate --custom --name booking_no_overlap`, entrée 23 de `_journal.json`
+  créée par drizzle-kit, SQL écrit à la main), `src/booking/cancel-token.ts`,
+  `src/booking/video-room-url.ts`, `src/booking/dto/create-booking.dto.ts`.
+- Modifiés : `src/booking/booking.service.ts` (`create`, `AppConfigService` injecté),
+  `booking.controller.ts` (`POST bookings`, `@BookingCreateThrottle()`), `booking.module.ts`
+  (`imports: [AppConfigModule]`), `availability.service.ts` (`listRules` / `listClosures` acceptent
+  l'exécuteur, défaut connexion partagée), `compute-free-slots.ts` (`overlapsBooking` exporté),
+  `src/common/utils.ts` (`isExclusionViolation`, marche `cause` interne partagée),
+  `src/common/throttle.ts` (`BOOKING_CREATE_THROTTLE`, `BookingCreateThrottle`),
+  `src/config/env.schema.ts` + `app-config.service.ts` (`BOOKING_VIDEO_URL_BASE`, getter
+  `bookingVideoUrlBase`), `src/database/drizzle.types.ts` (`Transaction`, `DbExecutor`),
+  `README.md` (ligne d'env), `drizzle/meta/_journal.json`.
+
+**Écarts au plan**
+- Plages et fermetures lues **sur `tx`** sous verrou (paramètre `executor` d'`AvailabilityService`) :
+  lues sur la connexion partagée, chaque création en attente du verrou tiendrait une connexion
+  pendant que le détenteur en réclame une seconde ; un pool saturé de créations se bloquerait.
+- `CreateBookingDto.format` typé `Booking['format']` (union du schéma) ; liste de `@IsIn` vérifiée
+  par `satisfies` contre ce type.
+- Salle de visio : un caractère `[a-z0-9]` par octet (`octet % 36`), environ 82 bits ; léger biais
+  modulo assumé (aucun enjeu de secret : la salle n'est pas un jeton d'accès).
+- Jeton d'annulation créé dans la transaction, seule l'empreinte est utilisée en A2 ; le jeton en
+  clair sera passé au `BookingNotifier` après commit en A3.
+- Aucun `.env.example` dans le repo API : variable documentée dans le README seulement.
+- Postgres jetable lancé avec Docker sur 55433 (`podman` absent), comme en A1.
+
+**Preuves**
+- `pnpm test -- src/booking; echo $?` → `Test Suites: 1 skipped, 9 passed` ; `Tests: 9 skipped,
+  153 passed, 162 total` ; exit 0. Idem sous `TZ=Pacific/Kiritimati`, exit 0.
+- `docker run --rm -d --name booking-it -e POSTGRES_PASSWORD=it -p 55433:5432
+  docker.io/postgres:17-alpine`, puis `BOOKING_IT_DATABASE_URL=postgres://postgres:it@127.0.0.1:55433/postgres
+  pnpm test -- booking.integration; echo $?` → `Tests: 9 passed, 9 total`, exit 0 ;
+  `pnpm db:migrate` sur la même base exit 0 ; `pg_get_constraintdef` de `booking_no_overlap` :
+  `EXCLUDE USING gist (tstzrange(starts_at, ends_at, '[)'::text) WITH &&) WHERE ((status =
+  'confirmed'::text))`.
+- `pnpm test; echo $?` → `Test Suites: 2 skipped, 57 passed` ; `Tests: 14 skipped, 1065 passed,
+  1079 total` ; exit 0.
+- `pnpm lint` exit 0 ; `pnpm build` exit 0.
+- Non vérifié : démarrage de l'application (câblage DI d'`AppConfigModule` dans `BookingModule`),
+  faute d'env S3/SMTP locale ; couvert par compilation seulement.
