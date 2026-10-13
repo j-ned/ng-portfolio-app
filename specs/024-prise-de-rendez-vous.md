@@ -1781,6 +1781,51 @@ le 2026-10-13 21:47, 102 failed / 4503 total ; 3 garde-fous « aucune règle / l
 verts sur le squelette). Nature : 102 `AssertionError` (vue neutre, page vide, route et entrée de
 navigation absentes) ; aucune erreur de harnais, aucun délai dépassé.
 
+### Tranche F6 — zéro violation axe sur les nouvelles pages
+
+Front, branche `feat/024-prise-de-rendez-vous` (sur `ec7e831`). Audit axe en navigateur réel contre
+l'image de production (ADR-0025, spec 023), réseau fermé : les appels à l'API de production sont rejoués
+sur la doublure, tout autre hôte est bloqué (`blocked=0` sur chaque nouveau scénario).
+
+**Doublure `ci/api-stub`** : créneaux et rendez-vous datés **depuis l'heure courante** dans `server.mjs`
+(jamais périmés) ; plages hebdomadaires en fixture statique (`fixtures/booking-availability-rules.json`).
+- `GET /api/booking/slots` : du surlendemain au 19e jour, jours ouvrés, six départs par jour, toujours
+  dans la fenêtre 24 h – 21 j ;
+- `POST /api/booking/bookings` → 201 (créneau demandé, lien visio en format visio) ;
+  `POST bookings/cancel/preview` → aperçu confirmé annulable, `POST bookings/cancel` → `cancelled`, 400 si
+  le jeton n'a pas 43 caractères `[A-Za-z0-9_-]` ; routes publiques testées avant le 405 ;
+- sous `STUB_ADMIN_SESSION` : `availability/rules` (GET, PUT), `availability/closures` (GET, POST,
+  DELETE `:id`, deux fermetures à J+7–J+9 et J+14), `bookings?scope=upcoming|past` (à venir : visio
+  confirmé, téléphone confirmé, annulé par vous avec motif), `bookings/upcoming-count` (2),
+  `PATCH bookings/:id/cancel`.
+
+**Scénarios** (`e2e/a11y/scenarios.ts`, `e2e/a11y/booking-states.spec.ts`), clair et sombre :
+
+| Scénario | Repère | Assertion d'atteinte avant l'analyse |
+|---|---|---|
+| `/rendez-vous` | `booking-day-picker` | pied de page rendu |
+| `/rendez-vous/annulation#<jeton 43>` | `booking-cancel-preview` | aperçu servi par la doublure |
+| `/rendez-vous/annulation` (lien invalide) | `booking-cancel-invalid` | — |
+| `/admin/rendez-vous` | `admin-bookings-list` | aucun squelette, erreur ni toast |
+| `/admin/disponibilites` | `admin-availability-rules` | idem |
+| jour et heure choisis | `booking-summary` | récapitulatif visible |
+| formulaire soumis vide | `booking-name-error` | erreurs nom, email et message visibles |
+| écran de confirmation | `booking-confirmation` | `booking-confirmation-heading` focalisé (201 de la doublure) |
+| dialogue d'annulation admin | `confirm-dialog` | 3 lignes, un `dialog[open]`, champ motif visible |
+| plages qui se chevauchent | `admin-availability-rule-start-error` | « Chevauche la plage 1 » après envoi (lundi 14:00 → 10:00) |
+
+Discriminance : le témoin `harness.spec.ts` (violation injectée → rapportée) reste vert, et chaque état
+interactif asserte son aboutissement avant l'analyse (un état non atteint échoue au lieu d'auditer la
+mauvaise page).
+
+**Pas de RED : tout passe d'emblée.** `pnpm a11y` le 2026-10-13 22:15, 0 failed / 75 total (75 passed,
+dont 20 nouveaux scénarios ; les 55 existants restent verts), exit 0 ; aucune violation WCAG 2.0/2.1/2.2
+A et AA sur les nouvelles pages, aucun code applicatif à corriger. Revue humaine (axe `incomplete`,
+non bloquant) : `color-contrast` indéterminé sur `.group[type="button"]` (formulaire soumis vide, élément
+partiellement recouvert) et sur le paragraphe du dialogue d'annulation (`#confirm-dialog-description-0 > p`,
+chevauchement), dans les deux thèmes. `pnpm test` 4503 passed / 4503 total, exit 0 ; `pnpm run
+a11y:typecheck`, `pnpm lint`, Prettier exit 0.
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1795,6 +1840,7 @@ navigation absentes) ; aucune erreur de harnais, aucun délai dépassé.
 - **Tranche F4 — points d'entrée et confidentialité** : GREEN 4332 passed / 4332 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm icons:check` exit 0, build production exit 0, non commité · refactor : hauteurs du placeholder de la méthode recalées sur la section rendue (le lien de l'étape Cadrer l'allonge de 31 à 53 px selon la largeur)
 - **Tranche F5a — l'admin voit et annule les rendez-vous** : GREEN 4404 passed / 4404 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, build production exit 0, non commité · refactor : séparateur du motif rendu (`Motif : ` : l'espace entre les deux `span` était supprimé par le compilateur, constaté au navigateur) ; passe qualité manuelle sur le diff (`simplify` indisponible en sous-agent), rien d'autre à reprendre
 - **Tranche F5b — l'admin règle ses disponibilités** : GREEN 4503 passed / 4503 total (`pnpm test`, exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, build production exit 0, sprite inchangé (`clock` déjà présent), non commité · refactor : `toDraft` passé directement (`toAvailabilityDraft`) au lieu d'une flèche ; passe qualité manuelle sur le diff (`simplify` indisponible en sous-agent)
+- **Tranche F6 — l'audit axe couvre la prise de rendez-vous** : tranche d'audit, vert d'emblée par nature (elle mesure des pages déjà livrées par F2a-F5b ; il n'y avait pas de RED à produire, exception actée le 2026-10-13) · `pnpm a11y` 75 passed / 75 total, exit 0, dont 20 scénarios neufs (clair et sombre), réseau fermé (`blocked=0`) ; `pnpm test` 4503 passed, exit 0 · à relire à la main : contraste non mesurable par axe sur `.group[type="button"]` (formulaire soumis vide) et `#confirm-dialog-description-0 > p` (dialogue admin)
 
 ### A1
 
