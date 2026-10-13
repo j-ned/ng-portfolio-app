@@ -1365,6 +1365,102 @@ le 2026-10-13 19:34, 60 failed / 4255 total). Nature : 60 `AssertionError` (sque
 envoi, page sans formulaire, copie vide) ; aucune erreur de harnais, aucun délai dépassé (attentes de
 page bornées par `settleBounded`, `flush()` borné dans la facade).
 
+### Tranche F3 — le visiteur annule par le lien
+
+Front, branche `feat/024-prise-de-rendez-vous` (sur `0074cb8`), 43 tests neufs : 33 dans
+`pages/booking-cancellation/booking-cancellation.spec.ts` (neuf), 3 dans `src/server/nginx-config.spec.ts`
+(neuf), 2 ajoutés à `booking-copy.static-data.spec.ts`, 2 à `app.routes.booking.spec.ts`, 2 à
+`core/seo/seo.spec.ts`, 1 ligne à l'`it.each` des routes Client de `app.routes.server.spec.ts`.
+
+**Squelettes de signature** (bundle unique, comme en F1/F2) : `BookingCancellation` (gabarit vide),
+`BOOKING_CANCEL_NOTICES` et `BOOKING_CANCEL_FAILURE_MESSAGES` à valeurs vides (type
+`BookingCancelNotice` exporté de `booking-copy.static-data.ts`), `SeoData.robots?: string` (champ de
+type seul, `Seo` ne l'applique pas). La route `annulation`, l'entrée `RenderMode.Client` et la location
+nginx restent à écrire.
+
+Signatures figées par les tests (non précisées au plan) :
+- Page montée par le vrai routeur (`RouterTestingHarness`, `/rendez-vous/annulation#<jeton>`) : le jeton
+  vient du fragment. Jeton valide = `/^[A-Za-z0-9_-]{43}$/` (le `@Matches` de l'API) ; absent, vide, 42 ou
+  44 caractères, `.` ou `=` → `booking-cancel-invalid`, aucun appel à `previewCancellation` ni
+  `cancelBooking`.
+- États exclusifs (un seul repère présent) : `booking-cancel-invalid`, `booking-cancel-loading`
+  (`role="status"`), `load-error` (`network`/`server` à l'aperçu, Réessayer relance l'aperçu avec le même
+  jeton), `booking-cancel-not-found`, `booking-cancel-preview`, `booking-cancel-result`.
+- Aperçu : `booking-cancel-when` (`formatParisDateTime`, « 1er » compris), `booking-cancel-format`
+  (`BOOKING_FORMAT_LABELS`) ; annulable → `booking-cancel-confirm` (`<button type="button">`, libellé
+  « Annuler ce rendez-vous », désactivé seulement pendant l'envoi) ; non annulable → recap +
+  `booking-cancel-unavailable` (`already-cancelled` si `status: 'cancelled'`, sinon `not-cancellable`),
+  sans bouton ; `booking-cancel-home` (`routerLink` `/`) ; région `booking-cancel-status`
+  `role="status"` présente et vide avant envoi.
+- Confirmation : `cancelBooking(jeton)` ; deux clics avant rendu → une seule requête (garde dans le
+  gestionnaire, pas seulement `disabled`) ; succès → `booking-cancel-result` remplace l'aperçu, titre
+  `booking-cancel-result-heading` « Rendez-vous annulé » focalisé, `booking-cancel-book-again`
+  (`routerLink` `/rendez-vous`) ; échec → `booking-cancel-status` = `BOOKING_CANCEL_FAILURE_MESSAGES[raison]`,
+  aperçu conservé, bouton réoffert (actif) pour `network`/`server`, retiré pour `too-late`/`not-found`.
+- Le jeton n'apparaît nulle part dans `document.documentElement.outerHTML` (aperçu, annulé, lien
+  invalide). Le fragment n'est **pas** nettoyé de l'URL : le plan ne le prévoit pas (`toSignal(route.fragment)`
+  le relirait vide) ; le `Referer` ne transporte jamais de fragment.
+- Route : `annulation` dans `BOOKING_ROUTES` → `BookingCancellation`, `title` suffixé « | Julien
+  Nédellec », `data.seo` au même titre, `url` **fixe** `${siteUrl}/rendez-vous/annulation` (sinon
+  `initializeSeo` prend `urlAfterRedirects`, fragment compris : le jeton finirait dans le canonical et
+  `og:url`), `robots: 'noindex, nofollow'`. `rendez-vous/annulation` en `RenderMode.Client` explicite.
+- `Seo.applySeoData` : `robots` posé dans une balise `meta[name="robots"]` unique ; sans `robots`, retour à
+  `index, follow` (valeur d'`index.html`), sinon une navigation client depuis l'annulation laisserait
+  `noindex` sur la page suivante.
+- nginx (lecture du `Dockerfile`) : location `~ ^/rendez-vous/annulation/?$` (guillemets tolérés)
+  contenant `try_files /index.csr.html =404`, `add_header X-Robots-Tag "noindex, nofollow" always` et
+  l'include `security-headers.conf` (un `add_header` de location annule ceux du `server`).
+
+Copie proposée (golden, à relire par le propriétaire) : `BOOKING_CANCEL_NOTICES` = « Ce lien d’annulation
+est incomplet. Ouvrez-le tel quel depuis votre email de confirmation. », « Ce rendez-vous est déjà annulé.
+Le créneau a été libéré. », « Ce rendez-vous a commencé ou est passé : il ne peut plus être annulé en
+ligne. » ; `BOOKING_CANCEL_FAILURE_MESSAGES` = `not-found` « Ce lien d’annulation ne correspond à aucun
+rendez-vous. Vérifiez qu’il est complet ou écrivez-moi via le formulaire de contact. », `too-late` « Le
+rendez-vous a commencé : il ne peut plus être annulé en ligne. », `network` et `server` comme la
+réservation (`server` sans renvoi au contact). Libellés figés par assertion : « Annuler ce rendez-vous »,
+« Rendez-vous annulé ».
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `pages/booking-cancellation/booking-cancellation.spec.ts` | 6 + 1 | `it.each` lien invalide ; jeton valide | seul `booking-cancel-invalid`, avis exact, 0 appel ; `[[TOKEN]]` |
+| | 1 + 2 + 1 + 1 | aperçu : en cours, annulable (visio 19/10, téléphone 1er/11), retour accueil, région de statut | squelette `role="status"` ; date, format, bouton `button` actif, libellé ; `href` `/` et URL `/` après clic ; `role="status"` vide |
+| | 2 + 1 + 2 | déjà annulé / passé ; jeton inconnu ; `network`/`server` puis Réessayer | recap + avis sans bouton ; message `not-found` ; `load-error` puis 2 appels et aperçu |
+| | 1 + 1 + 1 | confirmation : jeton transmis ; bouton pendant `NEVER` ; double clic avant rendu | `[[TOKEN]]` ; `false` puis `true` ; une requête |
+| | 1 + 1 | succès ; « réserver un autre créneau » | seul `booking-cancel-result`, titre, focus ; `href` et URL `/rendez-vous` |
+| | 4 + 1 | `it.each` refus `too-late`, `not-found`, `network`, `server` ; réessai après `network` | message exact, aperçu gardé, bouton selon la raison ; 2 appels puis annulé |
+| | 3 + 3 | jeton privé ; structure (lien invalide, aperçu, annulé) | état affiché et jeton absent du document ; un `h1`, aucun repère |
+| `domain/booking-copy.static-data.spec.ts` | 2 | golden | `BOOKING_CANCEL_NOTICES`, `BOOKING_CANCEL_FAILURE_MESSAGES` |
+| `src/app/app.routes.booking.spec.ts` | 2 | route | `/rendez-vous/annulation#…` → `BookingCancellation` ; titre, `url` fixe, `robots` |
+| `src/app/app.routes.server.spec.ts` | 1 ligne | rendu | `rendez-vous/annulation` en `Client` |
+| `src/app/core/seo/seo.spec.ts` | 2 | `robots` | `noindex, nofollow` dans une seule balise ; retour à `index, follow` |
+| `src/server/nginx-config.spec.ts` | 3 | location nginx | coquille CSR, `X-Robots-Tag`, en-têtes de sécurité |
+
+Balayages : `BOOKING_ROUTES` n'est énuméré que par `app.routes.booking.spec.ts` ; `applySeoData` est
+doublé dans `blog-detail.spec.ts` (arguments partiels, inchangés) ; la liste exacte du sitemap
+(`sitemap.spec.ts`) exclut déjà `/rendez-vous/annulation`, aucun test ajouté. Non couverts par un test
+automatique : smoke docker de `ci.yml` (`/rendez-vous/annulation` 200 avec `X-Robots-Tag`) et
+`curl -sI` sur l'image, vérifications du GREEN ; scénario axe de la page (F6).
+
+Sortie condensée (`pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?`, cache vidé) :
+
+```
+Test Files  2 failed | 8 passed (10)
+     Tests  35 failed | 198 passed (233)
+EXIT 1
+```
+
+`pnpm test; echo $?` (après `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+`Test Files 6 failed | 237 passed (243)` ; `Tests 43 failed | 4255 passed (4298)` ; exit 1. Échecs :
+`booking-cancellation.spec.ts` 33, `nginx-config.spec.ts` 3, `booking-copy.static-data.spec.ts` 2,
+`app.routes.booking.spec.ts` 2, `seo.spec.ts` 2, `app.routes.server.spec.ts` 1 ; les 4255 tests verts avant
+la tranche le restent. Typecheck vert (le bundle se construit) ; `pnpm run format:check` exit 0 ; `eslint`
+des fichiers touchés exit 0 ; grep d'archéologie : seul `admin/**` (chemin de route existant).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-13 20:23, 43 failed / 4298 total). Nature : 43 `AssertionError` (page vide, copie vide, route
+absente rattrapée en `null`, `Seo` sans `robots`, location nginx absente) ; aucune erreur de harnais,
+aucun délai dépassé (attentes bornées par `settleBounded`).
+
 ## Journal des tranches
 
 - **Tranche A1 — les créneaux libres sont justes toute l'année** : GREEN 66 passed / 66 total (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), commité `06a96dc` · refactor : aucun signalé au journal A1
@@ -1375,6 +1471,7 @@ page bornées par `settleBounded`, `flush()` borné dans la facade).
 - **Tranche F1 — la gateway parle le contrat de l'API** : GREEN 102 passed / 102 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4151 passed / 4151 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : champ `apiUrl` de la gateway renommé `bookingUrl` (il porte déjà le préfixe `/booking`)
 - **Tranche F2a — le visiteur choisit un jour et une heure** : GREEN partiel 136 passed / 137 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 1), suite complète 4192 passed / 4193 total (exit 1) : seul échec, délai dépassé du test « Given the slots are on their way » de `booking-flow.spec.ts` (contrat de test à revoir par `qa`, cf. `### F2a`) ; `pnpm lint` exit 0, build production exit 0, non commité · refactor : prédicat `offers` renommé `isOffered`
 - **Tranche F2b — le visiteur réserve** : GREEN 198 passed / 198 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4255 passed / 4255 total (exit 0), `pnpm lint` exit 0, build production exit 0, non commité · refactor : aucun (passe qualité manuelle sur le diff, `simplify` indisponible en sous-agent)
+- **Tranche F3 — le visiteur annule par le lien** : GREEN 233 passed / 233 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4298 passed / 4298 total (exit 0), `pnpm lint` exit 0, build production exit 0, image docker construite et smoke `curl` vert, non commité · refactor : constante `IDLE` à un seul site inlinée ; texte de la région `booking-cancel-status` passé sous `@if` (sans lui, l'espace du gabarit empêchait `empty:hidden` : marge vide sous l'aperçu, constaté au navigateur)
 
 ### A1
 
@@ -1798,6 +1895,51 @@ Sorties : ciblée `Test Files 9 passed (9)`, `Tests 198 passed (198)`, exit 0 ; 
 linting. », exit 0 ; Prettier des fichiers touchés vert ; `pnpm run build --configuration production`
 exit 0, « Prerendered 9 static routes ».
 
+### F3
+
+GREEN le 2026-10-13, front branche `feat/024-prise-de-rendez-vous`, non commité. Tests de `qa` inchangés.
+
+- `BookingCancellation` (page smart, sans facade : état local de l'écran, comme le prévoit le plan) :
+  `toSignal(route.fragment, { requireSync: true })`, jeton retenu seulement s'il respecte
+  `/^[A-Za-z0-9_-]{43}$/` ; `rxResource({ params: jeton })` (pas de jeton → `idle`, aucune requête) ;
+  `cancellation` en `linkedSignal` sur le jeton (`idle` / `sending` / `cancelled` / `failed`), remis à
+  `idle` si le fragment change sans recréer la page. Une vue dérivée (`computed`) choisit l'état
+  exclusif : lien invalide, chargement (squelette `role="status"`), `app-load-error` (`network`/`server`
+  à l'aperçu, Réessayer → `reload()`), lien inconnu, aperçu, annulé.
+- Garde de double clic dans `confirmCancellation` (`sending` posé synchroniquement avant l'appel) ; le
+  bouton est désactivé pendant l'envoi, retiré après `too-late`/`not-found`, réoffert après
+  `network`/`server`. Succès → bloc `booking-cancel-result`, titre `h2 tabindex="-1"` focalisé par
+  `afterRenderEffect({ write })` sur la query `viewChild` (s'exécute quand le titre apparaît).
+- Grammaire visuelle : `h1` et chapeau de `/rendez-vous`, panneau `rounded-xl border bg-surface` de
+  `booking-confirmation-panel.ts` (surtitre mono, `dl` Date/Format, bouton `appButton`). Aucun
+  landmark, le jeton n'est jamais rendu.
+- Route `annulation` (titre « Annuler un rendez-vous | Julien Nédellec », `data.seo` avec `url` fixe et
+  `robots: 'noindex, nofollow'`), `rendez-vous/annulation` en `RenderMode.Client` ; commentaire de tête
+  d'`app.routes.server.ts` étendu aux routes `Client` (elles aussi exigent une location nginx).
+- `Seo.applySeoData` écrit `meta[name="robots"]` à chaque page : `data.robots`, sinon `index, follow`
+  (`updateTag` : balise unique).
+- `Dockerfile` : location `~ ^/rendez-vous/annulation/?$` (snippet de sécurité, `X-Robots-Tag`, coquille
+  CSR) après celle des routes client. `.github/workflows/ci.yml` : smoke `/rendez-vous` (200,
+  `<app-booking`) et `/rendez-vous/annulation` (`X-Robots-Tag: noindex, nofollow` + HSTS), prévu au plan
+  (« Fichiers à créer / modifier ») sans test automatique ; rejoué à la main sur l'image (`SMOKE OK`).
+- Suivi d'audience vérifié : `initializePageTracking` et le suivi des clics sortants passent par
+  `trackedPath`, qui coupe le fragment ; le `referrer` envoyé est `document.referrer`, sans fragment par
+  construction. Le jeton ne part jamais vers `/api/analytics/track`.
+
+Écart signalé : la coquille CSR servie contient toujours `<meta name="robots" content="index, follow">`
+d'`index.html` jusqu'à l'exécution du JavaScript ; l'en-tête `X-Robots-Tag` couvre ce temps (les moteurs
+appliquent la directive la plus restrictive).
+
+Sorties : ciblée `Tests 233 passed (233)`, exit 0 ; `pnpm test` `Test Files 243 passed (243)`,
+`Tests 4298 passed (4298)`, exit 0 ; `pnpm lint` « All files pass linting. », exit 0 ;
+`pnpm run format:check` exit 0 ; `pnpm run build --configuration production` exit 0 (aucun
+`browser/rendez-vous/annulation/` prérendu) ; `docker build -t ng-portfolio-app:f3 .` exit 0.
+`curl -sI http://localhost:8089/rendez-vous/annulation` : `HTTP/1.1 200 OK`, `Strict-Transport-Security`,
+`Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options`, `X-Content-Type-Options`,
+`Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `X-Robots-Tag: noindex, nofollow` ;
+`/rendez-vous/annulation/` 200 ; `curl -sI http://localhost:8089/rendez-vous` : `200 OK`, mêmes en-têtes
+de sécurité, pas de `X-Robots-Tag`, `<title>` prérendu de la page.
+
 ## Verify
 
 Tranche F2a, `pnpm start` (dev SSR, port 4200), créneaux servis par `page.route('**/api/booking/slots')`
@@ -1832,6 +1974,24 @@ Verdict : **PASS** sur desktop 1440×1000 et mobile 375×812, clair et sombre. C
 `/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f2b/{desktop,mobile}-{light,dark}-{1-phone-error,2-confirmed,3-slot-taken}.png`.
 Console : aucune erreur applicative ; 502 du proxy de dev (`/api/config`, `/api/analytics/track`, API
 locale absente) et la 409 simulée du parcours 3.
+
+Tranche F3, `pnpm start` (dev, port 4210), `page.route('**/api/booking/bookings/cancel**')` dans un
+script Playwright jetable (aperçu annulable en 200, annulation en 204 après 1 s).
+
+1. Ouvrir `/rendez-vous/annulation#<jeton de 43 caractères>` : 1 `POST cancel/preview` avec le jeton,
+   aperçu « Lundi 19 octobre 2026 à 09:00 · Visio », région de statut vide (`:empty`),
+   `meta robots` = `noindex, nofollow`, canonical `https://nedellec-julien.fr/rendez-vous/annulation`.
+2. Cliquer « Annuler ce rendez-vous » : bouton désactivé pendant l'envoi, 1 `POST cancel`, état
+   « Rendez-vous annulé », focus sur `booking-cancel-result-heading`, jeton absent du document.
+3. Ouvrir le lien avec un jeton de 42 caractères : avis « Ce lien d’annulation est incomplet… », aucune
+   requête booking.
+4. Depuis l'aperçu, « Revenir à l’accueil » : `meta robots` repasse à `index, follow` (balise unique).
+
+Verdict : **PASS** sur desktop 1440×900 et mobile 390×844, clair et sombre. Captures :
+`/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/f3/{desktop,mobile}-{light,dark}-{preview,result}.png`,
+`desktop-light-invalid.png`, `mobile-dark-invalid.png`. Console : aucune erreur applicative ; 502 du
+proxy de dev vers l'API locale absente (`/api/config`, `/api/analytics/track`, `/api/cv`,
+`/api/projects`), étrangères au booking.
 
 ## Review code
 

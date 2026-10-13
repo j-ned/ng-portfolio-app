@@ -2,11 +2,14 @@ import { TestBed } from '@angular/core/testing';
 import { type ActivatedRouteSnapshot, type Route, Router, provideRouter } from '@angular/router';
 import { BOOKING_ROUTES } from '@features/booking/booking.routes';
 import { Booking } from '@features/booking/pages/booking/booking';
+import { BookingCancellation } from '@features/booking/pages/booking-cancellation/booking-cancellation';
 import { SITE_IDENTITY } from '@shared/identity/site-identity.static-data';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
 
 const BOOKING_URL = `${SITE_IDENTITY.siteUrl}/rendez-vous`;
+const CANCELLATION_URL = `${SITE_IDENTITY.siteUrl}/rendez-vous/annulation`;
+const TOKEN = 'k3Jd9_x-Qm2LpZ7vR4tYw8NcB1sHf6Ga0UeOiXyTq5n';
 
 const leafOf = (snapshot: ActivatedRouteSnapshot): ActivatedRouteSnapshot =>
   snapshot.firstChild ? leafOf(snapshot.firstChild) : snapshot;
@@ -73,6 +76,32 @@ describe('booking route', () => {
         { '@type': 'ListItem', position: 1, name: 'Accueil', item: SITE_IDENTITY.siteUrl },
         { '@type': 'ListItem', position: 2, name: 'Prendre rendez-vous', item: BOOKING_URL },
       ],
+    });
+  });
+});
+
+describe('booking cancellation route', () => {
+  it('serves the cancellation page at /rendez-vous/annulation with the token in the fragment', async () => {
+    const landed = await landOn(`/rendez-vous/annulation#${TOKEN}`).catch(() => null);
+
+    expect(landed?.leaf.component === BookingCancellation).toBe(true);
+  });
+
+  it('titles the page under the site name and keeps its SEO data on a fixed url, out of the index', async () => {
+    const landed = await landOn(`/rendez-vous/annulation#${TOKEN}`).catch(() => null);
+    const title = landed?.leaf.routeConfig?.title;
+    const seo = landed?.leaf.data['seo'] as Readonly<Record<string, unknown>> | undefined;
+
+    expect({
+      suffixed: typeof title === 'string' && title.endsWith(' | Julien Nédellec'),
+      seoTitle: seo?.['title'] === title,
+      url: seo?.['url'],
+      robots: seo?.['robots'],
+    }).toEqual({
+      suffixed: true,
+      seoTitle: true,
+      url: CANCELLATION_URL,
+      robots: 'noindex, nofollow',
     });
   });
 });

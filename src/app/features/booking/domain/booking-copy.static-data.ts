@@ -1,4 +1,8 @@
-import type { BookingFailureReason, BookingFormat } from './models/booking.model';
+import type {
+  BookingCancelFailure,
+  BookingFailureReason,
+  BookingFormat,
+} from './models/booking.model';
 
 export type BookingFicheRow = { readonly label: string; readonly value: string };
 
@@ -53,4 +57,22 @@ export const BOOKING_FAILURE_MESSAGES: Readonly<Record<BookingFailureReason, str
   network: 'La connexion a échoué. Vérifiez votre réseau puis réessayez.',
   server:
     'Le service de réservation ne répond pas. Réessayez dans un instant ou écrivez-moi via le formulaire de contact.',
+};
+
+export type BookingCancelNotice = 'invalid-link' | 'already-cancelled' | 'not-cancellable';
+
+export const BOOKING_CANCEL_NOTICES: Readonly<Record<BookingCancelNotice, string>> = {
+  'invalid-link':
+    'Ce lien d’annulation est incomplet. Ouvrez-le tel quel depuis votre email de confirmation.',
+  'already-cancelled': 'Ce rendez-vous est déjà annulé. Le créneau a été libéré.',
+  'not-cancellable':
+    'Ce rendez-vous a commencé ou est passé\u00a0: il ne peut plus être annulé en ligne.',
+};
+
+export const BOOKING_CANCEL_FAILURE_MESSAGES: Readonly<Record<BookingCancelFailure, string>> = {
+  'not-found':
+    'Ce lien d’annulation ne correspond à aucun rendez-vous. Vérifiez qu’il est complet ou écrivez-moi via le formulaire de contact.',
+  'too-late': 'Le rendez-vous a commencé\u00a0: il ne peut plus être annulé en ligne.',
+  network: 'La connexion a échoué. Vérifiez votre réseau puis réessayez.',
+  server: 'Le service de réservation ne répond pas. Réessayez dans un instant.',
 };
