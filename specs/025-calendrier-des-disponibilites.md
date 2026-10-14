@@ -634,3 +634,154 @@ code de sortie fait foi.
   un dimanche si besoin). Alternative : ajouter les deux dimanches à `frenchPublicHolidays`.
 2. **Lundi de Pentecôte** (journée de solidarité, souvent travaillée) : fermé par défaut comme les autres
   fériés, réouvrable d'un clic. Recommandation : garder (comportement uniforme de l'interrupteur).
+
+## Plan de test
+
+### Tranche A1 — les jours fériés sont fermés sur la page publique
+
+API `nest-portfolio-app`, branche `feat/booking-calendar`, fichiers sous `src/booking/` (80 tests neufs,
+dont 4 d'intégration ; builders partagés `anAvailabilityRule`, `anAvailabilityClosure`, `aBooking`).
+
+Signatures figées par les tests (squelettes sans comportement posés pour que les suites se chargent,
+retours neutres `''` / `new Map()` / `null` / `[]` / `false` / date inchangée) :
+
+- `french-public-holidays.ts` : `easterSunday(year: number): string` ; `frenchPublicHolidays(year: number):
+  ReadonlyMap<string, string>`, **clés `YYYY-MM-DD` complètes** ; `publicHolidayName(date: string): string | null`.
+  Noms : `Jour de l’an` (apostrophe typographique, comme les messages de l'API), `Lundi de Pâques`,
+  `Fête du Travail`, `Victoire 1945`, `Ascension`, `Lundi de Pentecôte`, `Fête nationale`, `Assomption`,
+  `Toussaint`, `Armistice 1918`, `Noël`.
+- `resolve-day.ts` : `DayOverrideKind = 'open' | 'closed'` ; `DayClosedReason = 'past' | 'closed-period' |
+  'closed' | 'holiday'` ; `DayContext = { today; closures: Pick<AvailabilityClosure, 'startsOn' | 'endsOn'>[];
+  overrides: ReadonlyMap<string, DayOverrideKind>; closePublicHolidays }` ; `closedReason(date, ctx)` ;
+  `templateSlotsOn(date, rules): readonly Date[]` (créneaux dans l'ordre des plages fournies).
+- `paris-time.ts` : `addDays(date: string, days: number): string` (négatif accepté).
+- `compute-free-slots.ts` : `FreeSlotsInput` gagne `overrides` et `closePublicHolidays`, obligatoires.
+- `AvailabilityService.readClosePublicHolidays(executor: DbExecutor = this.db): Promise<boolean>` : requête
+  `select … from booking_setting where id = 'main' limit 1` (terminateur Drizzle `limit`, précédent
+  `ProfileService`), ligne absente → vrai.
+- `BookingService.freeSlots` appelle `readClosePublicHolidays(executor)` : `db` pour `getSlots`, `tx` après
+  le verrou pour `create`.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `french-public-holidays.spec.ts` | 9 | `easterSunday` 2008, 2019, 2026-2030, 2038, 2285 | date exacte |
+| | 1 | 2026 complet | `toEqual` de la `Map` des 11 fériés nommés |
+| | 5 | 2026 à 2030 | `size` 11, trois mobiles nommés aux dates de la table, 8 fixes nommés |
+| | 1 | 2008, Ascension le 1er mai | `size` 10, « Fête du Travail et Ascension » |
+| | 5 | `publicHolidayName` sur des fériés | nom exact |
+| | 5 | Pâques, Pentecôte (dimanches), 2026-12-26, 2027-11-02, 2026-12-31 | `null` |
+| | 1 | années demandées dans le désordre (mémoïsation) | 2029-04-02 et 2026-04-06 fériés, 2026-04-02 et 2029-04-06 non |
+| `paris-time.spec.ts` | 11 | `addDays` : fin de mois, d'année, 29 février, jours de bascule, +50, −1, 0 | date exacte |
+| `resolve-day.spec.ts` | 8 | `closedReason`, `today = 2026-11-10`, sans exception : lignes de la table des consignes sans colonne Exception, plus hier sans fermeture et aujourd'hui sous fermeture | `past`, `closed-period`, `holiday`, `null` |
+| | 4 | fermeture du 24 au 26/11 | inclusive aux deux bornes, veille et lendemain `null` |
+| | 4 | interrupteur actif | dimanche de Pâques `null` ; lundi de Pâques, lundi de Pentecôte, jour de l'an `holiday` |
+| | 4 | `templateSlotsOn` plage dimanche 0–1440 | 48 le 2026-10-25, 46 le 2027-03-28, 48 un dimanche ordinaire ; premier, dernier et heure répétée exacts |
+| | 5 | `templateSlotsOn` plages | 09:00–10:00 → deux créneaux ; 09:00–09:50 → un ; seules les plages du jour ISO ; un férié et une date de 2030 gardent leurs créneaux (ni férié, ni préavis, ni horizon) ; jour sans plage → `[]` |
+| `compute-free-slots.spec.ts` | 2 | plage tous les jours, `now = 2026-11-02T08:00Z`, 11 novembre | interrupteur actif `[]`, inactif 09:00 et 09:30 |
+| | 1 | interrupteur actif | 10/11 et 12/11 intacts, 39 créneaux au total (41 sans le férié) |
+| | 2 | date de Paris contre date UTC | mercredi 11/11 23:00–24:00 → `[]` ; jeudi 12/11 00:00–01:00 (= 11/11 23:00Z) proposé |
+| | 1 | plage 0–1440, interrupteur actif, `now = 2027-03-23` | Pâques 46 créneaux, lundi de Pâques 0, mardi 48 |
+| `availability.service.spec.ts` | 3 | `readClosePublicHolidays` : aucune ligne, ligne fausse, ligne vraie | `true`, `false`, `true` |
+| | 1 | requête | table `booking_setting` (`getTableName`), paramètre `['main']` |
+| | 1 | exécuteur fourni | lu par `tx`, jamais par `db` |
+| `booking.service.spec.ts` | 2 | `getSlots`, plages le mercredi, aucune fermeture | réglage actif → jours `2026-11-04`, `2026-11-18` ; inactif → `2026-11-11` en plus |
+| | 1 | `getSlots` | réglage lu une fois, sur `db` |
+| | 1 | `create` | réglage lu une fois par `tx`, après `pg_advisory_xact_lock` |
+| | 2 | `create` le 11/11 10:00 de Paris, aucune fermeture | réglage actif → 422 `slot_unavailable` sans insertion ; inactif → inséré |
+| `booking.integration.spec.ts` | 4 | Postgres jetable | `0024_booking_setting` au journal et contrainte `booking_setting_single_row` (`c`) ; seconde ligne refusée (23514) ; `readClosePublicHolidays()` vrai sans ligne, faux après une ligne insérée en SQL direct |
+
+Contrôles verts par construction (lignes de triangulation qui passent contre le squelette et
+départageront une implémentation fausse) : 18 — `closedReason` à `null` (6), `publicHolidayName` à `null`
+(5), `addDays(…, 0)`, ligne de réglage fausse, interrupteur inactif (`computeFreeSlots`, `getSlots`,
+`create`), plage du jeudi 00:00–01:00, jour sans plage (`templateSlotsOn`).
+
+Adaptation mécanique : `compute-free-slots.spec.ts`, `booking.service.spec.ts`,
+`booking.integration.spec.ts` — 15 appels de `computeFreeSlots` reçoivent `overrides: new Map()` et
+`closePublicHolidays: false` (l'appel sur une ligne est seulement replié par prettier) ; 2 doubles
+d'`AvailabilityService` reçoivent `readClosePublicHolidays: jest.fn().mockResolvedValue(false)` ; le
+`beforeEach` d'intégration pose `booking_setting` à faux (upsert SQL) ; aucune valeur attendue modifiée.
+Le vidage d'`availability_override` dans ce `beforeEach` revient à A2 (table absente en A1).
+
+Scaffold dû au GREEN : `src/booking/booking.service.ts` (appel de `computeFreeSlots` sans `overrides` ni
+`closePublicHolidays`, seule erreur `tsc` du module ; les erreurs `tsc` d'`analytics`, `auth` et `profile`
+préexistent sur `master`) ; schéma `bookingSettings` + migration `drizzle/0024_booking_setting.sql`.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via `pnpm test` le 2026-10-14 18:49,
+62 failed / 1471 total). Détail, code de sortie lu à chaque fois :
+
+```text
+$ pnpm test -- src/booking; echo $?
+Test Suites: 6 failed, 2 skipped, 9 passed, 15 of 17 total
+Tests:       62 failed, 32 skipped, 403 passed, 497 total
+1
+$ TZ=Pacific/Kiritimati pnpm test -- src/booking; echo $?
+Tests:       62 failed, 32 skipped, 403 passed, 497 total
+1
+$ pnpm test; echo $?
+Test Suites: 6 failed, 3 skipped, 59 passed, 65 of 68 total
+Tests:       62 failed, 37 skipped, 1372 passed, 1471 total
+1
+```
+
+Avant la tranche : 1354 passed / 1387 total, sortie 0. Les 1354 restent verts ; les 62 échecs sont tous
+des tests neufs, tous des assertions (`toBe`, `toEqual`, `toHaveLength`, `toHaveBeenCalledTimes`) ; le
+test 422 du 11/11 échoue sur `toBeInstanceOf` (la création continue jusqu'à l'insertion non simulée).
+`jest` transpile sans contrôle de type (sonde du 2026-10-14) : le typage des specs est vérifié par
+`npx tsc --noEmit -p tsconfig.json` et `eslint src/booking` (0).
+
+Intégration (`docker.io/postgres:17-alpine` sur 55433) :
+`BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration booking-scheduler.integration; echo $?` →
+18 failed / 32 total, sortie 1 : les 18 tests de `booking.integration` tombent dans le `beforeEach` sur
+`relation "booking_setting" does not exist` (migration 0024 absente, livrable de la tranche), les 14 du
+planificateur passent. Contre-épreuve, table créée à la main avec le SQL du plan (sans entrée au
+journal) : 2 failed / 32 total — journal sans `0024_booking_setting`, lecture sans ligne rendue fausse ;
+les 28 autres verts, dont les deux tests d'intégration du réglage qui ne dépendent que du DDL.
+
+## Journal des tranches
+
+- **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
+
+### A1
+
+GREEN le 2026-10-14, API `nest-portfolio-app` branche `feat/booking-calendar` (depuis `c20acdb`), non
+commité. Tests de `qa` inchangés.
+
+**Fichiers**
+- Créés : `drizzle/0024_booking_setting.sql`, `drizzle/meta/0024_snapshot.json` (`pnpm db:generate --name
+  booking_setting` ; SQL identique au plan, `prevId` = id du snapshot 0023, entrée `idx 24` au journal).
+- Implémentés (squelettes de `qa`) : `src/booking/french-public-holidays.ts` (Meeus/Jones/Butcher, 8 fixes
+  + 3 mobiles par décalage depuis Pâques, collision nommée « fixe et mobile », `Map` mémoïsée par année),
+  `src/booking/resolve-day.ts` (`closedReason` dans l'ordre passé → période → exception → férié,
+  `templateSlotsOn`), `addDays` dans `src/booking/paris-time.ts`, `readClosePublicHolidays` dans
+  `src/booking/availability.service.ts` (`select … where id = 'main' limit 1`, défaut
+  `DEFAULT_CLOSE_PUBLIC_HOLIDAYS`).
+- Modifiés : `src/database/schema/booking.ts` (`bookingSettings`, `BOOKING_SETTING_ROW_ID`,
+  `DEFAULT_CLOSE_PUBLIC_HOLIDAYS` relu par la colonne et par le service, type `BookingSetting`),
+  `src/booking/compute-free-slots.ts` (jour sauté si `closedReason` non nul, créneaux par
+  `templateSlotsOn`), `src/booking/booking.service.ts` (`freeSlots` lit le réglage sur le même `executor`,
+  donc par `tx` après le verrou à la création ; `overrides: new Map()` jusqu'à A2).
+
+**Sorties**
+
+```text
+$ pnpm test -- src/booking; echo $?
+Test Suites: 2 skipped, 15 passed, 15 of 17 total
+Tests:       32 skipped, 465 passed, 497 total
+0
+$ TZ=Pacific/Kiritimati pnpm test -- src/booking; echo $?
+Tests:       32 skipped, 465 passed, 497 total
+0
+$ BOOKING_IT_DATABASE_URL=postgres://postgres:it@127.0.0.1:55433/postgres pnpm test -- booking.integration booking-scheduler.integration; echo $?
+Test Suites: 2 passed, 2 total
+Tests:       32 passed, 32 total
+0
+$ pnpm test; echo $?
+Test Suites: 3 skipped, 65 passed, 65 of 68 total
+Tests:       37 skipped, 1434 passed, 1471 total
+0
+$ pnpm lint; echo $?     → 0
+$ pnpm build; echo $?    → 0
+$ npx tsc --noEmit -p tsconfig.json   → 4 erreurs, toutes préexistantes (analytics ×2, auth, profile), aucune dans src/booking
+```
+
+**Écarts** : aucun au plan. `overrides` passé vide par `BookingService` (lecture des exceptions = A2).
