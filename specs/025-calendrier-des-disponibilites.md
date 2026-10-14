@@ -625,6 +625,9 @@ code de sortie fait foi.
 
 ### Décisions à arbitrer par le propriétaire
 
+> **Arbitré le 2026-10-14 par le propriétaire** : liste légale L3133-1 retenue (dimanches de Pâques et de
+> Pentecôte non compris) ; lundi de Pentecôte fermé par défaut comme les autres fériés, rouvrable d'un clic.
+
 1. **Dimanche de Pâques et de Pentecôte** : l'exigence 3 cite « Pâques ». Le plan suit la liste légale
   (L3133-1), où seul le **lundi** de Pâques et le **lundi** de Pentecôte sont fériés ; avec des créneaux le
   dimanche, Pâques et Pentecôte resteraient ouverts sauf clic. Recommandation : liste légale (un clic ferme
