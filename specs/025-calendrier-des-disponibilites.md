@@ -737,9 +737,114 @@ planificateur passent. Contre-épreuve, table créée à la main avec le SQL du 
 journal) : 2 failed / 32 total — journal sans `0024_booking_setting`, lecture sans ligne rendue fausse ;
 les 28 autres verts, dont les deux tests d'intégration du réglage qui ne dépendent que du DDL.
 
+### Tranche A2 — un jour se ferme ou se rouvre
+
+API `nest-portfolio-app`, branche `feat/booking-calendar` (A1 commitée `bd45c0a`), fichiers sous
+`src/booking/` (86 tests neufs, dont 8 d'intégration ; builder neuf `anAvailabilityOverride`).
+
+Signatures figées par les tests (squelettes sans comportement posés : `toCalendarDay` et `setDayOpen`
+rendent `{ date, state: 'empty', holiday: null, slotCount: 0, closure: null }`, `listOverrides` une
+`Map` vide) :
+
+- `resolve-day.ts` : `CalendarDayState = DayClosedReason | 'open' | 'empty'` ; `CalendarDay` (champs du
+  contrat d'API, `readonly`) ; `toCalendarDay(date, ctx: DayContext, rules, closures: Pick<AvailabilityClosure,
+  'startsOn' | 'endsOn' | 'reason'>[]): CalendarDay`. `slotCount` = `templateSlotsOn(date, rules).length`
+  **quel que soit l'état** (passé et fermé compris) ; `closure` seulement en `closed-period`.
+- `AvailabilityService.listOverrides(executor: DbExecutor, from: string, to: string):
+  Promise<ReadonlyMap<string, DayOverrideKind>>` : `select … from availability_override where day` entre
+  `from` et `to` (paramètres `[from, to]`), terminateur Drizzle `where` (ni `orderBy` ni `limit`).
+- `AvailabilityService.setDayOpen(date: string, open: boolean): Promise<CalendarDay>` : une
+  `db.transaction` ; lit par `tx` via ses propres méthodes `readClosePublicHolidays(tx)`,
+  `listClosures(tx)`, `listRules(tx)` et, **après** l'écriture, `listOverrides(tx, date, date)` ;
+  suppression `tx.delete(availability_override).where(day = date)` ; sinon
+  `tx.insert(availability_override).values({ day, kind }).onConflictDoUpdate({ target: day, set })`, clés de
+  `set` exactement `['kind']`. Refus : `UnprocessableEntityException({ error: 'day_in_past' |
+  'day_out_of_range' })`, `ConflictException({ error: 'day_in_closure' })`, dans cet ordre, avant toute
+  écriture. Borne : dernier jour du mois de Paris courant + 12 (`2027-11-30` pour aujourd'hui
+  `2026-11-10` comme pour `2026-10-31T23:30Z`).
+- `BookingService.freeSlots` : `listOverrides(executor, toParisDate(now), toParisDate(now + 21 j))`, une
+  fois, `db` pour `getSlots`, `tx` après le verrou pour `create`.
+- `BookingAdminController` : `PUT availability/days/:date` sous le `JwtAuthGuard` de classe, 200, corps =
+  `CalendarDay` rendu par le service, appel `setDayOpen(date, open)`.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `resolve-day.spec.ts` | 7 | `closedReason`, lignes de la table des consignes avec colonne Exception, plus une exception qui ne ferme que son jour | `past`, `closed-period`, `closed`, `null` |
+| | 9 | `toCalendarDay`, plages du lundi au vendredi 09:00–11:00 : ordinaire, fermé à la main, férié actif, férié rouvert, férié sous interrupteur inactif, férié fermé à la main, hier, aujourd'hui, samedi | `toEqual` du jour complet (`holiday` « Armistice 1918 » quel que soit l'état, `slotCount` 4 ou 0) |
+| | 3 | fermeture « Congés » ; deux fermetures qui se recouvrent ; hier sous fermeture | `closure` exacte, première par `startsOn`, `past` sans `closure` |
+| | 2 | plage dimanche 0–1440 | `slotCount` 48 le 2026-10-25, 46 le 2027-03-28 |
+| `compute-free-slots.spec.ts` | 3 | exception `closed` le 12/11 ; `open` le 11/11 interrupteur actif ; `open` sous fermeture | créneaux du 10 au 12/11 exacts, 37 et 41 au total |
+| `availability.service.spec.ts` | 4 | `listOverrides` | `Map` exacte depuis les lignes, table `availability_override`, paramètres `[from, to]`, vide, lu par `tx` |
+| | 8 | `setDayOpen`, matrice d'état souhaité (4 insertions, 4 suppressions) | table, `values({ day, kind })`, cible `day`, `set` sur `kind` ; `delete … where [date]`, aucune insertion |
+| | 3 | transaction et lectures | une `transaction`, aucune écriture par `db`, lectures par `tx`, relecture après l'écriture |
+| | 3 | réponse | jour relu exact : fermé, férié rouvert, férié revenu à la règle (`holiday`) |
+| | 13 | refus et bornes, horloge simulée | `day_in_past` (dont veille en date de Paris), `day_out_of_range` (dont mois courant pris à Paris), aujourd'hui et `2027-11-30` acceptés, `day_in_closure` aux deux bornes, lendemain accepté, passé et borne avant fermeture, aucune écriture |
+| `booking.service.spec.ts` | 2 | `getSlots`, 11/11 fermé à la main (interrupteur inactif) ou rouvert (actif) | jours `2026-11-04`, `2026-11-18` puis `2026-11-11` en plus |
+| | 2 | `getSlots` à `08:00Z` et `23:30Z` | `listOverrides(db, '2026-11-02', '2026-11-23')`, puis `('2026-11-03', '2026-11-24')`, une fois |
+| | 1 | `create` | `listOverrides(tx, …)` une fois, après `pg_advisory_xact_lock` |
+| | 2 | `create` | 04/11 fermé → 422 `slot_unavailable` sans insertion ; 11/11 rouvert sous interrupteur actif → inséré |
+| `booking-admin.controller.spec.ts` | 1 | route déclarée sur le contrôleur gardé | `PUT availability/days/:date` (métadonnées) |
+| | 2 | `open: false`, `open: true` sur un férié | 200, corps exact, `setDayOpen('2026-11-12', false)` / `('2026-11-11', true)` |
+| | 10 | date de chemin invalide (5) ; corps : absent, `null`, chaîne `"false"`, nombre `0`, champ inconnu | 400 sans appel |
+| | 3 | refus du service | 422 `day_in_past`, 422 `day_out_of_range`, 409 `day_in_closure` dans `error` |
+| `booking.integration.spec.ts` | 1 | Postgres jetable | `0025_availability_override` au journal, contrainte `availability_override_kind_check` (`c`) |
+| | 7 | exceptions réelles | fermer → aucun créneau ce jour et `create` 422 `slot_unavailable`, ligne `closed` ; rouvrir → créneaux identiques, aucune ligne ; double fermeture → une ligne, réponses égales ; double réouverture d'un jour ordinaire → aucune ligne ; prochain férié rouvert → ligne `open` et `holiday`, refermé → aucune ligne ; 409 et 422 sans ligne |
+
+Contrôles verts par construction : 12 — les 10 tests d'exception de `closedReason` (7) et de
+`computeFreeSlots` (3), parce que la GREEN de A1 a déjà câblé la priorité complète (ils épinglent le
+contrat contre une régression) ; `listOverrides` vide et le samedi `empty` de `toCalendarDay` (retours
+neutres des squelettes).
+
+Adaptation mécanique : `booking.service.spec.ts` — 2 doubles d'`AvailabilityService` reçoivent
+`listOverrides: jest.fn().mockResolvedValue(new Map())` (et le champ du type) ;
+`booking-admin.controller.spec.ts` — le double reçoit `setDayOpen: jest.fn()` ; `booking.integration.spec.ts`
+— le `beforeEach` vide `availability_override` (SQL direct) ; aucune valeur attendue modifiée.
+
+Scaffold dû au GREEN : schéma `availabilityOverrides` et type `AvailabilityOverride`
+(`src/database/schema/booking.ts`, seule erreur `tsc` du module, dans `booking-test-builders.ts` ; les 4
+erreurs d'`analytics`, `auth` et `profile` préexistent), migration `drizzle/0025_availability_override.sql`,
+DTO `day-param.dto.ts` et `set-day-open.dto.ts`. Le refus de `{ open: "false" }` et `{ open: 0 }` ne tient
+pas avec `@IsBoolean()` seul : sous `enableImplicitConversion`, la sonde du 2026-10-14 (même
+`ValidationPipe` que `main.ts`) convertit `"false"` en `true` et `0` en `false` avant validation ; le DTO
+doit lire la valeur brute (par exemple `@Transform(({ obj }) => obj.open)` avant `@IsBoolean()`). Même
+précaution pour `PUT availability/settings` en A3.
+
+Tous les tests de cette tranche échouent à ce stade, hors contrôles ci-dessus (RED confirmé via `pnpm test`
+le 2026-10-14 19:11, 66 failed / 1557 total). Détail, code de sortie lu à chaque fois :
+
+```text
+$ pnpm test -- src/booking; echo $?
+Test Suites: 4 failed, 2 skipped, 11 passed, 15 of 17 total
+Tests:       66 failed, 40 skipped, 477 passed, 583 total
+1
+$ TZ=Pacific/Kiritimati pnpm test -- src/booking; echo $?
+Tests:       66 failed, 40 skipped, 477 passed, 583 total
+1
+$ pnpm test; echo $?
+Test Suites: 4 failed, 3 skipped, 61 passed, 65 of 68 total
+Tests:       66 failed, 45 skipped, 1446 passed, 1557 total
+1
+```
+
+Avant la tranche : 1434 passed / 1471 total + 37 skipped, sortie 0. Comparaison par nom (`jest --json`
+avant et après, `git stash`) : aucun test préexistant en échec ni disparu ; les 66 échecs sont tous neufs,
+tous des assertions (`toEqual`, `toHaveBeenCalledTimes`, `toHaveBeenCalledWith`, `toBeInstanceOf`, `toBe`
+sur le statut HTTP : la route absente répond 404). `npx tsc --noEmit -p tsconfig.json` : la seule erreur
+de `src/booking` est le type `AvailabilityOverride` (scaffold) ; `eslint src/booking` 0 ; `prettier --check`
+vert.
+
+Intégration (`docker.io/postgres:17-alpine` sur 55433) :
+`BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration booking-scheduler.integration; echo $?` →
+26 failed / 40 total, sortie 1 : les 26 tests de `booking.integration` tombent dans le `beforeEach` sur
+`relation "availability_override" does not exist` (migration 0025 absente, livrable de la tranche), les
+14 du planificateur passent. Contre-épreuve, table créée à la main avec le SQL du plan (sans entrée au
+journal) : 8 failed / 40 total — les 8 neufs, sur assertion (journal sans `0025_availability_override`,
+réponses et lignes des écritures, créneaux du jour fermé, codes 409 / 422) ; les 32 autres verts.
+
 ## Journal des tranches
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
+- **Tranche A2 — un jour se ferme ou se rouvre** : GREEN 543 passed / 543 total + 40 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 40 passed / 40 total sur Postgres 17 réel (exit 0), suite complète 1512 passed / 1557 total + 45 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : `kind` calculé une fois pour `values` et `set`, fermeture couvrante de `toCalendarDay` par filtre puis tri (plus de `reduce`) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `SetDayOpenDto` (le plan disait `@IsBoolean()` seul)
 
 ### A1
 
@@ -785,3 +890,60 @@ $ npx tsc --noEmit -p tsconfig.json   → 4 erreurs, toutes préexistantes (anal
 ```
 
 **Écarts** : aucun au plan. `overrides` passé vide par `BookingService` (lecture des exceptions = A2).
+
+### A2
+
+GREEN le 2026-10-14, API `nest-portfolio-app` branche `feat/booking-calendar` (A1 commitée `bd45c0a`), non
+commité. Tests de `qa` inchangés (`git diff --stat` des specs et du builder identique avant / après).
+
+**Fichiers**
+- Créés : `drizzle/0025_availability_override.sql`, `drizzle/meta/0025_snapshot.json` (`pnpm db:generate
+  --name availability_override` ; SQL identique au plan, `prevId` = id du snapshot 0024, entrée `idx 25` au
+  journal) ; `src/booking/calendar-month.ts` (`CALENDAR_MONTHS_AHEAD = 12`, `lastAllowedDay(today)` par
+  `Date.UTC(année, mois + 12, 0)` ; le reste du module — `currentMonth`, `addMonths`, `daysOfMonth`,
+  `monthOf` — reste à A3) ; `src/booking/dto/day-param.dto.ts` (`@Matches` + `@IsISO8601({ strict: true })`),
+  `src/booking/dto/set-day-open.dto.ts`.
+- Implémentés (squelettes de `qa`) : `toCalendarDay` (`src/booking/resolve-day.ts` : `slotCount` et
+  `holiday` quel que soit l'état, `closure` = fermeture couvrante au plus petit `startsOn`, seulement en
+  `closed-period`) ; `listOverrides` et `setDayOpen` (`src/booking/availability.service.ts` : `select
+  { day, kind } … where day between from and to` ; transaction, refus `day_in_past` → `day_out_of_range` →
+  `day_in_closure` avant toute écriture, base = férié et interrupteur actif → fermé, `open === base` →
+  `delete`, sinon `insert … onConflictDoUpdate({ target: day, set: { kind } })`, relecture
+  `listOverrides(tx, date, date)` puis `toCalendarDay`).
+- Modifiés : `src/database/schema/booking.ts` (`availabilityOverrides`, type `AvailabilityOverride`),
+  `src/booking/booking.service.ts` (`freeSlots` lit `listOverrides(executor, toParisDate(now),
+  toParisDate(now + maxAdvanceDays))` dans le même `Promise.all`, donc par `tx` après le verrou à la
+  création), `src/booking/booking-admin.controller.ts` (`PUT availability/days/:date`, 200 par défaut de
+  `@Put`, Swagger 400 / 409 / 422).
+
+**Sorties**
+
+```text
+$ pnpm test -- src/booking; echo $?
+Test Suites: 2 skipped, 15 passed, 15 of 17 total
+Tests:       40 skipped, 543 passed, 583 total
+0
+$ TZ=Pacific/Kiritimati pnpm test -- src/booking; echo $?
+Tests:       40 skipped, 543 passed, 583 total
+0
+$ BOOKING_IT_DATABASE_URL=postgres://postgres:it@127.0.0.1:55433/postgres pnpm test -- booking.integration booking-scheduler.integration; echo $?
+Test Suites: 2 passed, 2 total
+Tests:       40 passed, 40 total
+0
+$ pnpm test; echo $?
+Test Suites: 3 skipped, 65 passed, 65 of 68 total
+Tests:       45 skipped, 1512 passed, 1557 total
+0
+$ pnpm lint; echo $?     → 0
+$ pnpm build; echo $?    → 0
+$ npx tsc --noEmit -p tsconfig.json   → 4 erreurs, toutes préexistantes (analytics ×2, auth, profile), aucune dans src/booking
+$ npx prettier --list-different src/booking src/database/schema   → seulement les 5 gabarits mail HTML, préexistants (même sortie sans le diff)
+```
+
+**Écarts**
+- `SetDayOpenDto` : `@Transform(({ obj }) => obj.open)` avant `@IsBoolean()` (le contrat d'API disait
+  `@IsBoolean()` seul). Sous `enableImplicitConversion` du `ValidationPipe` global, `"false"` deviendrait
+  `true` et `0` `false` avant validation ; le DTO lit donc la valeur brute du corps, et `"false"`, `0`,
+  `null` ou un corps vide répondent 400. À reprendre tel quel pour `PUT availability/settings` en A3.
+- `calendar-month.ts` créé dès A2 avec la seule borne nécessaire à `day_out_of_range` ; aucune fonction
+  de mois exportée sans consommateur.
