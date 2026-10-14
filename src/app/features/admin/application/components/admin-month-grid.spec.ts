@@ -89,10 +89,20 @@ const iconsOf = (day: HTMLElement | null): readonly string[] =>
 const visibleText = (day: HTMLElement | null): string =>
   (day?.textContent ?? '').replace(/\s+/g, '');
 
-async function press(grid: Grid, date: string, key: string): Promise<KeyboardEvent> {
+async function press(
+  grid: Grid,
+  date: string,
+  key: string,
+  modifiers: KeyboardEventInit = {},
+): Promise<KeyboardEvent> {
   const day = dayOn(grid.host, date);
   day?.focus();
-  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  const event = new KeyboardEvent('keydown', {
+    ...modifiers,
+    key,
+    bubbles: true,
+    cancelable: true,
+  });
   day?.dispatchEvent(event);
   await settle(grid.fixture);
   return event;
@@ -336,6 +346,34 @@ describe('AdminMonthGrid: clavier dans le mois', () => {
         requested: grid.requested,
       }).toEqual({
         prevented: false,
+        stops: ['jeudi 12 novembre 2026, fermé'],
+        requested: [],
+      });
+    },
+  );
+  it.each([
+    { key: 'ArrowLeft', modifier: 'altKey' },
+    { key: 'ArrowRight', modifier: 'altKey' },
+    { key: 'Home', modifier: 'ctrlKey' },
+    { key: 'End', modifier: 'metaKey' },
+    { key: 'ArrowDown', modifier: 'shiftKey' },
+    { key: 'PageDown', modifier: 'shiftKey' },
+    { key: 'PageUp', modifier: 'ctrlKey' },
+  ] as const)(
+    'Given the 12th focused When $key is pressed with $modifier Then the grid leaves it to the browser',
+    async ({ key, modifier }) => {
+      const grid = await renderGrid(NOVEMBER, '2026-11-12');
+
+      const event = await press(grid, '2026-11-12', key, { [modifier]: true });
+
+      expect({
+        prevented: event.defaultPrevented,
+        focused: focusedName(grid.host),
+        stops: tabStops(grid.host),
+        requested: grid.requested,
+      }).toEqual({
+        prevented: false,
+        focused: 'jeudi 12 novembre 2026, fermé',
         stops: ['jeudi 12 novembre 2026, fermé'],
         requested: [],
       });

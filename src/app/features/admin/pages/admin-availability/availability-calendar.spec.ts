@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { NEVER, Subject, defer, of, throwError, type Observable } from 'rxjs';
 import type { Mock } from 'vitest';
@@ -10,7 +11,11 @@ import type {
   CalendarDay,
   CalendarMonth,
 } from '@features/booking/domain/models/booking-admin.model';
-import { aCalendarDay, anAdminBooking } from '@features/booking/testing/booking-builders';
+import {
+  aCalendarDay,
+  anAdminBooking,
+  anApiErrorBody,
+} from '@features/booking/testing/booking-builders';
 import { stubBookingGateway } from '@features/booking/testing/stub-booking-gateway';
 import type { ToastMessage } from '@shared/ui/toast.types';
 import type { LoadState } from '@shared/ui/load-state';
@@ -117,6 +122,91 @@ describe('AvailabilityCalendar: lecture du mois', () => {
       busy: false,
       month: '2026-11',
       label: 'Novembre 2026',
+    });
+  });
+});
+
+const answeredWith = (status: number, error: string): Observable<never> =>
+  throwError(() => new HttpErrorResponse({ status, error: anApiErrorBody(status, error) }));
+
+describe('AvailabilityCalendar: mois devenu passé', () => {
+  it('Given November shown When October is asked and refused as out of range Then the current month is read again without naming it, shown, with nothing to focus', async () => {
+    const opened = await openCalendar((month) =>
+      month === '2026-10' ? answeredWith(400, 'month_out_of_range') : byMonth(month),
+    );
+
+    opened.calendar.goToMonth('2026-10', '2026-10-12');
+    await flush();
+
+    expect({
+      calls: opened.read.mock.calls,
+      ...shown(opened),
+      focusDate: opened.calendar.focusDate(),
+    }).toEqual({
+      calls: [[null], ['2026-10'], [null]],
+      state: 'ready',
+      busy: false,
+      month: '2026-11',
+      label: 'Novembre 2026',
+      focusDate: null,
+    });
+  });
+
+  it('Given the fallback to the current month failed When it is reloaded Then the current month is read again, not the refused one', async () => {
+    let currentReads = 0;
+    const opened = await openCalendar((month) => {
+      if (month === '2026-10') return answeredWith(400, 'month_out_of_range');
+      return defer(() => {
+        currentReads += 1;
+        return currentReads === 2 ? throwError(() => new Error('offline')) : byMonth(month);
+      });
+    });
+
+    opened.calendar.goToMonth('2026-10', '2026-10-12');
+    await flush();
+    const failed = opened.calendar.state();
+    opened.calendar.reload();
+    await flush();
+
+    expect({ failed, calls: opened.read.mock.calls, ...shown(opened) }).toEqual({
+      failed: 'error',
+      calls: [[null], ['2026-10'], [null], [null]],
+      state: 'ready',
+      busy: false,
+      month: '2026-11',
+      label: 'Novembre 2026',
+    });
+  });
+
+  it('Given December refused by a server error When it is reloaded Then December itself is read again', async () => {
+    let decemberReads = 0;
+    const opened = await openCalendar((month) =>
+      defer(() => {
+        if (month !== '2026-12') return byMonth(month);
+        decemberReads += 1;
+        return decemberReads === 1 ? answeredWith(500, 'Internal Server Error') : byMonth(month);
+      }),
+    );
+
+    opened.calendar.goToMonth('2026-12', null);
+    await flush();
+    const failed = opened.calendar.state();
+    opened.calendar.reload();
+    await flush();
+
+    expect({ failed, calls: opened.read.mock.calls, month: shown(opened).month }).toEqual({
+      failed: 'error',
+      calls: [[null], ['2026-12'], ['2026-12']],
+      month: '2026-12',
+    });
+  });
+
+  it('Given the current month itself refused as out of range When the calendar starts Then it reports an error without reading again', async () => {
+    const opened = await openCalendar(() => answeredWith(400, 'month_out_of_range'));
+
+    expect({ calls: opened.read.mock.calls, state: opened.calendar.state() }).toEqual({
+      calls: [[null]],
+      state: 'error',
     });
   });
 });
@@ -599,6 +689,56 @@ describe('AvailabilityCalendar: jours fériés', () => {
       meanwhile: { writes: 1, saving: true },
       saving: false,
     });
+  });
+
+  it('Given the setting written When the month is still being read again Then it stays saving and a new change is ignored until the month arrives', async () => {
+    const reread = new Subject<CalendarMonth>();
+    let reads = 0;
+    const opened = await openWriting({
+      getAvailabilityCalendar: () => {
+        reads += 1;
+        return reads === 1
+          ? of(aCalendarMonthOf('2026-11', { closePublicHolidays: true }))
+          : reread;
+      },
+    });
+
+    opened.calendar.setHolidaysClosed(false);
+    await flush();
+    opened.calendar.setHolidaysClosed(false);
+    await flush();
+    const meanwhile = {
+      writes: opened.setClosePublicHolidays.mock.calls.length,
+      saving: opened.calendar.holidaysSaving(),
+    };
+    reread.next(aCalendarMonthOf('2026-11', { closePublicHolidays: false }));
+    reread.complete();
+    await flush();
+
+    expect({
+      meanwhile,
+      saving: opened.calendar.holidaysSaving(),
+      shown: opened.calendar.view()?.closePublicHolidays,
+    }).toEqual({ meanwhile: { writes: 1, saving: true }, saving: false, shown: false });
+  });
+
+  it('Given the setting written When reading the month again fails Then it is no longer saving', async () => {
+    let reads = 0;
+    const opened = await openWriting({
+      getAvailabilityCalendar: (month) =>
+        defer(() => {
+          reads += 1;
+          return reads === 1 ? byMonth(month) : throwError(() => new Error('offline'));
+        }),
+    });
+
+    opened.calendar.setHolidaysClosed(false);
+    await flush();
+
+    expect({
+      saving: opened.calendar.holidaysSaving(),
+      state: opened.calendar.state(),
+    }).toEqual({ saving: false, state: 'error' });
   });
 
   it('Given December shown When the setting is changed Then December is read again by name', async () => {

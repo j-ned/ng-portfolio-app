@@ -1,6 +1,7 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { tap } from 'rxjs';
+import { EMPTY, catchError, finalize, tap, throwError } from 'rxjs';
 import { ToastStore } from '@core/notifications/toast-store';
 import { BookingGateway } from '@features/booking/domain/gateways/booking.gateway';
 import type {
@@ -18,6 +19,17 @@ import {
 } from '../../application/calendar-month-view';
 import { dayFailureMessage, holidaysFailureMessage } from './availability-messages';
 
+const isMonthOutOfRange = (err: unknown): boolean => {
+  if (!(err instanceof HttpErrorResponse) || err.status !== 400) return false;
+  const body: unknown = err.error;
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'error' in body &&
+    body.error === 'month_out_of_range'
+  );
+};
+
 const without = (dates: ReadonlySet<string>, date: string): ReadonlySet<string> =>
   new Set([...dates].filter((candidate) => candidate !== date));
 
@@ -29,20 +41,30 @@ export class AvailabilityCalendar {
 
   private readonly _month = signal<string | null>(null);
   private readonly _focusDate = signal<string | null>(null);
-  // Écrit à chaque réponse plutôt que dérivé de la ressource : changer de mois vide sa valeur, et un
-  // `linkedSignal` jamais lu avant ce changement n'aurait aucun mois précédent à garder.
+  // Écrit à chaque réponse : la ressource se vide au changement de mois, l'ancien doit rester affiché.
   private readonly _shown = signal<CalendarMonth | null>(null);
   private readonly _pending = signal<ReadonlySet<string>>(new Set());
-  private readonly _holidaysSaving = signal(false);
+  private readonly _holidaysPhase = signal<'idle' | 'writing' | 'rereading'>('idle');
   private readonly _announcement = signal('');
   private readonly _bookingWarning = signal<BookingWarning | null>(null);
 
   private readonly monthResource = rxResource({
     params: () => ({ month: this._month() }),
-    stream: ({ params }) =>
-      this.gateway
-        .getAvailabilityCalendar(params.month)
-        .pipe(tap((month) => this._shown.set(month))),
+    stream: ({ params }) => {
+      const rereadingHolidays = this._holidaysPhase() === 'rereading';
+      return this.gateway.getAvailabilityCalendar(params.month).pipe(
+        tap((month) => this._shown.set(month)),
+        catchError((err: unknown) => {
+          if (params.month === null || !isMonthOutOfRange(err)) return throwError(() => err);
+          this._focusDate.set(null);
+          this._month.set(null);
+          return EMPTY;
+        }),
+        finalize(() => {
+          if (rereadingHolidays) this._holidaysPhase.set('idle');
+        }),
+      );
+    },
   });
 
   private readonly upcomingBookings = rxResource({
@@ -71,7 +93,7 @@ export class AvailabilityCalendar {
   readonly busy = computed(() => this.monthResource.isLoading() && this._shown() !== null);
   readonly focusDate = this._focusDate.asReadonly();
   readonly pending = this._pending.asReadonly();
-  readonly holidaysSaving = this._holidaysSaving.asReadonly();
+  readonly holidaysSaving = computed(() => this._holidaysPhase() !== 'idle');
   readonly announcement = this._announcement.asReadonly();
   readonly bookingWarning = this._bookingWarning.asReadonly();
 
@@ -110,18 +132,19 @@ export class AvailabilityCalendar {
   }
 
   setHolidaysClosed(value: boolean): void {
-    if (this._holidaysSaving()) return;
+    if (this.holidaysSaving()) return;
     this._focusDate.set(null);
-    this._holidaysSaving.set(true);
+    this._holidaysPhase.set('writing');
     this.gateway
       .setClosePublicHolidays(value)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((result) => {
-        this._holidaysSaving.set(false);
         if (!result.success) {
+          this._holidaysPhase.set('idle');
           this.toast.add({ severity: 'error', detail: holidaysFailureMessage(result.reason) });
           return;
         }
+        this._holidaysPhase.set('rereading');
         this.monthResource.reload();
         this._announcement.set(
           result.data ? 'Jours fériés fermés.' : 'Jours fériés ouverts selon la semaine type.',

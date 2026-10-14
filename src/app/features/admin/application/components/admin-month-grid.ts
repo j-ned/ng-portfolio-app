@@ -160,9 +160,9 @@ export class AdminMonthGrid {
     if (cell.actionable) this.dayActivated.emit(cell.date);
   }
 
-  // Part de la date active, pas du bouton qui reçoit la touche : sous la répétition clavier, plusieurs
-  // touches arrivent avant que le focus n'ait suivi.
+  // Part de la date active : en répétition clavier, les touches devancent le focus.
   protected move(event: KeyboardEvent): void {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     const from = this.activeDate();
     const target = from === null ? null : nextCalendarDate(from, event.key);
     if (target === null) return;

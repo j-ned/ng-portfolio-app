@@ -205,8 +205,7 @@ const closures = () => [
   },
 ];
 
-// Calendrier d'admin : mois réels (jamais périmés), états posés par jour du mois pour couvrir chaque
-// état quelle que soit la date d'exécution. Les jours d'un rendez-vous confirmé restent actionnables.
+// Calendrier d'admin : mois réels, états fixés par jour du mois pour couvrir les six à toute date.
 const PARIS_DATE = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Paris',
   year: 'numeric',
