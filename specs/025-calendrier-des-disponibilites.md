@@ -949,11 +949,83 @@ Intégration (`docker.io/postgres:17-alpine` sur 55433) :
 temps d'un run puis retiré : les 2 tests qui ne dépendent pas de `getCalendar` passent (ligne créée,
 créneaux du férié revenus sous `Date` simulée, sans blocage du pilote Postgres), les 3 autres restent rouges.
 
+### Tranche F1 — la gateway parle le contrat du calendrier
+
+Front `ng-portfolio-app`, branche `feat/025-calendrier-disponibilites`, fichiers sous
+`src/app/features/booking/` (28 tests neufs ; contrat relu dans le code API, branche `feat/booking-calendar`
+`83c2aad` : `CalendarDay`, `CalendarMonthResponse`, DTO `calendar-query`, `set-day-open`,
+`update-booking-settings`, codes `day_in_past`, `day_out_of_range`, `day_in_closure`, `month_out_of_range`).
+
+Signatures figées par les tests (types posés tels quels, squelettes sans comportement : adapters à retours
+vides, trois méthodes de `HttpBookingGateway` en `NEVER`) :
+
+- `booking-admin.model.ts` : `CalendarDayState`, `CalendarDay`, `CalendarMonth` (champs du plan,
+  `readonly`) ; `BookingAdminFailure` gagne `'day-past'` et `'day-in-closure'`.
+- `booking-api.types.ts` : `CalendarDayDto`, `CalendarMonthResponseDto`, `BookingSettingsDto`
+  (`{ closePublicHolidays: boolean }`, pour typer la réponse du `PUT availability/settings`).
+- `booking.adapter.ts` : `toCalendarDay(raw: CalendarDayDto): CalendarDay`, `toCalendarMonth(raw:
+  CalendarMonthResponseDto): CalendarMonth` — copie champ par champ, `closure` recopiée sur ses trois champs.
+- `BookingGateway` : `getAvailabilityCalendar(month: string | null): Observable<CalendarMonth>` (lecture :
+  l'erreur se propage) ; `setDayOpen(date: string, open: boolean): Observable<BookingAdminResult<CalendarDay>>` ;
+  `setClosePublicHolidays(value: boolean): Observable<BookingAdminResult<boolean>>` (donnée = valeur rendue
+  par l'API).
+- Requêtes, toutes avec `silentErrors()` : `GET {booking}/availability/calendar` **sans aucun paramètre**
+  si `month` est nul, `?month=<YYYY-MM>` sinon ; `PUT {booking}/availability/days/<date>` corps `{ open }` ;
+  `PUT {booking}/availability/settings` corps `{ closePublicHolidays }`.
+- `toAdminFailure` : `422` + `day_in_past` → `day-past` ; autre `422` → `invalid` ; `409` + `day_in_closure`
+  → `day-in-closure` (autre `409` → `too-late`, toujours épinglé par `cancel_too_late`) ; `400` → `invalid` ;
+  `0` → `network` ; `5xx` → `server`.
+- Doublures : `stubBookingGateway` double les trois méthodes (mois `aCalendarMonth()` ; jour rendu dans
+  l'état demandé, `open` ou `closed` ; réglage renvoyé tel quel). Builders `aCalendarDay`, `aCalendarMonth`,
+  `aCalendarDayDto`, `aCalendarMonthDto` (défauts : 2026-11, aujourd'hui 2026-11-10, jeudi 12 `open` à
+  4 créneaux, fériés fermés, `previousMonth: null`, `nextMonth: '2026-12'`).
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `booking.adapter.spec.ts` | 6 | jour `past`, `closed`, `holiday` nommé, `open` férié rouvert, `open` à 46 créneaux, `empty` | `toEqual` du jour : `state`, `holiday`, `slotCount` repris tels quels, `closure: null` |
+| | 1 | jour `closed-period` dont la fermeture porte un `id` en trop | `closure` réduite à `startsOn`, `endsOn`, `reason` |
+| | 1 | jour avec un champ inconnu | cinq champs du contrat, rien d'autre |
+| | 2 | mois courant (`previousMonth: null`) et courant + 12 (`nextMonth: null`, fériés ouverts), champs en trop au mois et à un jour | `toEqual` du mois complet, jours adaptés dans l'ordre |
+| `http-booking.gateway.spec.ts` | 1 | calendrier sans mois | `GET`, URL exacte, aucun paramètre, silencieux, mois adapté |
+| | 1 | calendrier `2027-02` | `?month=2027-02`, seul paramètre `month`, mois adapté |
+| | 3 | lecture en 500, 400 `month_out_of_range`, réseau coupé | l'erreur atteint l'appelant |
+| | 2 | `setDayOpen('2026-11-12', false / true)` | `PUT`, corps `{ open }`, silencieux, succès avec le jour rendu (`holiday` gardé) |
+| | 2 | `setClosePublicHolidays(false / true)` | `PUT`, corps `{ closePublicHolidays }`, silencieux, succès avec la valeur |
+| | 9 | échecs : jour (422 `day_in_past`, 409 `day_in_closure`, 422 `day_out_of_range`, 400, réseau, 500) ; réglage (400, réseau, 503) | `day-past`, `day-in-closure`, `invalid`, `invalid`, `network`, `server` ; `invalid`, `network`, `server` |
+
+Sweep du contrat : `BookingAdminFailure` n'est consommé qu'en `Partial<Record<…>>` (`admin-availability.ts`,
+`admin-bookings.ts`) et en `it.each` typés dans leurs specs : l'élargissement de l'union ne casse aucun site.
+Aucun test existant n'assertait un `422` admin (mapping précédent : `server`). Seule sous-classe du port :
+`StubBookingGateway`, étendue. Aucune adaptation mécanique, aucune valeur attendue modifiée.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via `pnpm test` le 2026-10-14 20:19,
+28 failed / 4540 total). Détail, code de sortie lu à chaque fois :
+
+```text
+$ pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?
+ Test Files  2 failed | 8 passed (10)
+      Tests  28 failed | 233 passed (261)
+1
+$ pnpm test; echo $?
+ Test Files  2 failed | 246 passed (248)
+      Tests  28 failed | 4512 passed (4540)
+1
+$ pnpm lint; echo $?            → 0
+$ pnpm run format:check; echo $? → 0
+```
+
+Avant la tranche : 4512 passed / 4512 total, sortie 0 ; les 4512 restent verts. Nature des 28 échecs, tous
+des assertions : 10 `AssertionError` de `toEqual` (adapters, retours vides des squelettes) et 18
+`Expected one matching request … found none` de `HttpTestingController.expectOne` (aucune requête émise par
+les squelettes `NEVER`, donc aucune promesse rejetée ni rejet non géré). Le build compile toutes les specs
+(typecheck vert). Aucun cache touché par le diff.
+
 ## Journal des tranches
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
 - **Tranche A2 — un jour se ferme ou se rouvre** : GREEN 543 passed / 543 total + 40 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 40 passed / 40 total sur Postgres 17 réel (exit 0), suite complète 1512 passed / 1557 total + 45 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : `kind` calculé une fois pour `values` et `set`, fermeture couvrante de `toCalendarDay` par filtre puis tri (plus de `reduce`) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `SetDayOpenDto` (le plan disait `@IsBoolean()` seul)
 - **Tranche A3 — l'admin lit le mois résolu et règle les fériés** : GREEN 612 passed / 612 total + 45 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 45 passed / 45 total sur Postgres 17 réel (exit 0), suite complète 1581 passed / 1631 total + 50 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, démarrage réel `node dist/main.js` (routes mappées, 401 sans session, parcours admin vérifié au curl), commité `eb31c06` · refactor : `lastAllowedDay` dérivé de `daysOfMonth(addMonths(monthOf(today), 12))` (une seule arithmétique de mois) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `UpdateBookingSettingsDto`, comme A2
+- **Tranche F1 — la gateway parle le contrat du calendrier** : GREEN 261 passed / 261 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4540 passed / 4540 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : aucun · verify : reportée (aucune surface atteignable restructurée)
 
 ### A1
 
@@ -1141,6 +1213,44 @@ Application et conteneurs arrêtés, port libéré.
   deux) : lecture seule, aucun invariant entre elles à protéger.
 - Le démarrage réel a tourné sur le `dist` d'avant le refactor de `lastAllowedDay` ; ce refactor est couvert
   par les tests `day_out_of_range` (dont `2027-11-30` accepté) et le `pnpm build` final.
+
+### F1
+
+**Fait** (tests et doublures de `qa` inchangés)
+- `infra/booking.adapter.ts` : `toCalendarDay` (copie champ par champ, `closure` recopiée sur `startsOn`,
+  `endsOn`, `reason` ou `null`), `toCalendarMonth` (jours adaptés par `toCalendarDay`, dans l'ordre).
+- `infra/http-booking.gateway.ts` : `getAvailabilityCalendar` (`GET availability/calendar`, `params` vide si
+  `month` est nul, `{ month }` sinon, erreur propagée), `setDayOpen` (`PUT availability/days/<date>`, corps
+  `{ open }`), `setClosePublicHolidays` (`PUT availability/settings`, corps `{ closePublicHolidays }`, donnée
+  = `closePublicHolidays` de la réponse) ; les trois avec `silentErrors()`, les deux écritures via
+  `toResult(toAdminFailure)`. `toAdminFailure` : `409` + `day_in_closure` → `day-in-closure` (sinon
+  `too-late`), `422` + `day_in_past` → `day-past` (sinon `invalid`) ; `429` reste `server` (arbitrage).
+- Modèles, DTO, port abstrait, builders et stub : posés par `qa` tels que figés, gardés.
+
+**Sorties** (code de sortie lu à chaque fois, 2026-10-14)
+
+```text
+$ pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?
+ Test Files  10 passed (10)
+      Tests  261 passed (261)
+0
+$ pnpm test; echo $?
+ Test Files  248 passed (248)
+      Tests  4540 passed (4540)
+0
+$ pnpm lint; echo $?                                → 0 (All files pass linting.)
+$ pnpm run format:check; echo $?                    → 0
+$ pnpm run build --configuration production; echo $? → 0 (Prerendered 9 static routes.)
+```
+
+**Refactor** : aucun (passe manuelle sur le diff : deux adapters et trois méthodes calqués sur les patrons
+024, rien à factoriser).
+
+**Verify** : reportée. Aucun composant ne consomme encore les trois méthodes (F2+), aucune surface atteignable
+n'est modifiée ; `toAdminFailure` change seulement pour `422` (avant `server`, aucune route admin existante ne
+le renvoie) et pour `409` + `day_in_closure` (code propre aux nouvelles routes).
+
+**Écarts** : aucun.
 
 ## Review code
 
