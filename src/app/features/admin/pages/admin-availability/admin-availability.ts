@@ -20,6 +20,7 @@ import {
   toWeeklySlotsDraft,
   type WeeklySlotsDraft,
 } from '../../application/availability-draft';
+import { AdminAvailabilityCalendar } from '../../application/components/admin-availability-calendar';
 import { AdminClosures } from '../../application/components/admin-closures';
 import { AdminPageHeader } from '../../application/components/admin-page-header';
 import { AdminSaveBar } from '../../application/components/admin-save-bar';
@@ -32,6 +33,7 @@ import {
   deleteFailureMessage,
   saveFailureMessage,
 } from './availability-messages';
+import { AvailabilityCalendar } from './availability-calendar';
 
 const byPeriod = (a: AvailabilityClosure, b: AvailabilityClosure): number =>
   a.startsOn.localeCompare(b.startsOn) || a.endsOn.localeCompare(b.endsOn);
@@ -49,12 +51,14 @@ class AvailabilitySaveFailure extends Error {
     ConfirmDialog,
     LoadError,
     AppSkeleton,
+    AdminAvailabilityCalendar,
     AdminClosures,
     AdminPageHeader,
     AdminSaveBar,
     AdminSectionHead,
     AdminWeekTemplate,
   ],
+  providers: [AvailabilityCalendar],
   host: { class: 'block', '(window:beforeunload)': 'draft.warnBeforeUnload($event)' },
   template: `
     <app-admin-page-header heading="Disponibilités">
@@ -118,6 +122,17 @@ class AvailabilitySaveFailure extends Error {
     </section>
 
     <section
+      app-admin-availability-calendar
+      class="mt-14"
+      [view]="calendar.view()"
+      [state]="calendar.state()"
+      [busy]="calendar.busy()"
+      [focusDate]="calendar.focusDate()"
+      (monthRequested)="calendar.goToMonth($event.month, $event.focusDate)"
+      (retry)="calendar.reload()"
+    ></section>
+
+    <section
       app-admin-closures
       class="mt-14"
       [state]="closuresState()"
@@ -144,6 +159,7 @@ export class AdminAvailability implements LeaveConfirmable {
   private readonly gateway = inject(BookingGateway);
   private readonly toast = inject(ToastStore);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly calendar = inject(AvailabilityCalendar);
 
   protected readonly rulesResource = rxResource({
     stream: () => this.gateway.getAvailabilityRules(),

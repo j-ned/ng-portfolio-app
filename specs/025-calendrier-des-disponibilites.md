@@ -1131,6 +1131,121 @@ Les 82 échecs sont tous des `AssertionError` (`toEqual` / `toBe`) : 31 `availab
 aucune erreur de harnais, aucun rejet non géré. Typecheck des specs vert (la suite compile). Aucun cache
 touché par le diff.
 
+### Tranche F3 — le calendrier du mois s'affiche et se parcourt au clavier
+
+Front `ng-portfolio-app`, branche `feat/025-calendrier-disponibilites` (F2 commitée `2ca30ca`). 127 tests
+neufs et 1 test recalé. Builder neuf `admin/application/testing/calendar-month-builder.ts` :
+`aCalendarMonthOf(month, { today, previousMonth, nextMonth, closePublicHolidays, days })` rend **tous** les
+jours du mois par `aCalendarDay` (ouverts à 4 créneaux, ceux d'avant `today` en `past`, surcharges par
+date) ; `datesOfMonth(month)`.
+
+Signatures figées par les tests (squelettes sans comportement posés pour que les suites se chargent :
+`formatMonthLabel` rend `''`, `toCalendarMonthView` une vue vide, `describeDay` `''`, `nextCalendarDate`
+`null`, facade à signaux constants sans I/O, grille au gabarit vide) :
+
+- `booking/domain/paris-format.ts` : `formatMonthLabel(month: string): string` → « novembre 2026 » (minuscule ;
+  la vue capitalise).
+- `admin/application/calendar-month-view.ts` : `CalendarCell`, `CalendarMonthView`, `toCalendarMonthView`,
+  `describeDay` aux types du plan. `label` = « Novembre 2026 ». `shortLabel` : `past` → `''`, `closed` →
+  « Fermé », `holiday` → « Férié », `closed-period` → « Période », `open` → « 4 créneaux » / « 1 créneau »,
+  `empty` → « — ». `icon` : `lock` / `flag` / `calendar` pour `closed` / `holiday` / `closed-period`, sinon
+  `null` ; un férié rouvert (`open` + `holiday`) a `icon: null` et `reopenedHoliday: true`. `describeDay` :
+  libellés du plan, singulier « 1 créneau », période sans motif sans parenthèses. `wantsOpen` non testé ici
+  (son seul consommateur est `toggleDay`, F4).
+- `admin/application/calendar-keyboard.ts` : `nextCalendarDate(date: string, key: string): string | null`.
+- `admin/pages/admin-availability/availability-calendar.ts` : `@Injectable()` `AvailabilityCalendar`
+  (instance-scopé, fourni par la page), `view: Signal<CalendarMonthView | null>`, `state: Signal<LoadState>`,
+  `busy: Signal<boolean>` (vrai pendant le chargement d'un autre mois **ou** un rechargement alors qu'un
+  mois est déjà affiché), `focusDate: Signal<string | null>`, `goToMonth(month: string, focusDate: string |
+  null): void`, `reload(): void`. Premier appel `getAvailabilityCalendar(null)`, puis le mois par son nom.
+- `admin/application/components/admin-month-grid.ts` : `AdminMonthGrid` (`app-admin-month-grid`),
+  `view = input.required<CalendarMonthView>()`, `focusDate = input<string | null>(null)`,
+  `dayActivated = output<string>()`, `monthRequested = output<CalendarMonthRequest>()` avec
+  `CalendarMonthRequest = { month: string; focusDate: string }` exporté. `pending` et `aria-busy` laissés
+  au GREEN (prouvés par la page). `<table data-testid="admin-calendar-grid" role="grid">`, en-têtes
+  `<th scope="col" abbr="lundi">lun.</th>`, `<tbody>` d'une `<tr>` par semaine, sept `<td role="gridcell">` ;
+  **`data-testid="admin-calendar-day"` et `data-state` posés sur le `<button type="button">`** (enfant direct
+  du `gridcell`), case vide sans bouton ni testid. Nom du bouton = `describeDay`. `aria-disabled="true"` sur
+  `past` et `closed-period` seuls (attribut absent ailleurs, jamais `disabled`). Icônes rendues par
+  `app-icon` (`solid-lock`, `solid-flag` aussi pour le férié rouvert, `solid-calendar-days`). Le focus n'est
+  pris qu'à une demande (`focusDate` dans le mois rendu, ou une touche) : jamais au premier rendu.
+- Section de la page (prouvée par la page, sans spec isolé, `admin-availability-calendar` étant de
+  présentation) : `<section data-testid="admin-calendar" aria-labelledby="admin-calendar-heading">` avec le
+  `h2` « Calendrier » (`admin-section-head`, `headingId="admin-calendar-heading"`) entre la semaine type et
+  les fermetures ; libellé `admin-calendar-month-label` (`id` identique, `aria-live="polite"`) ; aide
+  `admin-calendar-help` (`id` identique, texte du plan) ; boutons `admin-calendar-previous` « Mois
+  précédent » et `admin-calendar-next` « Mois suivant », indisponibles (`disabled` ou `aria-disabled`) quand
+  la borne est nulle ; légende `<ul role="list" data-testid="admin-calendar-legend">` de six
+  `admin-calendar-legend-item` porteurs de `data-state` (« Passé », « Fermé », « Férié », « Période »
+  épinglés ; libellés `open` et `empty` libres) ; `aria-busy="true"` sur la grille pendant un chargement ;
+  `admin-calendar-loading` (`role="status"`) au premier chargement ; `load-error` dans la section, Réessayer
+  relit le mois.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `paris-format.spec.ts` | 4 | `formatMonthLabel` (`it.each`) | « novembre 2026 », « décembre 2026 », « janvier 2027 », « août 2027 » |
+| `calendar-month-view.spec.ts` (neuf) | 5 | semaines (`it.each`) : 2026-11, 2027-02, 2027-03, 2026-03, 2028-02 | 6/4/5/6/5 semaines de 7, cases vides en tête 6/0/0/6/1 et en fin 6/0/4/5/5, dates et numéros dans l'ordre |
+| | 1 | colonnes de novembre | 1er en colonne dimanche, 2 en tête de la 2ᵉ semaine, 30 en tête de la 6ᵉ |
+| | 4 | en-tête (`it.each` ×3, fériés fermés) | `month`, « Novembre 2026 », « Août 2027 », bornes recopiées, `closePublicHolidays` |
+| | 7 | une case par état (`it.each`) | `toEqual` de la case entière : nom, libellé court, icône, `actionable`, `reopenedHoliday` |
+| | 3 | aujourd'hui ; mois suivant ; actionnable | seule la date serveur est `today` ; aucune des 31 en décembre ; non actionnables = passés + période |
+| | 9 | `describeDay` (`it.each`) | ouvert 4 / 1, fermé, férié « 1er », rouvert, période avec et sans motif, vide, passé |
+| `calendar-keyboard.spec.ts` (neuf) | 24 | flèches, Home/End, PageUp/PageDown (`it.each`) | cas des Consignes + année, Home/End déjà au bord ou dans le mois voisin, PageDown 31 → 30, PageUp 31/05 → 30/04 |
+| | 5 | autres touches (`it.each`) | `Tab`, `Enter`, Espace, `Escape`, `a` → `null` |
+| `availability-calendar.spec.ts` (neuf) | 4 | lecture | un appel `null`, prêt, « Novembre 2026 », 6 semaines ; chargement ; erreur ; `reload` relit et affiche |
+| | 5 | navigation | `goToMonth('2026-12', '2026-12-12')` lit `2026-12` et expose la date ; sans date → `null` ; pendant le chargement de décembre novembre reste affiché, `busy`, jamais `loading` ; retour à novembre par son nom ; `reload` relit le mois affiché |
+| `admin-month-grid.spec.ts` (neuf) | 2 | structure | `table` `role="grid"`, `aria-labelledby` / `aria-describedby`, 7 en-têtes `abbr`/`scope` ; 6 lignes de 7 `gridcell`, 30 boutons natifs, 12 cases vides |
+| | 7 | une case par état (`it.each`) | `data-state`, nom, `aria-disabled` (passé, période), jamais `disabled`, texte visible (numéro + libellé), icône |
+| | 1 | aujourd'hui | seul le 10 porte `aria-current="date"` |
+| | 5 | focus itinérant | un seul `tabindex="0"` (aujourd'hui, sinon le 1er, sinon `focusDate`), 29 à `-1`, focus non pris au rendu ; `focusDate` dans le mois → focalisé ; hors du mois → ignoré ; décembre reçu avec une date → focus dessus |
+| | 7 | clavier dans le mois (`it.each` ×6 + période) | focus et arrêt de tabulation déplacés, jours `aria-disabled` traversés, `preventDefault`, aucune demande de mois |
+| | 3 | `Tab`, `Entrée`, Espace (`it.each`) | non empêchés, rien ne bouge |
+| | 7 | mois voisin (`it.each` ×6 + 31 janvier) | `monthRequested` `{ month, focusDate }` : PageDown, PageUp, débordements de flèches et de `End`, 2027-02-28 |
+| | 6 | bornes (`it.each` ×3 et ×3) | sans mois précédent / suivant : rien demandé, focus gardé, `preventDefault` |
+| | 3 | activation | clic d'un jour ouvert → `dayActivated` ; passé et période → rien |
+| `admin-availability.spec.ts` | 1 recalé | ouverture | `h2` `Semaine type`, `Calendrier`, `Fermetures` ; un seul `h1` |
+| | 7 | calendrier du mois | lu une fois sans mois, section entre semaine type et fermetures ; grille nommée « Novembre 2026 », région polie, aide, 30 jours, arrêt sur le 10 ; légende ; « Mois suivant » lit `2026-12`, arrêt sur le 1er ; « Mois précédent » ; bornes indisponibles sans lecture (novembre, janvier 2027) |
+| | 5 | calendrier au clavier | PageDown du 12 → lecture `2026-12`, focus sur le samedi 12 décembre ; pendant le chargement novembre reste, `aria-busy="true"`, pas de squelette ; PageUp retour au 12 novembre ; PageUp au mois courant sans effet ; ArrowRight vers le férié |
+| | 3 | chargement, erreur, Réessayer | statut sans grille, autres sections présentes ; `load-error` dans la section seule ; relecture `[null]` puis grille |
+
+Contrôles verts par construction (passent contre les squelettes, épinglent le contrat) : 5 touches sans effet
+de `calendar-keyboard.spec.ts`, et l'état de chargement de la facade (`loading`, rien à montrer).
+
+**Recalage** (comportement modifié, pas de test parallèle) : le premier test d'ouverture de la page
+attendait `['Semaine type', 'Fermetures']` ; il attend `['Semaine type', 'Calendrier', 'Fermetures']`.
+Construction des entrées : `Spies` gagne `getAvailabilityCalendar` (mois de novembre, décembre, janvier
+2027 selon le mois demandé) ; aucune autre valeur attendue des 56 tests existants de la page ne bouge.
+
+Sweep : `grep` de `admin-calendar`, `availability/calendar`, `'Semaine type', 'Fermetures'` sur `src/`,
+`e2e/`, `ci/` : aucun autre consommateur (doublure `ci/api-stub` et scénarios axe à F5). États seedés : les
+autres suites de la page passent par la doublure `stubBookingGateway`, dont le mois par défaut
+(`aCalendarMonth()`, un jour) rend désormais une grille, sans assertion qui en dépende ; aucune suite hors
+de la page ne monte l'écran. Écrire un jour (clic suivi d'un `PUT`), l'interrupteur, le statut et
+`wantsOpen` restent à F4.
+
+Tous les tests de cette tranche échouent à ce stade, hors contrôles ci-dessus (RED confirmé via `pnpm test`
+le 2026-10-14 21:19, 122 failed / 4701 total). Détail, code de sortie lu à chaque fois :
+
+```text
+$ pnpm test --include='src/app/features/admin/**/*.spec.ts'; echo $?
+ Test Files  5 failed | 67 passed (72)
+      Tests  118 failed | 1838 passed (1956)
+1
+$ pnpm test; echo $?
+ Test Files  6 failed | 248 passed (254)
+      Tests  122 failed | 4579 passed (4701)
+1
+$ pnpm lint; echo $?               → 0
+$ pnpm run format:check; echo $?   → 0
+$ pnpm run a11y:typecheck; echo $? → 0
+```
+
+Avant la tranche : 4574 passed / 4574 total. Hors des six suites touchées, tout reste vert ; dans la page,
+les 56 tests existants non recalés restent verts. Les 122 échecs sont tous des `AssertionError` (`toEqual` /
+`toBe`) : 24 clavier, 29 vue, 8 facade, 41 grille, 4 `formatMonthLabel`, 16 page (15 neufs + le recalé) ;
+aucune erreur de harnais, aucun rejet non géré. Typecheck des specs vert (la suite compile). Aucun cache
+touché par le diff.
+
 ## Journal des tranches
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
@@ -1138,6 +1253,7 @@ touché par le diff.
 - **Tranche A3 — l'admin lit le mois résolu et règle les fériés** : GREEN 612 passed / 612 total + 45 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 45 passed / 45 total sur Postgres 17 réel (exit 0), suite complète 1581 passed / 1631 total + 50 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, démarrage réel `node dist/main.js` (routes mappées, 401 sans session, parcours admin vérifié au curl), commité `eb31c06` · refactor : `lastAllowedDay` dérivé de `daysOfMonth(addMonths(monthOf(today), 12))` (une seule arithmétique de mois) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `UpdateBookingSettingsDto`, comme A2
 - **Tranche F1 — la gateway parle le contrat du calendrier** : GREEN 261 passed / 261 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4540 passed / 4540 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : aucun · verify : reportée (aucune surface atteignable restructurée)
 - **Tranche F2 — la semaine type se règle en pastilles** : GREEN 1833 passed / 1833 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4574 passed / 4574 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : conversion demi-heure → heure partagée par `toSlotTime` (brouillon et grille, plus de constante de 30 min dupliquée dans `admin-slot-grid`), tables de messages d'échec sorties dans `availability-messages.ts` · verify : PASS (surface `/admin/disponibilites` déjà atteignable et restructurée)
+- **Tranche F3 — le calendrier du mois s'affiche et se parcourt au clavier** : GREEN 1956 passed / 1956 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4701 passed / 4701 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : le clavier de la grille part de la date active plutôt que du bouton qui reçoit la touche (répétition clavier sans perte), navigation sous `min-w-11` · verify : PASS (section neuve sur la surface `/admin/disponibilites` déjà atteignable)
 
 ### A1
 
@@ -1426,6 +1542,82 @@ Console : aucune erreur applicative ; seul `404 /api/config`, route absente de l
 
 **Écarts** : aucun au contrat ; `role="group"` porté par un élément interne d'`admin-slot-grid` (et non par
 l'hôte) parce que la spec le cherche sous l'hôte du composant.
+
+### F3
+
+**Fait** (tests et builder de `qa` inchangés)
+- `booking/domain/paris-format.ts` : `formatMonthLabel` (`Intl` mois long + année, fuseau de Paris).
+- `application/calendar-keyboard.ts` : `nextCalendarDate` (jours ±1/±7, Home/End lundi/dimanche ISO,
+  PageUp/PageDown même jour borné au dernier jour du mois), arithmétique UTC sur les clés de date.
+- `application/calendar-month-view.ts` : `toCalendarMonthView` (semaines de lundi à dimanche construites sur
+  les jours rendus par le serveur, cases vides en tête et en fin), `describeDay` (libellés du plan, « 1er »
+  par `formatLongDate`, singulier « 1 créneau », période sans motif sans parenthèses), libellé court, icône,
+  `actionable`, `reopenedHoliday`. `wantsOpen` non écrit (F4, seul consommateur `toggleDay`).
+- `pages/admin-availability/availability-calendar.ts` : facade `@Injectable()` fournie par la page
+  (`providers: [AvailabilityCalendar]`) ; `rxResource` sur le mois demandé (`null` au départ), `view`,
+  `state`, `busy`, `focusDate`, `goToMonth`, `reload`.
+- `application/components/admin-month-grid.ts` : `table role="grid"` (`aria-labelledby` / `aria-describedby`,
+  `aria-busy` pendant un chargement, opacité réduite), sept `th scope="col" abbr`, `td role="gridcell"`, un
+  `button type="button"` par jour nommé par `describeDay` ; `aria-disabled` sur passé et période,
+  `aria-current="date"` ; focus itinérant (`activeDate` en `linkedSignal` : `focusDate` du mois, sinon la date
+  active gardée tant que la vue ne change pas, sinon aujourd'hui, sinon le 1er), focus posé par
+  `afterRenderEffect({ write })` sur demande seulement ; flèches, Home/End, PageUp/PageDown, `preventDefault`,
+  `monthRequested` vers un mois voisin permis. Traitement visuel par variantes `data-[state=…]` : passé
+  `text-status-error` + `line-through`, fermé cadenas + « Fermé » + bord `border-dashed border-field` sur
+  `foreground/8`, férié drapeau + « Férié » en `text-muted`, période calendrier + « Période » en
+  `text-status-warn` sur `status-warn/10`, ouvert nombre en `text-primary` sur `primary/10` (petit drapeau si
+  férié rouvert), vide « — » ; aujourd'hui `ring-2 ring-foreground`. Sous `sm` : numéro + icône, nombre ou
+  tiret visibles, reste du libellé en `max-sm:sr-only`.
+- `application/components/admin-availability-calendar.ts` (`section[app-admin-availability-calendar]`) :
+  `h2` « Calendrier », libellé du mois `aria-live="polite"`, « Mois précédent » / « Mois suivant »
+  (`appButton outlined`, icône seule sous `sm`, `aria-disabled` aux bornes, activation ignorée), grille, aide,
+  légende `ul role="list"` des six états, squelette `role="status"`, `app-load-error` avec Réessayer.
+- Page : section entre « Semaine type » et « Fermetures », `goToMonth` / `reload` câblés.
+
+**Sorties** (code de sortie lu à chaque fois, 2026-10-14)
+
+```text
+$ pnpm test --include='src/app/features/admin/**/*.spec.ts'; echo $?
+      Tests  1956 passed (1956)
+0
+$ pnpm test; echo $?
+ Test Files  254 passed (254)
+      Tests  4701 passed (4701)
+0
+$ pnpm lint; echo $?                                → 0 (All files pass linting.)
+$ pnpm run format:check; echo $?                    → 0
+$ pnpm run a11y:typecheck; echo $?                  → 0
+$ pnpm run build --configuration production; echo $? → 0 (Prerendered 9 static routes.)
+$ pnpm icons:check; echo $?                         → 0
+```
+
+**Refactor** : passe manuelle (skill `simplify` non lancée en sous-agent) : `move` part de `activeDate`
+(trois ArrowRight rapides depuis le 14 atterrissent sur le 17, vérifié au navigateur), test `startsWith`
+redondant retiré d'`inView`, cible tactile de la navigation ; vert relancé, aucun fichier de test touché.
+
+**Verify** : PASS. `pnpm start` + `STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs`, script Playwright jetable
+(`verify.mjs`, `page.route('**/api/booking/availability/calendar**')` : mois généré depuis la date réelle,
+passés avant aujourd'hui, 16 fermé, 19 férié, 20 férié rouvert, 23-25 période « Congés », week-ends vides,
+`previousMonth` nul au mois courant), captures dans
+`/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/s025-f3/`.
+1. Desktop clair 1440 : « Octobre 2026 », 31 jours aux états attendus, seul arrêt de tabulation le 14
+   (`aria-current`), focus non pris au chargement (`01-desktop-light-month.png`). « Mois suivant » → lecture
+   `2026-11`, arrêt sur le 1er ; « Mois précédent » → `2026-10`, bouton `aria-disabled="true"`.
+2. Clavier depuis le 14 : ArrowRight 15, ArrowDown 22, Home 19, End 25 (période traversée), ArrowUp 18,
+   ArrowLeft 17, toujours un seul `tabindex="0"` ; PageDown → lecture `2026-11`, focus sur le mardi 17 novembre
+   (`02-desktop-light-pagedown-focus.png`) ; PageUp → retour au 17 octobre ; PageUp au mois courant sans effet.
+3. Desktop sombre, mobile 375 clair et sombre : cases 47 × 44 px au minimum, aucun défilement horizontal
+   (`scrollWidth` 375), états lisibles sans la couleur (`desktop-dark-month.png`, `mobile-light-month.png`,
+   `mobile-dark-month.png`).
+Console : aucune erreur applicative ; seul `404 /api/config`, route absente de la doublure (comme F2).
+
+**Écarts**
+- Facade : le mois affiché est un `signal` écrit par `tap` à chaque réponse du flux, non un `linkedSignal` sur
+  la valeur de la ressource. Un `linkedSignal` jamais lu avant le changement de mois (cas du spec de la facade,
+  sans gabarit) n'a aucune valeur précédente à garder : le test « novembre reste affiché pendant décembre »
+  échouait. Même contrat (`view`, `busy`, `state`) ; F4 remplacera le jour dans ce signal.
+- `AdminMonthGrid` gagne l'entrée `busy` (laissée au GREEN par le plan de test) ; `pending` reste à F4.
+- Le clic d'un jour émet `dayActivated` mais la section ne l'écoute pas encore (F4).
 
 ## Review code
 

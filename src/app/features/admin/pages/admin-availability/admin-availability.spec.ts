@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { NEVER, Observable, defer, of, throwError } from 'rxjs';
+import { NEVER, Observable, Subject, defer, of, throwError } from 'rxjs';
 import type { Mock } from 'vitest';
 import { ToastStore } from '@core/notifications/toast-store';
 import { BookingGateway } from '@features/booking/domain/gateways/booking.gateway';
@@ -10,6 +10,7 @@ import type {
   AvailabilityClosure,
   AvailabilityRule,
   BookingAdminFailure,
+  CalendarMonth,
 } from '@features/booking/domain/models/booking-admin.model';
 import {
   anAvailabilityClosure,
@@ -21,6 +22,7 @@ import { byTestId, testIdText } from '@shared/testing/by-test-id';
 import { captureCrash } from '@shared/testing/capture-crash';
 import { settleBounded } from '@shared/testing/settle';
 import type { ToastMessage } from '@shared/ui/toast.types';
+import { aCalendarMonthOf } from '../../application/testing/calendar-month-builder';
 import { unsavedChangesGuard } from '../../application/unsaved-changes-guard';
 import { AdminAvailability } from './admin-availability';
 
@@ -46,6 +48,26 @@ const CHRISTMAS = anAvailabilityClosure({
   reason: "Congés de fin d'année",
 });
 
+const NOVEMBER = aCalendarMonthOf('2026-11', {
+  today: '2026-11-10',
+  previousMonth: null,
+  nextMonth: '2026-12',
+  days: { '2026-11-11': { state: 'holiday', holiday: 'Armistice 1918' } },
+});
+const DECEMBER = aCalendarMonthOf('2026-12', {
+  today: '2026-11-10',
+  previousMonth: '2026-11',
+  nextMonth: '2027-01',
+});
+const JANUARY = aCalendarMonthOf('2027-01', {
+  today: '2026-11-10',
+  previousMonth: '2026-12',
+  nextMonth: null,
+});
+
+const calendarMonth = (month: string | null): CalendarMonth =>
+  ({ '2026-12': DECEMBER, '2027-01': JANUARY })[month ?? ''] ?? NOVEMBER;
+
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'] as const;
 type DayLabel = (typeof DAYS)[number];
 
@@ -70,6 +92,7 @@ type Spies = {
   readonly getClosures: Mock<BookingGateway['getClosures']>;
   readonly createClosure: Mock<BookingGateway['createClosure']>;
   readonly deleteClosure: Mock<BookingGateway['deleteClosure']>;
+  readonly getAvailabilityCalendar: Mock<BookingGateway['getAvailabilityCalendar']>;
 };
 
 type Page = Spies & {
@@ -104,6 +127,9 @@ function spies(overrides: Partial<Spies> = {}): Spies {
         stored = stored.filter((closure) => closure.id !== id);
         return of({ success: true, data: null } as const);
       }),
+    ),
+    getAvailabilityCalendar: vi.fn<BookingGateway['getAvailabilityCalendar']>((month) =>
+      defer(() => of(calendarMonth(month))),
     ),
     ...overrides,
   };
@@ -304,7 +330,7 @@ const CHRISTMAS_PERIOD = 'Du jeudi 24 décembre 2026 au vendredi 1er janvier 202
 const ARMISTICE_PERIOD = 'Mercredi 11 novembre 2026';
 
 describe('AdminAvailability: ouverture', () => {
-  it('Given rules and closures When /admin/disponibilites is opened Then both are read once, the page is titled « Disponibilités » with its two sections and nothing is left to save', async () => {
+  it('Given rules and closures When /admin/disponibilites is opened Then both are read once, the page is titled « Disponibilités » with its three sections and nothing is left to save', async () => {
     const page = await openPage();
 
     expect({
@@ -323,7 +349,7 @@ describe('AdminAvailability: ouverture', () => {
       closures: 1,
       title: 'Disponibilités',
       h1: 1,
-      sections: ['Semaine type', 'Fermetures'],
+      sections: ['Semaine type', 'Calendrier', 'Fermetures'],
       state: 'Aucune modification',
     });
   });
@@ -1304,4 +1330,383 @@ describe('AdminAvailability: supprimer une fermeture', () => {
       });
     },
   );
+});
+
+const calendar = (host: HTMLElement): HTMLElement => byTestId(host, 'admin-calendar') ?? host;
+
+const calendarDays = (host: HTMLElement): readonly HTMLElement[] =>
+  allByTestId(calendar(host), 'admin-calendar-day');
+
+const calendarDayOn = (host: HTMLElement, date: string): HTMLElement | null =>
+  calendarDays(host)[Number(date.slice(8)) - 1] ?? null;
+
+const monthLabel = (host: HTMLElement): string =>
+  testIdText(calendar(host), 'admin-calendar-month-label');
+
+const calendarTabStops = (host: HTMLElement): readonly string[] =>
+  calendarDays(host)
+    .filter((day) => day.getAttribute('tabindex') === '0')
+    .map((day) => accessibleName(day, host));
+
+const focusedDay = (host: HTMLElement): string | null => {
+  const focused = host.ownerDocument.activeElement;
+  return focused instanceof HTMLElement && calendar(host).contains(focused)
+    ? accessibleName(focused, host)
+    : null;
+};
+
+const isUnavailable = (button: HTMLElement | null): boolean =>
+  button instanceof HTMLButtonElement &&
+  (button.disabled || button.getAttribute('aria-disabled') === 'true');
+
+async function pressKeyOn(page: Page, date: string, key: string): Promise<void> {
+  const day = calendarDayOn(page.host, date);
+  day?.focus();
+  day?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  await settleBounded(page.fixture);
+}
+
+const withCalendar = (read: BookingGateway['getAvailabilityCalendar']): Spies =>
+  spies({
+    getAvailabilityCalendar: vi.fn<BookingGateway['getAvailabilityCalendar']>(read),
+  });
+
+const CALENDAR_HELP =
+  'Cliquez un jour, ou Entrée et Espace, pour le fermer ou le rouvrir. Flèches : jour voisin ; Page précédente et Page suivante : mois voisin.';
+
+describe('AdminAvailability: calendrier du mois', () => {
+  it('Given the screen When it opens Then the current month is read once without naming it, in a « Calendrier » section between the weekly template and the closures', async () => {
+    const page = await openPage();
+    const section = byTestId(page.host, 'admin-calendar');
+    const weeklySection = byTestId(page.host, 'admin-availability-weekly');
+    const closuresSection = byTestId(page.host, 'admin-closures');
+    const follows = (first: Node | null, second: Node | null): boolean =>
+      first !== null &&
+      second !== null &&
+      (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+    expect({
+      crash: page.crash,
+      calls: page.getAvailabilityCalendar.mock.calls,
+      tag: section?.tagName,
+      labelledBy: section?.getAttribute('aria-labelledby'),
+      heading: testIdText(calendar(page.host), 'admin-calendar-heading'),
+      headingTag: byTestId(calendar(page.host), 'admin-calendar-heading')?.tagName,
+      afterWeekly: follows(weeklySection, section),
+      beforeClosures: follows(section, closuresSection),
+    }).toEqual({
+      crash: null,
+      calls: [[null]],
+      tag: 'SECTION',
+      labelledBy: 'admin-calendar-heading',
+      heading: 'Calendrier',
+      headingTag: 'H2',
+      afterWeekly: true,
+      beforeClosures: true,
+    });
+  });
+
+  it('Given November 2026 When the calendar renders Then the grid is named by the live month label, described by the visible help, and lists the 30 days', async () => {
+    const page = await openPage();
+    const grid = byTestId(calendar(page.host), 'admin-calendar-grid');
+    const label = byTestId(calendar(page.host), 'admin-calendar-month-label');
+    const help = byTestId(calendar(page.host), 'admin-calendar-help');
+
+    expect({
+      month: monthLabel(page.host),
+      labelId: label?.id,
+      live: label?.getAttribute('aria-live'),
+      gridName: grid ? accessibleName(grid, page.host) : null,
+      role: grid?.getAttribute('role'),
+      help: normalized(help),
+      helpId: help?.id,
+      describedBy: grid?.getAttribute('aria-describedby'),
+      days: calendarDays(page.host).length,
+      stops: calendarTabStops(page.host),
+      loading: byTestId(calendar(page.host), 'admin-calendar-loading'),
+      error: byTestId(calendar(page.host), 'load-error'),
+    }).toEqual({
+      month: 'Novembre 2026',
+      labelId: 'admin-calendar-month-label',
+      live: 'polite',
+      gridName: 'Novembre 2026',
+      role: 'grid',
+      help: CALENDAR_HELP,
+      helpId: 'admin-calendar-help',
+      describedBy: 'admin-calendar-help',
+      days: 30,
+      stops: ['mardi 10 novembre 2026, ouvert, 4 créneaux'],
+      loading: null,
+      error: null,
+    });
+  });
+
+  it('Given the calendar When its legend renders Then it lists the six states in a list, each with its label and the icon of the grid', async () => {
+    const page = await openPage();
+    const legend = byTestId(calendar(page.host), 'admin-calendar-legend');
+    const items = allByTestId(legend ?? page.host, 'admin-calendar-legend-item');
+    const itemOf = (state: string): HTMLElement | undefined =>
+      items.find((item) => item.getAttribute('data-state') === state);
+    const iconOf = (state: string): readonly string[] =>
+      [...(itemOf(state)?.querySelectorAll('use') ?? [])].map(
+        (use) => use.getAttribute('href')?.split('#')[1] ?? '',
+      );
+
+    expect({
+      tag: legend?.tagName,
+      role: legend?.getAttribute('role'),
+      states: items.map((item) => item.getAttribute('data-state')).sort(),
+      labels: ['past', 'closed', 'holiday', 'closed-period'].map((state) =>
+        collapsed(itemOf(state)),
+      ),
+      icons: [iconOf('closed'), iconOf('holiday'), iconOf('closed-period')],
+    }).toEqual({
+      tag: 'UL',
+      role: 'list',
+      states: ['closed', 'closed-period', 'empty', 'holiday', 'open', 'past'],
+      labels: ['Passé', 'Fermé', 'Férié', 'Période'],
+      icons: [['solid-lock'], ['solid-flag'], ['solid-calendar-days']],
+    });
+  });
+
+  it('Given November When « Mois suivant » is pressed Then December is read by name and shown, its 1st as the tab stop', async () => {
+    const page = await openPage();
+    const next = byTestId(calendar(page.host), 'admin-calendar-next');
+
+    await press(page, calendar(page.host), 'admin-calendar-next');
+
+    expect({
+      name: next ? accessibleName(next, page.host) : null,
+      calls: page.getAvailabilityCalendar.mock.calls,
+      month: monthLabel(page.host),
+      days: calendarDays(page.host).length,
+      stops: calendarTabStops(page.host),
+    }).toEqual({
+      name: 'Mois suivant',
+      calls: [[null], ['2026-12']],
+      month: 'Décembre 2026',
+      days: 31,
+      stops: ['mardi 1er décembre 2026, ouvert, 4 créneaux'],
+    });
+  });
+
+  it('Given December When « Mois précédent » is pressed Then November is read by name and shown', async () => {
+    const page = await openPage();
+
+    await press(page, calendar(page.host), 'admin-calendar-next');
+    const previous = byTestId(calendar(page.host), 'admin-calendar-previous');
+    await press(page, calendar(page.host), 'admin-calendar-previous');
+
+    expect({
+      name: previous ? accessibleName(previous, page.host) : null,
+      calls: page.getAvailabilityCalendar.mock.calls,
+      month: monthLabel(page.host),
+    }).toEqual({
+      name: 'Mois précédent',
+      calls: [[null], ['2026-12'], ['2026-11']],
+      month: 'Novembre 2026',
+    });
+  });
+
+  it('Given the current month When « Mois précédent » is pressed Then it is unavailable and nothing is read', async () => {
+    const page = await openPage();
+    const previous = nativeButton(byTestId(calendar(page.host), 'admin-calendar-previous'));
+
+    await press(page, calendar(page.host), 'admin-calendar-previous');
+
+    expect({
+      present: previous !== null,
+      unavailable: isUnavailable(previous),
+      calls: page.getAvailabilityCalendar.mock.calls.length,
+      month: monthLabel(page.host),
+    }).toEqual({ present: true, unavailable: true, calls: 1, month: 'Novembre 2026' });
+  });
+
+  it('Given the last month allowed When « Mois suivant » is pressed Then it is unavailable and nothing more is read', async () => {
+    const page = await openPage();
+
+    await press(page, calendar(page.host), 'admin-calendar-next');
+    await press(page, calendar(page.host), 'admin-calendar-next');
+    const next = nativeButton(byTestId(calendar(page.host), 'admin-calendar-next'));
+    await press(page, calendar(page.host), 'admin-calendar-next');
+
+    expect({
+      unavailable: isUnavailable(next),
+      calls: page.getAvailabilityCalendar.mock.calls,
+      month: monthLabel(page.host),
+    }).toEqual({
+      unavailable: true,
+      calls: [[null], ['2026-12'], ['2027-01']],
+      month: 'Janvier 2027',
+    });
+  });
+});
+
+describe('AdminAvailability: calendrier au clavier', () => {
+  it('Given the 12 November focused When PageDown is pressed Then December is read and the focus lands on 12 December', async () => {
+    const page = await openPage();
+
+    await pressKeyOn(page, '2026-11-12', 'PageDown');
+
+    expect({
+      calls: page.getAvailabilityCalendar.mock.calls,
+      month: monthLabel(page.host),
+      focused: focusedDay(page.host),
+      stops: calendarTabStops(page.host),
+    }).toEqual({
+      calls: [[null], ['2026-12']],
+      month: 'Décembre 2026',
+      focused: 'samedi 12 décembre 2026, ouvert, 4 créneaux',
+      stops: ['samedi 12 décembre 2026, ouvert, 4 créneaux'],
+    });
+  });
+
+  it('Given December on its way after PageDown When it is not answered yet Then November stays in a busy grid, without the loading placeholder, then December takes the focus', async () => {
+    const december = new Subject<CalendarMonth>();
+    const page = await openPage(
+      withCalendar((month) => (month === '2026-12' ? december : of(calendarMonth(month)))),
+    );
+
+    await pressKeyOn(page, '2026-11-12', 'PageDown');
+    const grid = (): HTMLElement | null => byTestId(calendar(page.host), 'admin-calendar-grid');
+    const meanwhile = {
+      month: monthLabel(page.host),
+      busy: grid()?.getAttribute('aria-busy'),
+      days: calendarDays(page.host).length,
+      loading: byTestId(calendar(page.host), 'admin-calendar-loading'),
+    };
+    december.next(DECEMBER);
+    december.complete();
+    await settleBounded(page.fixture);
+
+    expect({
+      meanwhile,
+      after: {
+        month: monthLabel(page.host),
+        busy: grid()?.getAttribute('aria-busy') === 'true',
+        focused: focusedDay(page.host),
+      },
+    }).toEqual({
+      meanwhile: { month: 'Novembre 2026', busy: 'true', days: 30, loading: null },
+      after: {
+        month: 'Décembre 2026',
+        busy: false,
+        focused: 'samedi 12 décembre 2026, ouvert, 4 créneaux',
+      },
+    });
+  });
+
+  it('Given December reached by keyboard When PageUp is pressed on the 12th Then November is read by name and the focus lands on 12 November', async () => {
+    const page = await openPage();
+
+    await pressKeyOn(page, '2026-11-12', 'PageDown');
+    await pressKeyOn(page, '2026-12-12', 'PageUp');
+
+    expect({
+      calls: page.getAvailabilityCalendar.mock.calls,
+      month: monthLabel(page.host),
+      focused: focusedDay(page.host),
+    }).toEqual({
+      calls: [[null], ['2026-12'], ['2026-11']],
+      month: 'Novembre 2026',
+      focused: 'jeudi 12 novembre 2026, ouvert, 4 créneaux',
+    });
+  });
+
+  it('Given the current month When PageUp is pressed on the 12th Then nothing is read and the focus stays', async () => {
+    const page = await openPage();
+
+    await pressKeyOn(page, '2026-11-12', 'PageUp');
+
+    expect({
+      calls: page.getAvailabilityCalendar.mock.calls.length,
+      month: monthLabel(page.host),
+      focused: focusedDay(page.host),
+    }).toEqual({
+      calls: 1,
+      month: 'Novembre 2026',
+      focused: 'jeudi 12 novembre 2026, ouvert, 4 créneaux',
+    });
+  });
+
+  it('Given the 10 November focused When ArrowRight is pressed Then the holiday next to it takes the focus', async () => {
+    const page = await openPage();
+
+    await pressKeyOn(page, '2026-11-10', 'ArrowRight');
+
+    expect({
+      focused: focusedDay(page.host),
+      stops: calendarTabStops(page.host),
+      calls: page.getAvailabilityCalendar.mock.calls.length,
+    }).toEqual({
+      focused: 'mercredi 11 novembre 2026, férié (Armistice 1918), fermé',
+      stops: ['mercredi 11 novembre 2026, férié (Armistice 1918), fermé'],
+      calls: 1,
+    });
+  });
+});
+
+describe('AdminAvailability: chargement et erreur du calendrier', () => {
+  it('Given the month is loading When the page renders Then a status placeholder stands in the calendar section, without a grid, and the other sections still show', async () => {
+    const page = await openPage(withCalendar(() => NEVER));
+    const loading = byTestId(calendar(page.host), 'admin-calendar-loading');
+
+    expect({
+      crash: page.crash,
+      present: byTestId(page.host, 'admin-calendar') !== null,
+      role: loading?.getAttribute('role'),
+      grid: byTestId(calendar(page.host), 'admin-calendar-grid'),
+      week: byTestId(page.host, 'admin-week-template') !== null,
+      closures: closurePeriods(page.host),
+    }).toEqual({
+      crash: null,
+      present: true,
+      role: 'status',
+      grid: null,
+      week: true,
+      closures: [ARMISTICE_PERIOD, CHRISTMAS_PERIOD],
+    });
+  });
+
+  it('Given the month failed to load When the page renders Then the calendar section alerts with a retry, without a grid, and the other sections still show', async () => {
+    const page = await openPage(withCalendar(() => throwError(() => new Error('down'))));
+    const error = byTestId(calendar(page.host), 'load-error');
+
+    expect({
+      crash: page.crash,
+      present: byTestId(page.host, 'admin-calendar') !== null,
+      role: error?.getAttribute('role'),
+      retry: nativeButton(byTestId(calendar(page.host), 'load-error-retry')) !== null,
+      grid: byTestId(calendar(page.host), 'admin-calendar-grid'),
+      weeklyError: byTestId(weekly(page.host), 'load-error'),
+      week: byTestId(page.host, 'admin-week-template') !== null,
+      closures: closurePeriods(page.host),
+    }).toEqual({
+      crash: null,
+      present: true,
+      role: 'alert',
+      retry: true,
+      grid: null,
+      weeklyError: null,
+      week: true,
+      closures: [ARMISTICE_PERIOD, CHRISTMAS_PERIOD],
+    });
+  });
+
+  it('Given the month failed to load When Réessayer is pressed Then it is read again and the grid shows', async () => {
+    const getAvailabilityCalendar = vi
+      .fn<BookingGateway['getAvailabilityCalendar']>()
+      .mockReturnValueOnce(throwError(() => new Error('down')))
+      .mockReturnValue(of(NOVEMBER));
+    const page = await openPage(spies({ getAvailabilityCalendar }));
+
+    await press(page, calendar(page.host), 'load-error-retry');
+
+    expect({
+      calls: getAvailabilityCalendar.mock.calls,
+      month: monthLabel(page.host),
+      days: calendarDays(page.host).length,
+      error: byTestId(calendar(page.host), 'load-error'),
+    }).toEqual({ calls: [[null], [null]], month: 'Novembre 2026', days: 30, error: null });
+  });
 });
