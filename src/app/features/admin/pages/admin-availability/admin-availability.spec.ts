@@ -31,6 +31,7 @@ const MONDAY_MORNING = anAvailabilityRule({ weekday: 1, startMinute: 540, endMin
 const MONDAY_AFTERNOON = anAvailabilityRule({ weekday: 1, startMinute: 840, endMinute: 1080 });
 const WEDNESDAY = anAvailabilityRule({ weekday: 3, startMinute: 600, endMinute: 690 });
 const RULES: readonly AvailabilityRule[] = [MONDAY_MORNING, MONDAY_AFTERNOON, WEDNESDAY];
+const EARLY_MONDAY = anAvailabilityRule({ weekday: 1, startMinute: 420, endMinute: 540 });
 
 const ARMISTICE = anAvailabilityClosure({
   id: 'c-armistice',
@@ -48,13 +49,20 @@ const CHRISTMAS = anAvailabilityClosure({
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'] as const;
 type DayLabel = (typeof DAYS)[number];
 
-const HALF_HOURS = Array.from(
-  { length: 49 },
-  (_, index) =>
-    `${String(Math.floor(index / 2)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}`,
-);
-const START_OPTIONS = ['', ...HALF_HOURS.slice(0, 48)];
-const END_OPTIONS = ['', ...HALF_HOURS.slice(1)];
+const SLOT_TIMES = Array.from({ length: 26 }, (_, offset) => {
+  const halfHour = 16 + offset;
+  return `${String(Math.floor(halfHour / 2)).padStart(2, '0')}:${halfHour % 2 === 0 ? '00' : '30'}`;
+});
+
+const INITIAL_SUMMARY = [
+  'Lundi : 09:00–12:00, 14:00–18:00',
+  'Mardi : aucun créneau',
+  'Mercredi : 10:00–11:30',
+  'Jeudi : aucun créneau',
+  'Vendredi : aucun créneau',
+  'Samedi : aucun créneau',
+  'Dimanche : aucun créneau',
+];
 
 type Spies = {
   readonly getAvailabilityRules: Mock<BookingGateway['getAvailabilityRules']>;
@@ -101,6 +109,9 @@ function spies(overrides: Partial<Spies> = {}): Spies {
   };
 }
 
+const withRules = (rules: readonly AvailabilityRule[]): Spies =>
+  spies({ getAvailabilityRules: vi.fn<BookingGateway['getAvailabilityRules']>(() => of(rules)) });
+
 async function openPage(gateway: Spies = spies()): Promise<Page> {
   const toast = vi.fn<ToastStore['add']>();
   TestBed.configureTestingModule({
@@ -134,6 +145,9 @@ async function openPage(gateway: Spies = spies()): Promise<Page> {
 const normalized = (element: Element | null | undefined): string =>
   (element?.textContent ?? '').replace(/[ \t\n\r]+/g, ' ').replace(/^ | $/g, '');
 
+const collapsed = (element: Element | null | undefined): string =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
 const allByTestId = (root: ParentNode, testId: string): readonly HTMLElement[] => [
   ...root.querySelectorAll<HTMLElement>(`[data-testid="${testId}"]`),
 ];
@@ -141,37 +155,36 @@ const allByTestId = (root: ParentNode, testId: string): readonly HTMLElement[] =
 const weekly = (host: HTMLElement): HTMLElement =>
   byTestId(host, 'admin-availability-weekly') ?? host;
 
+const weekTemplate = (host: HTMLElement): HTMLElement =>
+  byTestId(host, 'admin-week-template') ?? host;
+
 const closures = (host: HTMLElement): HTMLElement => byTestId(host, 'admin-closures') ?? host;
 
-const legendOf = (fieldset: Element): string =>
-  normalized([...fieldset.children].find((child) => child.tagName === 'LEGEND'));
+const dayOptions = (host: HTMLElement): readonly HTMLElement[] =>
+  allByTestId(weekTemplate(host), 'filter-option');
 
-const dayFieldsets = (host: HTMLElement): readonly HTMLElement[] =>
-  allByTestId(host, 'admin-availability-day');
+const slotButtons = (host: HTMLElement): readonly HTMLElement[] =>
+  allByTestId(weekTemplate(host), 'admin-slot');
 
-const day = (host: HTMLElement, label: DayLabel): HTMLElement | null =>
-  dayFieldsets(host).find((fieldset) => legendOf(fieldset) === label) ?? null;
+const pressedSlots = (host: HTMLElement): readonly string[] =>
+  SLOT_TIMES.filter(
+    (_, index) => slotButtons(host)[index]?.getAttribute('aria-pressed') === 'true',
+  );
 
-const timeSelect = (
-  root: ParentNode | null,
-  part: 'start' | 'end',
-  index: number,
-): HTMLSelectElement | null => {
-  const element = root && byTestId(root, `admin-availability-rule-${part}`, index);
-  return element instanceof HTMLSelectElement ? element : null;
-};
+const pressedDays = (host: HTMLElement): readonly string[] =>
+  dayOptions(host)
+    .filter((option) => option.getAttribute('aria-pressed') === 'true')
+    .map((option) => testIdText(option, 'filter-option-label'));
 
-const rangesOf = (
-  host: HTMLElement,
-  label: DayLabel,
-): readonly { readonly start: string; readonly end: string }[] => {
-  const fieldset = day(host, label);
-  return fieldset === null
-    ? []
-    : allByTestId(fieldset, 'admin-availability-rule').map((row) => ({
-        start: timeSelect(row, 'start', 0)?.value ?? '',
-        end: timeSelect(row, 'end', 0)?.value ?? '',
-      }));
+const summary = (host: HTMLElement): readonly string[] =>
+  allByTestId(host, 'admin-week-summary-day').map(collapsed);
+
+const summaryOf = (host: HTMLElement, label: DayLabel): string =>
+  summary(host)[DAYS.indexOf(label)] ?? '';
+
+const hiddenNotice = (host: HTMLElement): string | null => {
+  const notice = byTestId(host, 'admin-week-hidden-ranges');
+  return notice === null ? null : collapsed(notice);
 };
 
 const labelOf = (host: HTMLElement, control: Element | null): string => {
@@ -182,7 +195,7 @@ const labelOf = (host: HTMLElement, control: Element | null): string => {
   return labels.length === 1 ? normalized(labels[0]) : '';
 };
 
-const nativeButton = (element: Element | null): HTMLButtonElement | null =>
+const nativeButton = (element: Element | null | undefined): HTMLButtonElement | null =>
   element instanceof HTMLButtonElement ? element : (element?.querySelector('button') ?? null);
 
 async function press(
@@ -195,40 +208,18 @@ async function press(
   await settleBounded(page.fixture);
 }
 
-async function choose(
-  page: Page,
-  label: DayLabel,
-  index: number,
-  part: 'start' | 'end',
-  value: string,
-): Promise<void> {
-  const select = timeSelect(day(page.host, label), part, index);
-  if (select === null) return;
-  select.value = value;
-  select.dispatchEvent(new Event('input'));
-  select.dispatchEvent(new Event('change'));
-  select.dispatchEvent(new Event('blur'));
+async function chooseDay(page: Page, label: DayLabel): Promise<void> {
+  nativeButton(dayOptions(page.host)[DAYS.indexOf(label)])?.click();
   await settleBounded(page.fixture);
 }
 
-async function addRange(page: Page, label: DayLabel): Promise<void> {
-  await press(page, day(page.host, label), 'admin-availability-rule-add');
+async function toggleSlots(page: Page, label: DayLabel, ...times: string[]): Promise<void> {
+  await chooseDay(page, label);
+  for (const time of times) {
+    nativeButton(slotButtons(page.host)[SLOT_TIMES.indexOf(time)])?.click();
+    await settleBounded(page.fixture);
+  }
 }
-
-async function removeRange(page: Page, label: DayLabel, index: number): Promise<void> {
-  await press(page, day(page.host, label), 'admin-availability-rule-remove', index);
-}
-
-const rowError = (
-  host: HTMLElement,
-  label: DayLabel,
-  index: number,
-  part: 'start' | 'end',
-): string | null => {
-  const row = allByTestId(day(host, label) ?? host, 'admin-availability-rule')[index];
-  const error = row && byTestId(row, `admin-availability-rule-${part}-error`);
-  return error ? normalized(error) : null;
-};
 
 async function save(page: Page): Promise<void> {
   await press(page, page.host, 'savebar-submit');
@@ -332,7 +323,7 @@ describe('AdminAvailability: ouverture', () => {
       closures: 1,
       title: 'Disponibilités',
       h1: 1,
-      sections: ['Plages hebdomadaires', 'Fermetures'],
+      sections: ['Semaine type', 'Fermetures'],
       state: 'Aucune modification',
     });
   });
@@ -345,146 +336,118 @@ describe('AdminAvailability: ouverture', () => {
     );
   });
 
-  it('Given the rules When the weekly grid renders Then it is the availability form with one fieldset per day, Monday to Sunday', async () => {
+  it('Given the rules When the weekly section renders Then the availability form holds the week template, Monday shown first in a grid of 26 half hours', async () => {
     const page = await openPage();
     const form = byTestId(page.host, 'admin-availability-rules');
+    const template = byTestId(page.host, 'admin-week-template');
 
     expect({
       tag: form?.tagName,
       id: form?.id,
-      fieldsets: dayFieldsets(page.host).map((fieldset) => ({
-        tag: fieldset.tagName,
-        legend: legendOf(fieldset),
-        inForm: form?.contains(fieldset) ?? false,
-      })),
+      inForm: template !== null && (form?.contains(template) ?? false),
+      inSection: template !== null && weekly(page.host).contains(template),
+      group: byTestId(weekTemplate(page.host), 'filter-group')?.getAttribute('aria-label'),
+      days: dayOptions(page.host).map((option) => testIdText(option, 'filter-option-label')),
+      pressed: pressedDays(page.host),
+      heading: testIdText(weekTemplate(page.host), 'admin-slot-grid-heading'),
+      slots: slotButtons(page.host).length,
     }).toEqual({
       tag: 'FORM',
       id: 'availability-form',
-      fieldsets: DAYS.map((legend) => ({ tag: 'FIELDSET', legend, inForm: true })),
+      inForm: true,
+      inSection: true,
+      group: 'Jour de la semaine',
+      days: [...DAYS],
+      pressed: ['Lundi'],
+      heading: 'Créneaux du lundi',
+      slots: 26,
     });
   });
 
-  it('Given two Monday ranges and one on Wednesday When the grid renders Then each day shows its ranges and the others say they offer no slot', async () => {
+  it('Given two Monday ranges and one on Wednesday When the week renders Then the summary lists every day, the counts follow and the Monday grid is pressed on its ranges', async () => {
     const page = await openPage();
 
     expect({
-      ranges: Object.fromEntries(DAYS.map((label) => [label, rangesOf(page.host, label)])),
-      empty: DAYS.filter((label) => {
-        const fieldset = day(page.host, label);
-        return fieldset !== null && byTestId(fieldset, 'admin-availability-day-empty') !== null;
-      }),
-      emptyText: testIdText(day(page.host, 'Mardi') ?? page.host, 'admin-availability-day-empty'),
+      summary: summary(page.host),
+      counts: dayOptions(page.host).map((option) => testIdText(option, 'filter-option-count')),
+      monday: pressedSlots(page.host),
       none: byTestId(page.host, 'admin-availability-none'),
+      hidden: hiddenNotice(page.host),
     }).toEqual({
-      ranges: {
-        Lundi: [
-          { start: '09:00', end: '12:00' },
-          { start: '14:00', end: '18:00' },
-        ],
-        Mardi: [],
-        Mercredi: [{ start: '10:00', end: '11:30' }],
-        Jeudi: [],
-        Vendredi: [],
-        Samedi: [],
-        Dimanche: [],
-      },
-      empty: ['Mardi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'],
-      emptyText: 'Aucun créneau ce jour-là',
+      summary: INITIAL_SUMMARY,
+      counts: ['14', '0', '3', '0', '0', '0', '0'],
+      monday: [
+        '09:00',
+        '09:30',
+        '10:00',
+        '10:30',
+        '11:00',
+        '11:30',
+        '14:00',
+        '14:30',
+        '15:00',
+        '15:30',
+        '16:00',
+        '16:30',
+        '17:00',
+        '17:30',
+      ],
       none: null,
+      hidden: null,
     });
   });
 
-  it('Given a whole Sunday When the grid renders Then its range reads from 00:00 to 24:00', async () => {
+  it('Given a whole Sunday When it is shown Then its range reads from 00:00 to 24:00, the whole grid is pressed and the hours outside it are reported kept', async () => {
     const page = await openPage(
-      spies({
-        getAvailabilityRules: vi.fn<BookingGateway['getAvailabilityRules']>(() =>
-          of([anAvailabilityRule({ weekday: 7, startMinute: 0, endMinute: 1440 })]),
-        ),
-      }),
+      withRules([anAvailabilityRule({ weekday: 7, startMinute: 0, endMinute: 1440 })]),
     );
 
-    expect(rangesOf(page.host, 'Dimanche')).toEqual([{ start: '00:00', end: '24:00' }]);
+    await chooseDay(page, 'Dimanche');
+
+    expect({
+      sunday: summaryOf(page.host, 'Dimanche'),
+      pressed: pressedSlots(page.host),
+      hidden: hiddenNotice(page.host),
+      state: saveBarState(page),
+    }).toEqual({
+      sunday: 'Dimanche : 00:00–24:00',
+      pressed: SLOT_TIMES,
+      hidden: 'Conservé hors de la grille : dimanche 00:00–08:00, 21:00–24:00.',
+      state: 'Aucune modification',
+    });
   });
 
-  it('Given no rule at all When the grid renders Then a notice says the booking page offers no slot, and every day is still editable', async () => {
-    const page = await openPage(
-      spies({ getAvailabilityRules: vi.fn<BookingGateway['getAvailabilityRules']>(() => of([])) }),
-    );
+  it('Given a Monday range from 07:00 to 09:00 When the week renders Then the grid shows 08:00 and 08:30 and the hour before is reported kept outside the grid', async () => {
+    const page = await openPage(withRules([EARLY_MONDAY]));
+
+    expect({
+      monday: summaryOf(page.host, 'Lundi'),
+      pressed: pressedSlots(page.host),
+      hidden: hiddenNotice(page.host),
+      state: saveBarState(page),
+    }).toEqual({
+      monday: 'Lundi : 07:00–09:00',
+      pressed: ['08:00', '08:30'],
+      hidden: 'Conservé hors de la grille : lundi 07:00–08:00.',
+      state: 'Aucune modification',
+    });
+  });
+
+  it('Given no rule at all When the week renders Then a notice says the booking page offers no slot, and every day is still editable', async () => {
+    const page = await openPage(withRules([]));
 
     expect({
       none: testIdText(page.host, 'admin-availability-none'),
-      days: dayFieldsets(page.host).length,
-      add: allByTestId(page.host, 'admin-availability-rule-add').length,
+      days: dayOptions(page.host).length,
+      slots: slotButtons(page.host).length,
+      pressed: pressedSlots(page.host),
+      summary: summary(page.host),
     }).toEqual({
-      none: "Aucune plage\u00a0: la page de réservation n'affiche aucun créneau.",
+      none: "Aucune plage : la page de réservation n'affiche aucun créneau.",
       days: 7,
-      add: 7,
-    });
-  });
-});
-
-describe('AdminAvailability: libellés et choix des heures', () => {
-  it('Given the Monday ranges When they render Then each time selector is named after its range and its day, with its own id', async () => {
-    const page = await openPage();
-    const monday = day(page.host, 'Lundi');
-    const controls = [
-      timeSelect(monday, 'start', 0),
-      timeSelect(monday, 'end', 0),
-      timeSelect(monday, 'start', 1),
-      timeSelect(monday, 'end', 1),
-    ];
-    const ids = [...page.host.querySelectorAll('select')].map((select) => select.id);
-
-    expect({
-      labels: controls.map((control) => labelOf(page.host, control)),
-      uniqueIds: ids.length > 0 && new Set(ids).size === ids.length && !ids.includes(''),
-    }).toEqual({
-      labels: [
-        'Début de la plage 1 du lundi',
-        'Fin de la plage 1 du lundi',
-        'Début de la plage 2 du lundi',
-        'Fin de la plage 2 du lundi',
-      ],
-      uniqueIds: true,
-    });
-  });
-
-  it('Given a range When its selectors render Then the start offers every half hour from 00:00 to 23:30 and the end from 00:30 to 24:00', async () => {
-    const page = await openPage();
-    const monday = day(page.host, 'Lundi');
-
-    expect({
-      start: [...(timeSelect(monday, 'start', 0)?.options ?? [])].map((option) => option.value),
-      end: [...(timeSelect(monday, 'end', 0)?.options ?? [])].map((option) => option.value),
-    }).toEqual({ start: START_OPTIONS, end: END_OPTIONS });
-  });
-
-  it('Given the grid When it renders Then each range has a remove button naming it, and each day an add button naming the day', async () => {
-    const page = await openPage();
-    const removeButtons = allByTestId(
-      day(page.host, 'Lundi') ?? page.host,
-      'admin-availability-rule-remove',
-    );
-    const addButtons = allByTestId(page.host, 'admin-availability-rule-add');
-
-    expect({
-      remove: removeButtons.map((button) => ({
-        type: nativeButton(button)?.type,
-        name: accessibleName(nativeButton(button) ?? button, page.host),
-      })),
-      add: addButtons.map((button) => ({
-        type: nativeButton(button)?.type,
-        name: accessibleName(nativeButton(button) ?? button, page.host),
-      })),
-    }).toEqual({
-      remove: [
-        { type: 'button', name: 'Retirer la plage 1 du lundi' },
-        { type: 'button', name: 'Retirer la plage 2 du lundi' },
-      ],
-      add: DAYS.map((label) => ({
-        type: 'button',
-        name: `Ajouter une plage le ${label.toLowerCase()}`,
-      })),
+      slots: 26,
+      pressed: [],
+      summary: DAYS.map((label) => `${label} : aucun créneau`),
     });
   });
 });
@@ -531,7 +494,7 @@ describe('AdminAvailability: chargement et erreur des plages', () => {
     });
   });
 
-  it('Given the rules failed to load When Réessayer is pressed Then they are read again and the grid shows', async () => {
+  it('Given the rules failed to load When Réessayer is pressed Then they are read again and the week shows', async () => {
     const getAvailabilityRules = vi
       .fn<BookingGateway['getAvailabilityRules']>()
       .mockReturnValueOnce(throwError(() => new Error('down')))
@@ -542,180 +505,164 @@ describe('AdminAvailability: chargement et erreur des plages', () => {
 
     expect({
       calls: getAvailabilityRules.mock.calls.length,
-      monday: rangesOf(page.host, 'Lundi'),
-    }).toEqual({
-      calls: 2,
-      monday: [
-        { start: '09:00', end: '12:00' },
-        { start: '14:00', end: '18:00' },
-      ],
-    });
+      summary: summary(page.host),
+    }).toEqual({ calls: 2, summary: INITIAL_SUMMARY });
   });
 });
 
-describe('AdminAvailability: modifier les plages', () => {
-  it('Given an empty Tuesday When a range is added Then an unfilled range appears there and one change is reported', async () => {
+describe('AdminAvailability: régler la semaine type', () => {
+  it('Given an empty Tuesday When 18:00 is switched on Then it is pressed, the summary and the count follow and one change is reported', async () => {
     const page = await openPage();
 
-    await addRange(page, 'Mardi');
+    await toggleSlots(page, 'Mardi', '18:00');
 
     expect({
-      tuesday: rangesOf(page.host, 'Mardi'),
-      empty: byTestId(day(page.host, 'Mardi') ?? page.host, 'admin-availability-day-empty'),
-      label: labelOf(page.host, timeSelect(day(page.host, 'Mardi'), 'start', 0)),
+      pressed: pressedSlots(page.host),
+      tuesday: summaryOf(page.host, 'Mardi'),
+      count: testIdText(dayOptions(page.host)[1] ?? page.host, 'filter-option-count'),
       state: saveBarState(page),
     }).toEqual({
-      tuesday: [{ start: '', end: '' }],
-      empty: null,
-      label: 'Début de la plage 1 du mardi',
+      pressed: ['18:00'],
+      tuesday: 'Mardi : 18:00–18:30',
+      count: '1',
       state: '1 modification non enregistrée',
     });
   });
 
-  it('Given two Monday ranges When the first is removed Then the afternoon becomes range 1 and one change is reported', async () => {
+  it('Given the week When another day is only shown Then nothing is left to save', async () => {
     const page = await openPage();
 
-    await removeRange(page, 'Lundi', 0);
-    const monday = day(page.host, 'Lundi');
+    await chooseDay(page, 'Mercredi');
 
     expect({
-      monday: rangesOf(page.host, 'Lundi'),
-      label: labelOf(page.host, timeSelect(monday, 'start', 0)),
-      remove: allByTestId(monday ?? page.host, 'admin-availability-rule-remove').map((button) =>
-        accessibleName(nativeButton(button) ?? button, page.host),
-      ),
+      pressed: pressedDays(page.host),
+      heading: testIdText(weekTemplate(page.host), 'admin-slot-grid-heading'),
+      slots: pressedSlots(page.host),
       state: saveBarState(page),
     }).toEqual({
-      monday: [{ start: '14:00', end: '18:00' }],
-      label: 'Début de la plage 1 du lundi',
-      remove: ['Retirer la plage 1 du lundi'],
+      pressed: ['Mercredi'],
+      heading: 'Créneaux du mercredi',
+      slots: ['10:00', '10:30', '11:00'],
+      state: 'Aucune modification',
+    });
+  });
+
+  it('Given Tuesday When 18:00 and 18:30 are switched on Then the day reads one range and still counts as one change', async () => {
+    const page = await openPage();
+
+    await toggleSlots(page, 'Mardi', '18:00', '18:30');
+
+    expect({ tuesday: summaryOf(page.host, 'Mardi'), state: saveBarState(page) }).toEqual({
+      tuesday: 'Mardi : 18:00–19:00',
       state: '1 modification non enregistrée',
     });
   });
 
-  it('Given the only Wednesday range When it is removed Then the day says it offers no slot', async () => {
+  it('Given the Monday morning When 09:00 is switched off Then the morning starts at 09:30', async () => {
     const page = await openPage();
 
-    await removeRange(page, 'Mercredi', 0);
+    await toggleSlots(page, 'Lundi', '09:00');
 
-    expect(
-      testIdText(day(page.host, 'Mercredi') ?? page.host, 'admin-availability-day-empty'),
-    ).toBe('Aucun créneau ce jour-là');
+    expect({ monday: summaryOf(page.host, 'Lundi'), state: saveBarState(page) }).toEqual({
+      monday: 'Lundi : 09:30–12:00, 14:00–18:00',
+      state: '1 modification non enregistrée',
+    });
+  });
+
+  it('Given the only Wednesday range When its three half hours are switched off Then the day says it offers no slot', async () => {
+    const page = await openPage();
+
+    await toggleSlots(page, 'Mercredi', '10:00', '10:30', '11:00');
+
+    expect({
+      wednesday: summaryOf(page.host, 'Mercredi'),
+      pressed: pressedSlots(page.host),
+      count: testIdText(dayOptions(page.host)[2] ?? page.host, 'filter-option-count'),
+    }).toEqual({ wednesday: 'Mercredi : aucun créneau', pressed: [], count: '0' });
   });
 
   it('Given Monday and Thursday edited When the bar renders Then it reports two changes', async () => {
     const page = await openPage();
 
-    await choose(page, 'Lundi', 0, 'end', '12:30');
-    await addRange(page, 'Jeudi');
+    await toggleSlots(page, 'Lundi', '12:00');
+    await toggleSlots(page, 'Jeudi', '09:00');
 
-    expect({ monday: rangesOf(page.host, 'Lundi')[0], state: saveBarState(page) }).toEqual({
-      monday: { start: '09:00', end: '12:30' },
+    expect({
+      monday: summaryOf(page.host, 'Lundi'),
+      thursday: summaryOf(page.host, 'Jeudi'),
+      state: saveBarState(page),
+    }).toEqual({
+      monday: 'Lundi : 09:00–12:30, 14:00–18:00',
+      thursday: 'Jeudi : 09:00–09:30',
       state: '2 modifications non enregistrées',
     });
   });
 
-  it('Given a range added on Tuesday When it is removed again Then nothing is left to save', async () => {
+  it('Given a half hour switched on on Tuesday When it is switched off again Then nothing is left to save', async () => {
     const page = await openPage();
 
-    await addRange(page, 'Mardi');
-    await removeRange(page, 'Mardi', 0);
+    await toggleSlots(page, 'Mardi', '18:00', '18:00');
 
-    expect(saveBarState(page)).toBe('Aucune modification');
+    expect({ tuesday: summaryOf(page.host, 'Mardi'), state: saveBarState(page) }).toEqual({
+      tuesday: 'Mardi : aucun créneau',
+      state: 'Aucune modification',
+    });
   });
 });
 
-describe('AdminAvailability: validation des plages', () => {
-  it.each([
-    { case: 'equal to', end: '09:00' },
-    { case: 'before', end: '08:30' },
-  ])(
-    'Given the first Monday range When its end is set $case its start Then the end announces that it must follow the start and is described by it',
-    async ({ end }) => {
-      const page = await openPage();
-
-      await choose(page, 'Lundi', 0, 'end', end);
-      const control = timeSelect(day(page.host, 'Lundi'), 'end', 0);
-      const row = allByTestId(day(page.host, 'Lundi') ?? page.host, 'admin-availability-rule')[0];
-      const error = row ? byTestId(row, 'admin-availability-rule-end-error') : null;
-
-      expect({
-        message: normalized(error),
-        role: error?.getAttribute('role'),
-        invalid: control?.getAttribute('aria-invalid'),
-        describedBy:
-          error !== null &&
-          error.id !== '' &&
-          control?.getAttribute('aria-describedby') === error.id,
-        startError: rowError(page.host, 'Lundi', 0, 'start'),
-      }).toEqual({
-        message: 'La fin doit suivre le début',
-        role: 'alert',
-        invalid: 'true',
-        describedBy: true,
-        startError: null,
-      });
-    },
-  );
-
-  it('Given two Monday ranges When the second is made to start inside the first Then its start announces the overlap and the first range stays valid', async () => {
+describe('AdminAvailability: fusion des plages', () => {
+  it('Given the two Monday ranges When the hours between them are switched on Then the day reads one range and a single Monday rule is sent', async () => {
     const page = await openPage();
 
-    await choose(page, 'Lundi', 1, 'start', '11:00');
-    const control = timeSelect(day(page.host, 'Lundi'), 'start', 1);
-
-    expect({
-      second: rowError(page.host, 'Lundi', 1, 'start'),
-      invalid: control?.getAttribute('aria-invalid'),
-      first: [rowError(page.host, 'Lundi', 0, 'start'), rowError(page.host, 'Lundi', 0, 'end')],
-    }).toEqual({ second: 'Chevauche la plage 1', invalid: 'true', first: [null, null] });
-  });
-
-  it('Given the first Monday range stretched over the second When « Enregistrer » is pressed Then nothing is sent and the later range announces the overlap', async () => {
-    const page = await openPage();
-
-    await choose(page, 'Lundi', 0, 'end', '15:00');
+    await toggleSlots(page, 'Lundi', '12:00', '12:30', '13:00', '13:30');
+    const monday = summaryOf(page.host, 'Lundi');
     await save(page);
 
     expect({
-      calls: page.replaceAvailabilityRules.mock.calls.length,
-      second: rowError(page.host, 'Lundi', 1, 'start'),
+      monday,
+      calls: page.replaceAvailabilityRules.mock.calls,
+      alerts: weekly(page.host).querySelectorAll('[role="alert"]').length,
       toasts: toasts(page),
-    }).toEqual({ calls: 0, second: 'Chevauche la plage 1', toasts: [] });
-  });
-
-  it('Given an added Tuesday range left unfilled When « Enregistrer » is pressed Then nothing is sent and both times ask to be chosen', async () => {
-    const page = await openPage();
-
-    await addRange(page, 'Mardi');
-    await save(page);
-
-    expect({
-      calls: page.replaceAvailabilityRules.mock.calls.length,
-      start: rowError(page.host, 'Mardi', 0, 'start'),
-      end: rowError(page.host, 'Mardi', 0, 'end'),
     }).toEqual({
-      calls: 0,
-      start: "Choisissez l'heure de début",
-      end: "Choisissez l'heure de fin",
+      monday: 'Lundi : 09:00–18:00',
+      calls: [
+        [
+          [
+            { weekday: 1, startMinute: 540, endMinute: 1080 },
+            { weekday: 3, startMinute: 600, endMinute: 690 },
+          ],
+        ],
+      ],
+      alerts: 0,
+      toasts: [{ severity: 'success', detail: 'Disponibilités enregistrées' }],
     });
   });
 
-  it('Given a Monday range touching the next one and the same hours on Tuesday When « Enregistrer » is pressed Then the grid is sent', async () => {
-    const page = await openPage();
+  it('Given 09:00–10:00 and 10:00–11:00 read on Thursday When the week renders and is saved Then they show and are sent as one range 09:00–11:00', async () => {
+    const page = await openPage(
+      withRules([
+        anAvailabilityRule({ weekday: 4, startMinute: 540, endMinute: 600 }),
+        anAvailabilityRule({ weekday: 4, startMinute: 600, endMinute: 660 }),
+      ]),
+    );
+    const thursday = summaryOf(page.host, 'Jeudi');
+    const state = saveBarState(page);
 
-    await addRange(page, 'Lundi');
-    await choose(page, 'Lundi', 2, 'start', '12:00');
-    await choose(page, 'Lundi', 2, 'end', '14:00');
-    await addRange(page, 'Mardi');
-    await choose(page, 'Mardi', 0, 'start', '09:00');
-    await choose(page, 'Mardi', 0, 'end', '12:00');
+    await toggleSlots(page, 'Mardi', '18:00');
     await save(page);
 
-    expect({
-      errors: allByTestId(page.host, 'admin-availability-rule-start-error').length,
-      calls: page.replaceAvailabilityRules.mock.calls.length,
-    }).toEqual({ errors: 0, calls: 1 });
+    expect({ thursday, state, sent: page.replaceAvailabilityRules.mock.calls }).toEqual({
+      thursday: 'Jeudi : 09:00–11:00',
+      state: 'Aucune modification',
+      sent: [
+        [
+          [
+            { weekday: 2, startMinute: 1080, endMinute: 1110 },
+            { weekday: 4, startMinute: 540, endMinute: 660 },
+          ],
+        ],
+      ],
+    });
   });
 });
 
@@ -732,92 +679,124 @@ describe('AdminAvailability: enregistrer', () => {
     }).toEqual({ type: 'submit', form: 'availability-form', formExists: true, cancel: '/admin' });
   });
 
-  it('Given a range added on Tuesday When it is saved Then the whole grid is sent once, success is told and nothing is left to save', async () => {
+  it('Given 18:00 and 18:30 switched on on Tuesday When it is saved Then the whole week is sent once, success is told and nothing is left to save', async () => {
     const page = await openPage();
 
-    await addRange(page, 'Mardi');
-    await choose(page, 'Mardi', 0, 'start', '09:00');
-    await choose(page, 'Mardi', 0, 'end', '10:00');
+    await toggleSlots(page, 'Mardi', '18:00', '18:30');
     await save(page);
 
     expect({
       calls: page.replaceAvailabilityRules.mock.calls,
       toasts: toasts(page),
       state: saveBarState(page),
+      tuesday: summaryOf(page.host, 'Mardi'),
     }).toEqual({
       calls: [
         [
           [
             { weekday: 1, startMinute: 540, endMinute: 720 },
             { weekday: 1, startMinute: 840, endMinute: 1080 },
-            { weekday: 2, startMinute: 540, endMinute: 600 },
+            { weekday: 2, startMinute: 1080, endMinute: 1140 },
             { weekday: 3, startMinute: 600, endMinute: 690 },
           ],
         ],
       ],
       toasts: [{ severity: 'success', detail: 'Disponibilités enregistrées' }],
       state: 'Aucune modification',
+      tuesday: 'Mardi : 18:00–19:00',
     });
   });
 
-  it('Given an early range added last on Monday When the API answers the sorted grid Then the day shows the returned order with nothing left to save', async () => {
+  it('Given a Monday range starting at 07:00 When Tuesday is edited and saved Then the hour outside the grid is sent untouched', async () => {
+    const page = await openPage(withRules([EARLY_MONDAY]));
+
+    await toggleSlots(page, 'Mardi', '18:00');
+    await save(page);
+
+    expect(page.replaceAvailabilityRules.mock.calls).toEqual([
+      [
+        [
+          { weekday: 1, startMinute: 420, endMinute: 540 },
+          { weekday: 2, startMinute: 1080, endMinute: 1110 },
+        ],
+      ],
+    ]);
+  });
+
+  it('Given a Monday range from 07:00 to 09:00 When its two half hours in the grid are switched off and saved Then 07:00–08:00 is still sent and still reported', async () => {
+    const page = await openPage(withRules([EARLY_MONDAY]));
+
+    await toggleSlots(page, 'Lundi', '08:00', '08:30');
+    await save(page);
+
+    expect({
+      sent: page.replaceAvailabilityRules.mock.calls,
+      hidden: hiddenNotice(page.host),
+      monday: summaryOf(page.host, 'Lundi'),
+    }).toEqual({
+      sent: [[[{ weekday: 1, startMinute: 420, endMinute: 480 }]]],
+      hidden: 'Conservé hors de la grille : lundi 07:00–08:00.',
+      monday: 'Lundi : 07:00–08:00',
+    });
+  });
+
+  it('Given the API answers the stored week When the save succeeds Then the week shows the answer with nothing left to save', async () => {
     const page = await openPage(
       spies({
         replaceAvailabilityRules: vi.fn<BookingGateway['replaceAvailabilityRules']>(() =>
           of({
             success: true,
-            data: [
-              anAvailabilityRule({ weekday: 1, startMinute: 420, endMinute: 480 }),
-              MONDAY_MORNING,
-              MONDAY_AFTERNOON,
-              WEDNESDAY,
-            ],
+            data: [anAvailabilityRule({ weekday: 2, startMinute: 1080, endMinute: 1200 })],
           } as const),
         ),
       }),
     );
 
-    await addRange(page, 'Lundi');
-    await choose(page, 'Lundi', 2, 'start', '07:00');
-    await choose(page, 'Lundi', 2, 'end', '08:00');
+    await toggleSlots(page, 'Mardi', '18:00');
     await save(page);
 
-    expect({
-      sent: page.replaceAvailabilityRules.mock.calls[0]?.[0],
-      monday: rangesOf(page.host, 'Lundi'),
-      state: saveBarState(page),
-    }).toEqual({
-      sent: [
-        { weekday: 1, startMinute: 540, endMinute: 720 },
-        { weekday: 1, startMinute: 840, endMinute: 1080 },
-        { weekday: 1, startMinute: 420, endMinute: 480 },
-        { weekday: 3, startMinute: 600, endMinute: 690 },
-      ],
-      monday: [
-        { start: '07:00', end: '08:00' },
-        { start: '09:00', end: '12:00' },
-        { start: '14:00', end: '18:00' },
+    expect({ summary: summary(page.host), state: saveBarState(page) }).toEqual({
+      summary: [
+        'Lundi : aucun créneau',
+        'Mardi : 18:00–20:00',
+        'Mercredi : aucun créneau',
+        'Jeudi : aucun créneau',
+        'Vendredi : aucun créneau',
+        'Samedi : aucun créneau',
+        'Dimanche : aucun créneau',
       ],
       state: 'Aucune modification',
     });
   });
 
-  it('Given every range removed When it is saved Then an empty grid is sent', async () => {
+  it('Given every half hour switched off When it is saved Then an empty week is sent', async () => {
     const page = await openPage();
 
-    await removeRange(page, 'Lundi', 1);
-    await removeRange(page, 'Lundi', 0);
-    await removeRange(page, 'Mercredi', 0);
+    await toggleSlots(
+      page,
+      'Lundi',
+      '09:00',
+      '09:30',
+      '10:00',
+      '10:30',
+      '11:00',
+      '11:30',
+      '14:00',
+      '14:30',
+      '15:00',
+      '15:30',
+      '16:00',
+      '16:30',
+      '17:00',
+      '17:30',
+    );
+    await toggleSlots(page, 'Mercredi', '10:00', '10:30', '11:00');
     await save(page);
 
     expect(page.replaceAvailabilityRules.mock.calls).toEqual([[[]]]);
   });
 
   it.each<{ reason: BookingAdminFailure; detail: string }>([
-    {
-      reason: 'overlap',
-      detail: 'Deux plages du même jour se chevauchent : corrigez-les, puis enregistrez.',
-    },
     {
       reason: 'invalid',
       detail: 'Les plages ont été refusées : vérifiez les heures, puis réessayez.',
@@ -831,7 +810,7 @@ describe('AdminAvailability: enregistrer', () => {
       detail: "Enregistrement impossible : le serveur n'a pas répondu. Réessayez dans un instant.",
     },
   ])(
-    'Given the API answers $reason When the grid is saved Then « $detail » is told and the draft is kept',
+    'Given the API answers $reason When the week is saved Then « $detail » is told and the draft is kept',
     async ({ reason, detail }) => {
       const page = await openPage(
         spies({
@@ -841,17 +820,19 @@ describe('AdminAvailability: enregistrer', () => {
         }),
       );
 
-      await choose(page, 'Lundi', 0, 'end', '12:30');
+      await toggleSlots(page, 'Mardi', '18:00');
       await save(page);
 
       expect({
+        calls: page.replaceAvailabilityRules.mock.calls.length,
         toasts: toasts(page),
-        monday: rangesOf(page.host, 'Lundi')[0],
+        tuesday: summaryOf(page.host, 'Mardi'),
         state: saveBarState(page),
         disabled: nativeButton(byTestId(page.host, 'savebar-submit'))?.disabled,
       }).toEqual({
+        calls: 1,
         toasts: [{ severity: 'error', detail }],
-        monday: { start: '09:00', end: '12:30' },
+        tuesday: 'Mardi : 18:00–18:30',
         state: '1 modification non enregistrée',
         disabled: false,
       });
@@ -865,7 +846,7 @@ describe('AdminAvailability: enregistrer', () => {
       }),
     );
 
-    await choose(page, 'Lundi', 0, 'end', '12:30');
+    await toggleSlots(page, 'Mardi', '18:00');
     await save(page);
 
     expect({
@@ -890,7 +871,7 @@ describe('AdminAvailability: quitter la page', () => {
   it('Given an unsaved change When the admin leaves Then a dialog asks to confirm, names the availability, and the page stays meanwhile', async () => {
     const page = await openPage();
 
-    await addRange(page, 'Mardi');
+    await toggleSlots(page, 'Mardi', '18:00');
     await leaveByCancel(page);
     const dialog = dialogTitled(page.host, LEAVE_HEADING);
 
@@ -906,29 +887,29 @@ describe('AdminAvailability: quitter la page', () => {
   });
 
   it.each([
-    { reply: 'confirm', url: '/admin', tuesday: [] },
-    { reply: 'cancel', url: '/admin/disponibilites', tuesday: [{ start: '', end: '' }] },
+    { reply: 'confirm', url: '/admin', tuesday: null },
+    { reply: 'cancel', url: '/admin/disponibilites', tuesday: 'Mardi : 18:00–18:30' },
   ] as const)(
     'Given the leave dialog When the admin answers $reply Then the address is $url',
     async ({ reply, url, tuesday }) => {
       const page = await openPage();
 
-      await addRange(page, 'Mardi');
+      await toggleSlots(page, 'Mardi', '18:00');
       await leaveByCancel(page);
       await answer(page, dialogTitled(page.host, LEAVE_HEADING), reply);
 
       expect({
         url: TestBed.inject(Router).url,
         open: dialogTitled(page.host, LEAVE_HEADING)?.open ?? false,
-        tuesday: rangesOf(page.host, 'Mardi'),
+        tuesday: byTestId(page.host, 'admin-week-template') ? summaryOf(page.host, 'Mardi') : null,
       }).toEqual({ url, open: false, tuesday });
     },
   );
 
-  it('Given an edited grid saved When the admin leaves Then no dialog is asked', async () => {
+  it('Given an edited week saved When the admin leaves Then no dialog is asked', async () => {
     const page = await openPage();
 
-    await choose(page, 'Lundi', 0, 'end', '12:30');
+    await toggleSlots(page, 'Mardi', '18:00');
     await save(page);
     await leaveByCancel(page);
 
@@ -938,12 +919,12 @@ describe('AdminAvailability: quitter la page', () => {
     }).toEqual({ saved: 1, url: '/admin' });
   });
 
-  it('Given the tab about to close When the grid is untouched then edited Then the browser warning is requested only once edited', async () => {
+  it('Given the tab about to close When the week is untouched then edited Then the browser warning is requested only once edited', async () => {
     const page = await openPage();
     const untouched = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(untouched);
 
-    await addRange(page, 'Mardi');
+    await toggleSlots(page, 'Mardi', '18:00');
     const edited = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(edited);
 

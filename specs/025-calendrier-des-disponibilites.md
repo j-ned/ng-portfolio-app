@@ -1020,12 +1020,124 @@ des assertions : 10 `AssertionError` de `toEqual` (adapters, retours vides des s
 les squelettes `NEVER`, donc aucune promesse rejetée ni rejet non géré). Le build compile toutes les specs
 (typecheck vert). Aucun cache touché par le diff.
 
+### Tranche F2 — la semaine type se règle en pastilles
+
+Front `ng-portfolio-app`, branche `feat/025-calendrier-disponibilites` (F1 commitée `f42e24b`), fichiers sous
+`src/app/features/admin/` (124 tests dans les quatre suites touchées, dont 67 hors page ; builder neuf
+`application/testing/weekly-slots-draft-builder.ts` : `aWeeklySlotsDraft`, `halfHoursBetween`).
+
+Signatures figées par les tests (squelettes sans comportement posés pour que les suites se chargent :
+`SLOT_GRID` vide, `toWeeklySlotsDraft` semaine vide, `toggleSlot` rend la liste reçue, `summarizeSlots` `''`,
+`hiddenRanges` `[]`, `toAvailabilityRules` accepte provisoirement les deux formes de brouillon et ignore
+les demi-heures ; anciens exports gardés jusqu'au GREEN, qui les supprime avec `admin-availability-rows.ts`) :
+
+- `availability-draft.ts` : `AvailabilityWeekdayKey` exporté ; `WeeklySlotsDraft`, `SLOT_GRID`,
+  `toWeeklySlotsDraft`, `toAvailabilityRules(draft: WeeklySlotsDraft)`, `toggleSlot`, `summarizeSlots`,
+  `hiddenRanges` aux signatures du plan. `hiddenRanges` rend `{ label: 'Lundi', ranges: '07:00–08:00' }` :
+  libellé de `AVAILABILITY_WEEKDAYS` (capitalisé), plages hors grille seules, jours du lundi au dimanche,
+  jours sans plage cachée omis. Plages séparées par `, `, tiret demi-cadratin `–`.
+- `AdminSlotGrid` (`app-admin-slot-grid`) : `implements FormValueControl<readonly number[]>`,
+  `day = input.required<AvailabilityWeekday>()` (précédent `AdminAvailabilityRows`), `value = model<readonly
+  number[]>([])`. Groupe `data-testid="admin-slot-grid"` `role="group"` nommé par `aria-labelledby` vers le
+  titre `h3` `admin-slot-grid-heading` « Créneaux du mardi » ; 26 `<button type="button"
+  data-testid="admin-slot">` sans `tabindex`, ni `disabled`, ni `aria-disabled`, `aria-pressed`, nom « 18:00 à
+  18:30 » (texte visible + `sr-only`). Un clic = `toggleSlot`, demi-heures hors grille conservées.
+- `AdminWeekTemplate` (`app-admin-week-template`, `data-testid="admin-week-template"`) :
+  `slots = input.required<FieldTree<WeeklySlotsDraft>>()`. `app-filter-group` « Jour de la semaine », Lundi
+  au départ, `count` = **toutes** les demi-heures du jour (hors grille comprises) ; `admin-week-summary` en
+  `<dl>`, sept `admin-week-summary-day` dont le texte (espaces fusionnés, insécables compris) lit
+  « Mardi : 18:00–20:00 » ou « Mardi : aucun créneau » ; `admin-week-hidden-ranges` absent sans plage hors
+  grille, sinon « Conservé hors de la grille : lundi 07:00–08:00. ».
+- Page : `h2` « Semaine type » (au lieu de « Plages hebdomadaires ») puis « Fermetures » ; le `form`
+  `admin-availability-rules` (`id="availability-form"`) contient `admin-week-template`, dans la section
+  `admin-availability-weekly` ; introduction, notice `admin-availability-none`, chargement, erreur,
+  barre et dialogue de sortie inchangés.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `availability-draft.spec.ts` (réécrit) | 6 | `toTimeOfDay` (gardé) | heure exacte |
+| | 1 | `AVAILABILITY_WEEKDAYS` | sept jours, clés, ISO, libellés |
+| | 1 | `SLOT_GRID` | 16 à 41, première 08:00, dernière 20:30 |
+| | 5 | `toWeeklySlotsDraft` : aucune règle, lundi 07:00–09:00, semaine (dimanche 0–1440), désordre, règles adjacentes | `toEqual` du brouillon (14 à 17 ; 48 demi-heures ; triées ; une seule fois) |
+| | 11 | `toAvailabilityRules` : vide, 14 à 17, dimanche entier, 5 suites (`it.each`), plusieurs jours, adjacentes relues, aller-retour, hors grille adjacente | règles exactes, une par suite contiguë, lundi → dimanche (`{ 1, 420, 540 }`, `{ 7, 0, 1440 }`, `{ 4, 540, 660 }`) |
+| | 7 | `toggleSlot` : 6 cas (`it.each`), allumer puis éteindre | liste triée, nouvelle référence, entrée intacte |
+| | 7 | `summarizeSlots` (`it.each`) | `''`, `18:00–20:00`, `20:30–21:00`, deux et trois plages, `23:30–24:00`, `00:00–24:00` |
+| | 4 | `hiddenRanges` : grille seule, lundi 07:00–09:00, bords 07:30 et 21:00, mardi et dimanche | `[]`, `Lundi 07:00–08:00`, `07:30–08:00, 21:00–21:30`, ordre des jours |
+| `admin-slot-grid.spec.ts` (neuf) | 1 | rendu | 26 boutons `button`, noms « 08:00 à 08:30 » … « 20:30 à 21:00 » |
+| | 2 | groupe ; jour changé | `role="group"` nommé « Créneaux du mardi », `h3`, puis « Créneaux du dimanche » |
+| | 1 | valeur avec demi-heures hors grille | seuls 18:00 et 18:30 pressés |
+| | 1 | clavier | boutons natifs, aucun `tabindex`, `disabled` ni `aria-disabled` |
+| | 5 | clics (`it.each`) | valeur triée exacte, hors grille gardée, `aria-pressed` suivi, entrée intacte |
+| | 3 | lié par `[formField]` | pressés depuis le modèle, clic écrit le mardi seul, modèle remplacé suivi |
+| `admin-week-template.spec.ts` (neuf) | 5 | choix du jour | groupe « Jour de la semaine », comptes `6 4 0 0 0 0 48`, lundi pressé ; grille du lundi ; Mardi choisi (brouillon intact) ; clic du mercredi écrit le brouillon et le compte ; hors grille gardée au clic |
+| | 3 | résumé | `<dl>` des sept jours (hors grille comprise) ; plage jusqu'à 21:00 ; brouillon remplacé suivi |
+| | 3 | hors grille | lundi 07:00–08:00 ; dimanche `00:00–08:00, 21:00–24:00` ; aucun avertissement dans la grille |
+| `admin-availability.spec.ts` | 7 | ouverture | sections `Semaine type`, `Fermetures` ; formulaire contenant la semaine type, lundi pressé, 26 pastilles ; résumé, comptes `14 0 3 0 0 0 0` et pastilles du lundi ; dimanche entier ; lundi 07:00–09:00 signalé ; aucune règle |
+| | 3 | chargement, erreur, Réessayer | statut, message, résumé relu |
+| | 7 | régler | 18:00 allumé (résumé, compte, une modification) ; autre jour affiché sans modification ; deux pastilles un seul changement ; 09:00 éteint ; mercredi vidé ; lundi et jeudi deux modifications ; allumer puis éteindre « Aucune modification » |
+| | 2 | fusion | les heures entre deux plages comblées → une règle `{ 1, 540, 1080 }`, aucun `role="alert"` ; deux règles adjacentes lues → affichées et envoyées en une |
+| | 10 | enregistrer | barre ; corps exact de toute la semaine ; plage hors grille envoyée intacte ; hors grille gardée quand la grille du jour est vidée ; réponse de l'API affichée ; tout éteint → `[]` ; échecs `invalid`, `network`, `server` (toast, brouillon gardé) ; envoi en cours désactivé |
+| | 6 | quitter | sans changement ; dialogue ; confirmer / annuler (résumé gardé) ; après enregistrement ; `beforeunload` |
+| | 22 | fermetures | inchangés |
+
+Contrôles verts par construction (passent contre les squelettes ou l'ancienne page, épinglent le contrat) :
+12 dans `availability-draft.spec.ts` — `toTimeOfDay` (6), `AVAILABILITY_WEEKDAYS`, `toWeeklySlotsDraft(null)`,
+`toAvailabilityRules` vide, allumer puis éteindre, `summarizeSlots([])`, `hiddenRanges` dans la grille ; 7 dans
+la page hors fermetures — introduction, chargement, erreur, barre, sortie sans changement, sortie confirmée,
+sortie après enregistrement (l'ancienne page enregistre un formulaire inchangé).
+
+**Recalage des tests de la spec 024 F5b** (`admin-availability.spec.ts`, 60 tests → 57, couverture gardée) :
+- Recalés sur le nouveau contrat : titre de section (`Plages hebdomadaires` → `Semaine type`), plages par jour
+  (menus → résumé et pastilles), dimanche entier, aucune règle, Réessayer, les cinq modifications (ajouter /
+  retirer une plage → allumer / éteindre des pastilles), corps exact de l'enregistrement, tout retirer,
+  échecs, envoi en cours, quatre tests de sortie (ajout de plage → pastille allumée).
+- Remplacés : « une fieldset par jour » → formulaire contenant la semaine type ; libellés des menus, options
+  00:00–24:00 et boutons Ajouter / Retirer → noms des 26 pastilles (`admin-slot-grid.spec.ts`) et sélecteur de
+  jour ; chevauchement signalé (2 tests) → fusion automatique (2 tests) ; plages contiguës acceptées →
+  règles adjacentes envoyées fusionnées ; « l'API trie la grille » → réponse de l'API affichée, plus deux
+  tests de reprise hors grille dans le `PUT`.
+- Retirés, cas devenus impossibles : fin égale ou antérieure au début (2), plage laissée vide (1), message
+  d'échec `overlap` (le brouillon ne peut plus produire de chevauchement).
+- `availability-draft.spec.ts` : tests de `toMinuteOfDay`, `toAvailabilityDraft`, `findOverlappedRange` et de
+  l'ancien `toAvailabilityRules` retirés avec leurs fonctions (30 tests) ; `toTimeOfDay` gardé.
+- `e2e/a11y/booking-states.spec.ts` : scénario « overlapping weekly ranges submitted » retiré (il pilotait
+  `admin-availability-rule-start` supprimé) ; le repère `admin-availability-rules` de `scenarios.ts` reste
+  valable ; les scénarios neufs restent à F5. `pnpm a11y:typecheck` 0.
+
+Sweep : `grep` de `admin-availability-(rule|day)`, `AdminAvailabilityRows`, `findOverlappedRange`,
+`toMinuteOfDay`, `toAvailabilityDraft`, `AvailabilityDraft`, `AvailabilityRangeRow`, `Plages hebdomadaires`,
+`chevauch` sur `src/`, `e2e/`, `ci/` : seuls consommateurs la page, `admin-availability-rows.ts`, les deux
+specs recalées et le scénario e2e retiré. `ci/api-stub` ne dépend que des routes (inchangées en F2).
+
+Tous les tests de cette tranche échouent à ce stade, hors contrôles ci-dessus (RED confirmé via `pnpm test`
+le 2026-10-14 20:54, 82 failed / 4574 total). Détail, code de sortie lu à chaque fois :
+
+```text
+$ pnpm test --include='src/app/features/admin/**/*.spec.ts'; echo $?
+ Test Files  4 failed | 64 passed (68)
+      Tests  82 failed | 1751 passed (1833)
+1
+$ pnpm test; echo $?
+ Test Files  4 failed | 246 passed (250)
+      Tests  82 failed | 4492 passed (4574)
+1
+$ pnpm lint; echo $?            → 0
+$ pnpm run format:check; echo $? → 0
+```
+
+Avant la tranche : 4540 passed / 4540 total. Hors des quatre suites touchées, les 4450 tests restent verts.
+Les 82 échecs sont tous des `AssertionError` (`toEqual` / `toBe`) : 31 `availability-draft`, 13
+`admin-slot-grid`, 11 `admin-week-template`, 27 page (aucune semaine type rendue, ancienne page à menus) ;
+aucune erreur de harnais, aucun rejet non géré. Typecheck des specs vert (la suite compile). Aucun cache
+touché par le diff.
+
 ## Journal des tranches
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
 - **Tranche A2 — un jour se ferme ou se rouvre** : GREEN 543 passed / 543 total + 40 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 40 passed / 40 total sur Postgres 17 réel (exit 0), suite complète 1512 passed / 1557 total + 45 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : `kind` calculé une fois pour `values` et `set`, fermeture couvrante de `toCalendarDay` par filtre puis tri (plus de `reduce`) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `SetDayOpenDto` (le plan disait `@IsBoolean()` seul)
 - **Tranche A3 — l'admin lit le mois résolu et règle les fériés** : GREEN 612 passed / 612 total + 45 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 45 passed / 45 total sur Postgres 17 réel (exit 0), suite complète 1581 passed / 1631 total + 50 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, démarrage réel `node dist/main.js` (routes mappées, 401 sans session, parcours admin vérifié au curl), commité `eb31c06` · refactor : `lastAllowedDay` dérivé de `daysOfMonth(addMonths(monthOf(today), 12))` (une seule arithmétique de mois) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `UpdateBookingSettingsDto`, comme A2
 - **Tranche F1 — la gateway parle le contrat du calendrier** : GREEN 261 passed / 261 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4540 passed / 4540 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : aucun · verify : reportée (aucune surface atteignable restructurée)
+- **Tranche F2 — la semaine type se règle en pastilles** : GREEN 1833 passed / 1833 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4574 passed / 4574 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : conversion demi-heure → heure partagée par `toSlotTime` (brouillon et grille, plus de constante de 30 min dupliquée dans `admin-slot-grid`), tables de messages d'échec sorties dans `availability-messages.ts` · verify : PASS (surface `/admin/disponibilites` déjà atteignable et restructurée)
 
 ### A1
 
@@ -1251,6 +1363,69 @@ n'est modifiée ; `toAdminFailure` change seulement pour `422` (avant `server`, 
 le renvoie) et pour `409` + `day_in_closure` (code propre aux nouvelles routes).
 
 **Écarts** : aucun.
+
+
+### F2
+
+**Fait** (tests, builder et scénario e2e de `qa` inchangés)
+- `application/availability-draft.ts` réécrit : `SLOT_GRID` (16..41), `toWeeklySlotsDraft` (demi-heures
+  couvertes par les règles, dédoublonnées, triées), `toAvailabilityRules` (une règle par suite contiguë, lundi →
+  dimanche), `toggleSlot`, `summarizeSlots`, `hiddenRanges`, `toSlotTime` ; supprimés : `toMinuteOfDay`,
+  `toAvailabilityDraft`, `findOverlappedRange`, `AvailabilityRangeRow`, `AvailabilityDraft`, l'ancienne forme de
+  `toAvailabilityRules`.
+- `application/components/admin-slot-grid.ts` : `FormValueControl<readonly number[]>` sur le patron
+  d'`AdminTagsSelector` ; groupe nommé par le `h3` « Créneaux du mardi », 26 boutons natifs `aria-pressed`
+  (« 18:00 » + `sr-only` « à 18:30 »), allumé `bg-primary-bg` texte blanc + icône `check`, éteint bord
+  `border-field` ; cible 44 px de haut, `focus-visible:outline-primary`, grille `auto-fill` (≥ 4,5 rem) : 8
+  colonnes à 1440 px, 4 à 375 px.
+- `application/components/admin-week-template.ts` : `app-filter-group` « Jour de la semaine » (compte = toutes
+  les demi-heures du jour), grille liée par `[formField]="slots()[dayKey()]"`, récapitulatif `<dl>` sous un `h3`,
+  avertissement `admin-week-hidden-ranges` (jours séparés par « ; », arbitrage).
+- Page : section « Semaine type », `form(draft.value, { submission })` sans schéma ni `onInvalid`,
+  `DocumentDraft<readonly AvailabilityRule[], WeeklySlotsDraft>`, barre et garde de sortie inchangées ; messages
+  d'échec dans `pages/admin-availability/availability-messages.ts` (entrée `overlap` retirée : un `overlap`
+  résiduel tombe sur le message générique, arbitrage). `admin-availability-rows.ts` supprimé.
+- Sweep (`admin-availability-(rule|day)`, `AdminAvailabilityRows`, `findOverlappedRange`, `toMinuteOfDay`,
+  `toAvailabilityDraft`, `AvailabilityDraft`, `AvailabilityRangeRow`, `Plages hebdomadaires`, `chevauch` sur
+  `src/`, `e2e/`, `ci/`) : seul reste le repère conservé `admin-availability-rules`.
+
+**Sorties** (code de sortie lu à chaque fois, 2026-10-14)
+
+```text
+$ pnpm test --include='src/app/features/admin/**/*.spec.ts'; echo $?
+ Test Files  68 passed (68)
+      Tests  1833 passed (1833)
+0
+$ pnpm test; echo $?
+ Test Files  250 passed (250)
+      Tests  4574 passed (4574)
+0
+$ pnpm lint; echo $?                                → 0 (All files pass linting.)
+$ pnpm run format:check; echo $?                    → 0
+$ pnpm run a11y:typecheck; echo $?                  → 0
+$ pnpm run build --configuration production; echo $? → 0 (Prerendered 9 static routes.)
+```
+
+**Refactor** : passe manuelle (skill `simplify` non lancée en sous-agent) : `toSlotTime` partagé, tables de
+messages sorties de la page ; vert relancé ensuite, aucun fichier de test touché.
+
+**Verify** : PASS. `pnpm start` + `STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs`, script Playwright jetable
+(`verify.mjs`, indice `auth:session` posé par `addInitScript`), captures dans `/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/s025-f2/`.
+1. Desktop clair 1440 : `/admin/disponibilites`, résumé initial conforme à la fixture ; Mardi 18:00–19:30 et
+   Samedi 09:00–11:30 allumés → récapitulatif « Mardi : 09:00–12:00, 18:00–20:00 », « Samedi : 09:00–12:00 »,
+   comptes `14 10 6 8 5 6 0`, barre « 2 modifications non enregistrées » ; Enregistrer → un `PUT
+   /api/booking/availability/rules` (200) au corps de la semaine entière (mardi `540–720` et `1080–1200`, samedi
+   `540–720`), toast « Disponibilités enregistrées », barre « Aucune modification » (`01-…`, `02-…` focus visible
+   sur 10:30, `03-…`).
+2. Hors grille (`page.route` : lundi 07:00–09:00, dimanche 00:00–24:00), desktop sombre, mobile 375 clair et
+   sombre : « Conservé hors de la grille : lundi 07:00–08:00 ; dimanche 00:00–08:00, 21:00–24:00. », pastilles
+   80 × 44 px en 4 colonnes, aucun défilement horizontal (`scrollWidth` 375) (`desktop-dark-hidden.png`,
+   `mobile-light-hidden.png`, `mobile-dark-hidden.png`).
+Console : aucune erreur applicative ; seul `404 /api/config`, route absente de la doublure, sans lien avec le diff
+(présent sur toute page admin servie par `ci/api-stub`).
+
+**Écarts** : aucun au contrat ; `role="group"` porté par un élément interne d'`admin-slot-grid` (et non par
+l'hôte) parce que la spec le cherche sous l'hôte du composant.
 
 ## Review code
 

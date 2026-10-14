@@ -76,22 +76,6 @@ for (const theme of THEMES) {
         await expect(page.getByTestId('admin-booking-reason')).toBeVisible();
         await expectNoA11yViolations('confirm-dialog', 'dialogue-annulation-ouvert');
       });
-
-      test('overlapping weekly ranges submitted has no WCAG A/AA violation', async ({
-        page,
-        visit,
-        expectNoA11yViolations,
-      }) => {
-        await visit('/admin/disponibilites');
-        await expect(page.getByTestId('admin-closure')).toHaveCount(2);
-        await expect(page.locator(ADMIN_PENDING_OR_FAILED)).toHaveCount(0);
-        await page.getByTestId('admin-availability-rule-start').nth(1).selectOption('10:00');
-        await page.getByTestId('savebar-submit').click();
-        await expect(page.getByTestId('admin-availability-rule-start-error')).toHaveText(
-          'Chevauche la plage 1',
-        );
-        await expectNoA11yViolations('admin-availability-rule-start-error', 'chevauchement');
-      });
     });
   });
 }
