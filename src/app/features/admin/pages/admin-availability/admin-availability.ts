@@ -128,7 +128,13 @@ class AvailabilitySaveFailure extends Error {
       [state]="calendar.state()"
       [busy]="calendar.busy()"
       [focusDate]="calendar.focusDate()"
+      [pending]="calendar.pending()"
+      [holidaysSaving]="calendar.holidaysSaving()"
+      [announcement]="calendar.announcement()"
+      [bookingWarning]="calendar.bookingWarning()"
       (monthRequested)="calendar.goToMonth($event.month, $event.focusDate)"
+      (dayActivated)="calendar.toggleDay($event)"
+      (holidaysToggled)="calendar.setHolidaysClosed($event)"
       (retry)="calendar.reload()"
     ></section>
 
@@ -207,6 +213,7 @@ export class AdminAvailability implements LeaveConfirmable {
     });
     if (result.success) {
       this.toast.add({ severity: 'success', detail: 'Disponibilités enregistrées' });
+      this.calendar.reload();
       return;
     }
     const reason = result.error instanceof AvailabilitySaveFailure ? result.error.reason : null;
@@ -228,6 +235,7 @@ export class AdminAvailability implements LeaveConfirmable {
         this.closuresResource.update((list) => [...(list ?? []), result.data].sort(byPeriod));
         this.closureResetToken.update((token) => token + 1);
         this.toast.add({ severity: 'success', detail: 'Fermeture ajoutée' });
+        this.calendar.reload();
       });
   }
 
@@ -245,6 +253,7 @@ export class AdminAvailability implements LeaveConfirmable {
         }
         this.closuresResource.update((list) => (list ?? []).filter((item) => item.id !== id));
         this.toast.add({ severity: 'success', detail: 'Fermeture supprimée' });
+        this.calendar.reload();
       });
   }
 }

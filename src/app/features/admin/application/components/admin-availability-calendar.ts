@@ -1,10 +1,12 @@
-import { Component, input, output } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { formatLongDate } from '@features/booking/domain/paris-format';
 import { AppIcon } from '@shared/icons/app-icon';
 import { Button } from '@shared/ui/button';
 import { LoadError } from '@shared/ui/load-error';
 import type { LoadState } from '@shared/ui/load-state';
 import { AppSkeleton } from '@shared/ui/skeleton';
-import type { CalendarMonthView } from '../calendar-month-view';
+import type { BookingWarning, CalendarMonthView } from '../calendar-month-view';
 import { AdminMonthGrid } from './admin-month-grid';
 import { AdminSectionHead } from './admin-section-head';
 
@@ -12,7 +14,7 @@ type MonthRequest = { readonly month: string; readonly focusDate: string | null 
 
 @Component({
   selector: 'section[app-admin-availability-calendar]',
-  imports: [AppIcon, Button, LoadError, AppSkeleton, AdminMonthGrid, AdminSectionHead],
+  imports: [RouterLink, AppIcon, Button, LoadError, AppSkeleton, AdminMonthGrid, AdminSectionHead],
   host: {
     'data-testid': 'admin-calendar',
     'aria-labelledby': 'admin-calendar-heading',
@@ -36,7 +38,23 @@ type MonthRequest = { readonly month: string; readonly focusDate: string | null 
       }
       @default {
         @if (view(); as month) {
-          <div class="mt-5 flex items-center justify-between gap-3">
+          <button
+            appButton
+            variant="outlined"
+            type="button"
+            data-testid="admin-calendar-holidays-toggle"
+            class="mt-5 aria-disabled:cursor-wait aria-disabled:opacity-60 aria-pressed:border-primary"
+            [attr.aria-pressed]="month.closePublicHolidays"
+            [attr.aria-disabled]="holidaysSaving() ? 'true' : null"
+            (click)="toggleHolidays(month.closePublicHolidays)"
+          >
+            @if (month.closePublicHolidays) {
+              <app-icon name="check" [size]="16" />
+            }
+            Fermer les jours fériés
+          </button>
+
+          <div class="mt-4 flex items-center justify-between gap-3">
             <p
               id="admin-calendar-month-label"
               data-testid="admin-calendar-month-label"
@@ -78,8 +96,26 @@ type MonthRequest = { readonly month: string; readonly focusDate: string | null 
             [view]="month"
             [focusDate]="focusDate()"
             [busy]="busy()"
+            [pending]="pending()"
+            (dayActivated)="dayActivated.emit($event)"
             (monthRequested)="monthRequested.emit($event)"
           />
+
+          <p data-testid="admin-calendar-status" role="status" class="mt-3 min-h-6 text-sm">
+            {{ announcement() }}
+            @if (warning(); as notice) {
+              <span data-testid="admin-calendar-booking-warning" class="font-semibold">
+                {{ notice.lead }} : annulez-{{ notice.pronoun }} depuis
+                <a
+                  data-testid="admin-calendar-booking-warning-link"
+                  routerLink="/admin/rendez-vous"
+                  class="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary"
+                  >Rendez-vous</a
+                >
+                si besoin.
+              </span>
+            }
+          </p>
 
           <p
             id="admin-calendar-help"
@@ -174,10 +210,29 @@ export class AdminAvailabilityCalendar {
   readonly state = input.required<LoadState>();
   readonly busy = input(false);
   readonly focusDate = input<string | null>(null);
+  readonly pending = input<ReadonlySet<string>>(new Set());
+  readonly holidaysSaving = input(false);
+  readonly announcement = input('');
+  readonly bookingWarning = input<BookingWarning | null>(null);
   readonly monthRequested = output<MonthRequest>();
+  readonly dayActivated = output<string>();
+  readonly holidaysToggled = output<boolean>();
   readonly retry = output<void>();
+
+  protected readonly warning = computed(() => {
+    const warning = this.bookingWarning();
+    if (warning === null) return null;
+    const date = formatLongDate(warning.date);
+    return warning.count === 1
+      ? { lead: `1 rendez-vous reste prévu le ${date}`, pronoun: 'le' }
+      : { lead: `${warning.count} rendez-vous restent prévus le ${date}`, pronoun: 'les' };
+  });
 
   protected showMonth(month: string | null): void {
     if (month !== null) this.monthRequested.emit({ month, focusDate: null });
+  }
+
+  protected toggleHolidays(closed: boolean): void {
+    if (!this.holidaysSaving()) this.holidaysToggled.emit(!closed);
   }
 }

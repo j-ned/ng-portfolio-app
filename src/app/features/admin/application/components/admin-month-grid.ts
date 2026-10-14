@@ -80,6 +80,7 @@ function splitShortLabel({ state, shortLabel }: CalendarCell): {
                     data-testid="admin-calendar-day"
                     [attr.data-state]="cell.state"
                     [attr.data-date]="cell.date"
+                    [attr.data-pending]="pending().has(cell.date) ? 'true' : null"
                     [attr.aria-label]="cell.label"
                     [attr.aria-disabled]="cell.actionable ? null : 'true'"
                     [attr.aria-current]="cell.today ? 'date' : null"
@@ -87,7 +88,7 @@ function splitShortLabel({ state, shortLabel }: CalendarCell): {
                     (click)="activate(cell)"
                     (focus)="activeDate.set(cell.date)"
                     (keydown)="move($event)"
-                    class="flex min-h-11 w-full cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border border-transparent px-0.5 py-1 text-sm leading-tight transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary aria-disabled:cursor-default aria-[current=date]:ring-2 aria-[current=date]:ring-foreground sm:min-h-16 sm:items-start sm:justify-between sm:p-2 hover:not-aria-disabled:border-primary data-[state=closed]:border-dashed data-[state=closed]:border-field data-[state=closed]:bg-foreground/8 data-[state=closed]:text-foreground data-[state=closed-period]:bg-status-warn/10 data-[state=closed-period]:text-status-warn data-[state=empty]:text-muted data-[state=holiday]:text-muted data-[state=open]:bg-primary/10 data-[state=open]:text-primary data-[state=past]:text-status-error data-[state=past]:line-through"
+                    class="flex min-h-11 w-full cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border border-transparent px-0.5 py-1 text-sm leading-tight transition data-pending:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary aria-disabled:cursor-default aria-[current=date]:ring-2 aria-[current=date]:ring-foreground sm:min-h-16 sm:items-start sm:justify-between sm:p-2 hover:not-aria-disabled:border-primary data-[state=closed]:border-dashed data-[state=closed]:border-field data-[state=closed]:bg-foreground/8 data-[state=closed]:text-foreground data-[state=closed-period]:bg-status-warn/10 data-[state=closed-period]:text-status-warn data-[state=empty]:text-muted data-[state=holiday]:text-muted data-[state=open]:bg-primary/10 data-[state=open]:text-primary data-[state=past]:text-status-error data-[state=past]:line-through"
                   >
                     <span class="font-mono font-semibold tabular-nums">{{ cell.dayOfMonth }}</span>
                     <span class="inline-flex items-center gap-1 text-xs">
@@ -112,6 +113,7 @@ export class AdminMonthGrid {
   readonly view = input.required<CalendarMonthView>();
   readonly focusDate = input<string | null>(null);
   readonly busy = input(false);
+  readonly pending = input<ReadonlySet<string>>(new Set());
   readonly dayActivated = output<string>();
   readonly monthRequested = output<CalendarMonthRequest>();
 
@@ -132,7 +134,8 @@ export class AdminMonthGrid {
     source: () => ({ view: this.view(), focusDate: this.focusDate() }),
     computation: ({ view, focusDate }, previous) => {
       if (inView(view, focusDate)) return focusDate;
-      if (previous?.source.view === view) return previous.value;
+      const kept = previous?.value ?? null;
+      if (previous?.source.view.month === view.month && inView(view, kept)) return kept;
       return defaultTabStop(view);
     },
   });

@@ -27,6 +27,8 @@ export type CalendarMonthView = {
   readonly weeks: readonly (readonly (CalendarCell | null)[])[];
 };
 
+export type BookingWarning = { readonly date: string; readonly count: number };
+
 const DAYS_PER_WEEK = 7;
 
 const ICONS: Readonly<Partial<Record<CalendarDayState, CalendarCell['icon']>>> = {
@@ -81,12 +83,15 @@ function shortLabel(day: CalendarDay): string {
   }
 }
 
+export const isActionable = (day: CalendarDay): boolean =>
+  day.state !== 'past' && day.state !== 'closed-period';
+
 const toCell = (day: CalendarDay, today: string): CalendarCell => ({
   date: day.date,
   dayOfMonth: Number(day.date.slice(8)),
   state: day.state,
   today: day.date === today,
-  actionable: day.state !== 'past' && day.state !== 'closed-period',
+  actionable: isActionable(day),
   label: describeDay(day),
   shortLabel: shortLabel(day),
   icon: ICONS[day.state] ?? null,
@@ -114,4 +119,20 @@ export function toCalendarMonthView(month: CalendarMonth): CalendarMonthView {
     closePublicHolidays: month.closePublicHolidays,
     weeks: toWeeks(month.days.map((day) => toCell(day, month.today))),
   };
+}
+
+export function wantsOpen(day: CalendarDay): boolean {
+  return day.state === 'closed' || day.state === 'holiday';
+}
+
+export function announceDay(day: CalendarDay): string {
+  const date = formatLongDate(day.date);
+  switch (day.state) {
+    case 'open':
+      return `Rouvert : ${date}, ${slots(day.slotCount)}.`;
+    case 'empty':
+      return `Rouvert : ${date}, aucun créneau.`;
+    default:
+      return `Fermé : ${date}.`;
+  }
 }

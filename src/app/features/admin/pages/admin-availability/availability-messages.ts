@@ -29,3 +29,24 @@ export const createFailureMessage = (reason: BookingAdminFailure): string =>
 
 export const deleteFailureMessage = (reason: BookingAdminFailure): string =>
   DELETE_FAILURES[reason] ?? DELETE_SERVER_FAILURE;
+
+const DAY_FAILURES: Partial<Record<BookingAdminFailure, string>> = {
+  'day-past': 'Ce jour est passé : il ne peut plus être modifié.',
+  'day-in-closure':
+    'Ce jour est couvert par une fermeture : modifiez-la dans la section Fermetures.',
+  network: 'Modification impossible : vérifiez votre connexion, puis réessayez.',
+};
+const DAY_SERVER_FAILURE =
+  "Modification impossible : le serveur n'a pas répondu. Réessayez dans un instant.";
+
+const HOLIDAYS_FAILURES: Partial<Record<BookingAdminFailure, string>> = {
+  network: 'Réglage des jours fériés impossible : vérifiez votre connexion, puis réessayez.',
+};
+const HOLIDAYS_SERVER_FAILURE =
+  "Réglage des jours fériés impossible : le serveur n'a pas répondu. Réessayez dans un instant.";
+
+export const dayFailureMessage = (reason: BookingAdminFailure): string =>
+  DAY_FAILURES[reason] ?? DAY_SERVER_FAILURE;
+
+export const holidaysFailureMessage = (reason: BookingAdminFailure): string =>
+  HOLIDAYS_FAILURES[reason] ?? HOLIDAYS_SERVER_FAILURE;

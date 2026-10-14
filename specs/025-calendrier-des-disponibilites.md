@@ -1246,6 +1246,115 @@ les 56 tests existants non recalés restent verts. Les 122 échecs sont tous des
 aucune erreur de harnais, aucun rejet non géré. Typecheck des specs vert (la suite compile). Aucun cache
 touché par le diff.
 
+### Tranche F4 — un clic ferme ou rouvre un jour, l'interrupteur ferme les fériés
+
+Front `ng-portfolio-app`, branche `feat/025-calendrier-disponibilites` (F3 commitée `9510b34`). 68 tests
+neufs, aucun test existant recalé.
+
+**Décision du propriétaire (2026-10-14), rendez-vous sur un jour fermé** : fermer un jour qui porte un
+rendez-vous confirmé à venir le ferme quand même (rien n'est annulé), puis un avertissement est annoncé
+avec un lien vers `/admin/rendez-vous`. Les rendez-vous à venir sont lus par `getBookings('upcoming')`,
+**une fois** à l'ouverture du calendrier, sans bloquer son affichage ; un échec de cette lecture n'empêche
+pas la fermeture et ne donne aucun avertissement. Un rendez-vous compte pour un jour par sa date de Paris
+(`toParisDateKey(startsAt)`), statut `confirmed` seulement. Rouvrir le jour, ou toute autre écriture réussie,
+retire l'avertissement.
+
+**Copie proposée** (épinglée par les tests) :
+
+| Situation | Texte |
+|---|---|
+| annonce, jour rendu `closed` ou `holiday` | « Fermé : jeudi 12 novembre 2026. » |
+| annonce, jour rendu `open` | « Rouvert : mercredi 11 novembre 2026, 4 créneaux. » (« 1 créneau ») |
+| annonce, jour rendu `empty` | « Rouvert : dimanche 15 novembre 2026, aucun créneau. » |
+| annonce, interrupteur | « Jours fériés fermés. » / « Jours fériés ouverts selon la semaine type. » |
+| avertissement, 1 | « 1 rendez-vous reste prévu le jeudi 12 novembre 2026 : annulez-le depuis Rendez-vous si besoin. » |
+| avertissement, n | « 2 rendez-vous restent prévus le jeudi 12 novembre 2026 : annulez-les depuis Rendez-vous si besoin. » |
+| toast `day-past` | « Ce jour est passé : il ne peut plus être modifié. » (puis relecture du mois) |
+| toast `day-in-closure` | « Ce jour est couvert par une fermeture : modifiez-la dans la section Fermetures. » (puis relecture) |
+| toast `network` (jour) | « Modification impossible : vérifiez votre connexion, puis réessayez. » |
+| toast autre raison (jour) | « Modification impossible : le serveur n'a pas répondu. Réessayez dans un instant. » |
+| toast `network` (fériés) | « Réglage des jours fériés impossible : vérifiez votre connexion, puis réessayez. » |
+| toast autre raison (fériés) | « Réglage des jours fériés impossible : le serveur n'a pas répondu. Réessayez dans un instant. » |
+
+L'annonce suit les exemples du plan (verbe, date longue, créneaux si ouvert) et non `describeDay` préfixé,
+qui doublerait l'état (« Fermé : …, fermé »). Aucun toast de succès sur un jour : la région de statut suffit.
+
+Signatures figées par les tests (squelettes sans comportement posés pour que les suites compilent :
+`wantsOpen` rend `false`, signaux constants, méthodes vides) :
+
+- `admin/application/calendar-month-view.ts` : `wantsOpen(day: CalendarDay): boolean`.
+- `admin/pages/admin-availability/availability-calendar.ts` : `export type BookingWarning = { readonly date:
+  string; readonly count: number }` ; `pending: Signal<ReadonlySet<string>>`, `holidaysSaving:
+  Signal<boolean>`, `announcement: Signal<string>` (`''` au départ), `bookingWarning: Signal<BookingWarning |
+  null>`, `toggleDay(date: string): void`, `setHolidaysClosed(value: boolean): void`. La facade injecte
+  `ToastStore` (fourni dans les deux harnais). Effacement de `focusDate` : mécanisme libre, prouvé par la page
+  (le focus ne revient pas sur la date de navigation après une écriture).
+- Page / section (sans spec isolé) : `admin-calendar-status` (`role="status"`, présent et vide avant toute
+  écriture, dans la section) ; `admin-calendar-booking-warning` **dans** la région de statut, avec le lien
+  `admin-calendar-booking-warning-link` (`<a>`, nom « Rendez-vous », `href="/admin/rendez-vous"`) ;
+  `admin-calendar-holidays-toggle` = `<button type="button" aria-pressed>` au libellé fixe « Fermer les jours
+  fériés », sans `role`, icône `solid-check` quand actif, `aria-disabled="true"` pendant l'écriture ; jour en
+  cours : `data-pending="true"` sur le bouton du jour, **sans** `aria-busy` ni `aria-disabled` (plan :
+  aucun changement d'ARIA) ; la page appelle `calendar.reload()` après plages enregistrées, fermeture ajoutée,
+  fermeture supprimée (succès seulement).
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `calendar-month-view.spec.ts` | 5 | `wantsOpen` (`it.each`) | `closed`, `holiday` → vrai ; `open`, férié rouvert, `empty` → faux |
+| `availability-calendar.spec.ts` | 5 | état souhaité (`it.each`) | un `setDayOpen('2026-11-12', open)` selon l'état affiché |
+| | 3 | non actionnable (`it.each`) | passé, période, date hors du mois : aucune écriture, rien en cours, aucune annonce |
+| | 1 | succès | seule la case du 12 remplacée par la réponse (état, nom), voisin intact, nouvelle vue, aucune relecture, aucun toast, annonce |
+| | 5 | annonce (`it.each`) | fermé, férié refermé, férié rouvert 4, rouvert 1, vide |
+| | 1 | en vol | second clic du 12 ignoré, 12 et 13 en cours ensemble, le 12 sort de l'ensemble à sa réponse |
+| | 5 | échecs (`it.each`) | toast exact ; `day-past` / `day-in-closure` relisent le mois, `network` / `server` / `invalid` non ; case inchangée, rien en cours, aucune annonce |
+| | 2 | après échec ; décembre | nouveau clic → nouvelle écriture ; refus en décembre → relecture `2026-12` |
+| | 2 | interrupteur (`it.each`) | une écriture, relecture, `closePublicHolidays` de la vue suit, annonce, aucun toast |
+| | 2 | interrupteur en vol ; décembre | `holidaysSaving`, seconde demande ignorée ; relecture `2026-12` |
+| | 2 | interrupteur refusé (`it.each`) | toast exact, réglage serveur gardé, aucune relecture ni annonce |
+| | 8 | rendez-vous | lus une fois (`['upcoming']`) ; 2 sur le 12 (dont `23:30Z` la veille, annulé exclu) ; 1 sur le 13 ; aucun le 16 ; retiré à la réouverture ; refus → aucun ; lecture en échec → fermé sans avertissement ni toast ; lecture sans réponse → mois affiché |
+| `admin-availability.spec.ts` | 1 | région de statut | `role="status"`, vide, dans la section |
+| | 2 | clic d'un jour | 12 ouvert → `[['2026-11-12', false]]`, `data-state="closed"`, nom, annonce, une lecture, aucun toast ; férié → `true`, nom « rouvert », annonce |
+| | 1 | en cours | un `PUT`, seul le 12 `data-pending`, pas d'`aria-disabled`/`aria-busy`, puis remplacé |
+| | 2 | focus | 12 focalisé puis cliqué : focus et arrêt de tabulation restent ; PageDown, ArrowRight, clic du 13 décembre : restent sur le 13 |
+| | 2 | sans requête | passé et période : aucun `PUT`, statut vide ; Entrée sur un jour : aucun `PUT` par la touche |
+| | 3 | échecs (`it.each`) | toast, case gardée, 2 / 2 / 1 lectures, statut vide |
+| | 6 | interrupteur | bouton natif nommé, `aria-pressed` vrai + `solid-check` ; faux sans icône ; clic → `[[false]]`, relecture, férié rouvert, libellé fixe, annonce ; second clic → `[[false], [true]]` ; en vol `aria-disabled`, un seul `PUT` ; refus → toast, `aria-pressed` gardé |
+| | 5 | avertissement | texte singulier, dans la région de statut, lien ; pluriel ; autre jour → aucun ; lecture sans réponse → grille ; lecture en échec → fermé sans avertissement |
+| | 5 | rechargement | fermeture ajoutée / supprimée → `[[null], [null]]` ; en décembre → `2026-12` ; ajout refusé → aucune relecture ; plages enregistrées → relecture |
+
+Contrôles verts par construction (passent contre les squelettes, épinglent le contrat) : `wantsOpen` faux ×3,
+facade non actionnable ×3, avertissement absent sur refus, Entrée sans `PUT`, ajout refusé sans relecture.
+
+**Construction des entrées** (pas de recalage) : `Spies` de la page gagne `setDayOpen` (jour résolu comme le
+serveur depuis le mois doublé : rouvert `open`/`empty`, fermé `closed`/`holiday`), `setClosePublicHolidays`
+(renvoie la valeur) et `getBookings` (liste vide) ; le harnais de la facade (`openCalendar`) fournit
+`ToastStore`. Aucune valeur attendue des 1956 tests existants ne bouge.
+
+Sweep : `grep` de `AvailabilityCalendar`, `admin-calendar-status`, `holidays-toggle` sur `src/`, `e2e/`, `ci/` :
+aucun autre consommateur (doublure `ci/api-stub` et scénarios axe à F5). États seedés : `getBookings` est
+désormais lu par l'écran ; la doublure `stubBookingGateway` le rend vide, aucune autre suite ne monte l'écran.
+
+Tous les tests de cette tranche échouent à ce stade, hors contrôles ci-dessus (RED confirmé via `pnpm test`
+le 2026-10-14 21:50, 59 failed / 4769 total). Détail, code de sortie lu à chaque fois :
+
+```text
+$ pnpm test --include='src/app/features/admin/**/*.spec.ts'; echo $?
+ Test Files  3 failed | 69 passed (72)
+      Tests  59 failed | 1965 passed (2024)
+1
+$ pnpm test; echo $?
+ Test Files  3 failed | 251 passed (254)
+      Tests  59 failed | 4710 passed (4769)
+1
+$ pnpm lint; echo $?               → 0
+$ pnpm run format:check; echo $?   → 0
+$ pnpm run a11y:typecheck; echo $? → 0
+```
+
+Avant la tranche : 4701 passed / 4701 total ; après : 4710 passed = 4701 + les 9 contrôles. Échecs : 2
+`calendar-month-view`, 32 facade, 25 page ; tous des `AssertionError` (`toEqual` / `toBe` / `toBeNull`),
+aucune erreur de harnais, aucun rejet non géré. Typecheck des specs vert. Aucun cache touché par le diff.
+
 ## Journal des tranches
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
@@ -1254,6 +1363,7 @@ touché par le diff.
 - **Tranche F1 — la gateway parle le contrat du calendrier** : GREEN 261 passed / 261 total (`pnpm test --include='src/app/features/booking/**/*.spec.ts'`, exit 0), suite complète 4540 passed / 4540 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : aucun · verify : reportée (aucune surface atteignable restructurée)
 - **Tranche F2 — la semaine type se règle en pastilles** : GREEN 1833 passed / 1833 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4574 passed / 4574 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : conversion demi-heure → heure partagée par `toSlotTime` (brouillon et grille, plus de constante de 30 min dupliquée dans `admin-slot-grid`), tables de messages d'échec sorties dans `availability-messages.ts` · verify : PASS (surface `/admin/disponibilites` déjà atteignable et restructurée)
 - **Tranche F3 — le calendrier du mois s'affiche et se parcourt au clavier** : GREEN 1956 passed / 1956 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4701 passed / 4701 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : le clavier de la grille part de la date active plutôt que du bouton qui reçoit la touche (répétition clavier sans perte), navigation sous `min-w-11` · verify : PASS (section neuve sur la surface `/admin/disponibilites` déjà atteignable)
+- **Tranche F4 — un clic ferme ou rouvre un jour, l'interrupteur ferme les fériés** : GREEN 2024 passed / 2024 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4769 passed / 4769 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : aucun (passe manuelle sur le diff, rien à reprendre) · verify : PASS (surface `/admin/disponibilites` déjà atteignable, section calendrier rendue interactive)
 
 ### A1
 
@@ -1618,6 +1728,89 @@ Console : aucune erreur applicative ; seul `404 /api/config`, route absente de l
   échouait. Même contrat (`view`, `busy`, `state`) ; F4 remplacera le jour dans ce signal.
 - `AdminMonthGrid` gagne l'entrée `busy` (laissée au GREEN par le plan de test) ; `pending` reste à F4.
 - Le clic d'un jour émet `dayActivated` mais la section ne l'écoute pas encore (F4).
+
+### F4
+
+**Fait** (tests et builders de `qa` inchangés)
+- `application/calendar-month-view.ts` : `wantsOpen` (vrai pour `closed` et `holiday`), `isActionable`
+  (partagé par `toCell` et la facade), `announceDay` (« Fermé : … », « Rouvert : …, 4 créneaux. », « …, aucun
+  créneau. »), type `BookingWarning`.
+- `pages/admin-availability/availability-calendar.ts` : `toggleDay` non optimiste (jour introuvable, non
+  actionnable ou en cours → rien ; `setDayOpen(date, wantsOpen(day))` ; succès → le jour remplacé dans le mois
+  affiché, annonce, avertissement recalculé ; échec → toast, relecture pour `day-past` / `day-in-closure`) ;
+  `pending` (ensemble remplacé, jamais muté) ; `setHolidaysClosed` (`holidaysSaving`, seconde demande ignorée,
+  succès → relecture du mois, annonce, avertissement retiré ; échec → toast) ; rendez-vous à venir lus une fois
+  par `rxResource` (`getBookings('upcoming')`), comptés par `toParisDateKey` sur les seuls `confirmed`, une
+  lecture en échec ne donne aucun avertissement ; `focusDate` effacé par `toggleDay`, `setHolidaysClosed` et
+  `reload`.
+- `availability-messages.ts` : `dayFailureMessage`, `holidaysFailureMessage` (copie du plan de test).
+- `admin-month-grid.ts` : entrée `pending` → `data-pending="true"` et `opacity-50`, sans ARIA ; l'arrêt de
+  tabulation garde la date active quand une nouvelle vue du **même mois** la contient (point dur n°7 : le jour
+  cliqué garde focus et `tabindex="0"`, la grille ne revient plus sur aujourd'hui ni sur la date de navigation).
+- `admin-availability-calendar.ts` : interrupteur `appButton outlined` `aria-pressed` au libellé fixe, icône
+  `check` quand actif, `aria-disabled` pendant l'écriture (activation ignorée) ; région `role="status"`
+  (annonce + avertissement avec lien `routerLink="/admin/rendez-vous"`) entre la grille et l'aide, hauteur
+  réservée ; relais `dayActivated` / `holidaysToggled`.
+- Page : liaisons de la section, `calendar.reload()` après plages enregistrées, fermeture ajoutée, fermeture
+  supprimée (succès seulement).
+
+**Sorties** (code de sortie lu à chaque fois, 2026-10-14)
+
+```text
+$ pnpm test --include='src/app/features/admin/**/*.spec.ts'; echo $?
+ Test Files  72 passed (72)
+      Tests  2024 passed (2024)
+0
+$ pnpm test; echo $?
+ Test Files  254 passed (254)
+      Tests  4769 passed (4769)
+0
+$ pnpm lint; echo $?                                → 0 (All files pass linting.)
+$ pnpm run format:check; echo $?                    → 0
+$ pnpm run a11y:typecheck; echo $?                  → 0
+$ pnpm run build --configuration production; echo $? → 0
+$ pnpm icons:check; echo $?                         → 0
+```
+
+Vert atteint au premier cycle ; seul Prettier a reformaté la section ensuite (gates relancées).
+
+**Refactor** : passe manuelle (skill `simplify` non lancée en sous-agent) sur le diff : rien à reprendre ;
+aucun fichier de test touché.
+
+**Verify** : PASS. `pnpm start` + `STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs`, script Playwright jetable
+(`verify.mjs`, `page.route` à état sur `**/api/booking/availability/**` : `PUT days` écrit l'exception en état
+souhaité et renvoie le jour résolu, `PUT settings` change le réglage relu par le mois ; `**/api/booking/bookings?scope=upcoming` :
+deux rendez-vous confirmés le 21 octobre à Paris dont un à `22:30Z` la veille ; 250 ms de latence), captures et
+`verify.json` dans `/tmp/claude-1000/-home-j-ned-Projects-Portfolio-ng-portfolio-app/0eba6dcb-8029-4acc-acf8-26cd15578b28/scratchpad/s025-f4/`.
+1. Desktop clair 1440 (`01-desktop-light-initial.png`) : statut vide, interrupteur `aria-pressed="true"`.
+   Focus sur le 15, Entrée → pendant l'écriture seul le 15 porte `data-pending`, sans `aria-disabled` ni
+   `aria-busy` ; réponse → `data-state="closed"`, cadenas, statut « Fermé : jeudi 15 octobre 2026. », focus et
+   seul arrêt de tabulation sur le 15 (`02-desktop-light-closed-15.png`). Espace → rouvert, « Rouvert : jeudi
+   15 octobre 2026, 1 créneau. », focus gardé.
+2. Clic du 21 → fermé, « 2 rendez-vous restent prévus le mercredi 21 octobre 2026 : annulez-les depuis
+   Rendez-vous si besoin. », lien `href="/admin/rendez-vous"` (`03-desktop-light-booking-warning.png`). Clic du
+   férié 19 → rouvert (« férié (Armistice 1918) rouvert, 4 créneaux »), avertissement retiré.
+3. Interrupteur → `aria-disabled="true"` pendant l'écriture, puis une relecture, `aria-pressed="false"`, « Jours
+   fériés ouverts selon la semaine type. » ; second appui → `aria-pressed="true"`, « Jours fériés fermés. »,
+   réglage serveur suivi.
+4. Clic d'un jour passé (2) et d'un jour de période (24) : aucune requête.
+5. `PUT` en 500 sur le 22 : toast « Modification impossible : le serveur n'a pas répondu. Réessayez dans un
+   instant. », cellule inchangée (`04-desktop-light-failure-toast.png`).
+6. Desktop sombre, mobile 375 clair et sombre, avertissement affiché : aucun défilement horizontal
+   (`scrollWidth` 375), interrupteur de 44 px de haut (`desktop-dark-warning.png`, `mobile-light-warning.png`,
+   `mobile-dark-warning.png`).
+Console : aucune erreur applicative ; `404 /api/config` (route absente de la doublure, comme F2-F3) et le 500
+provoqué à l'étape 5.
+
+**Écarts**
+- `BookingWarning` est déclaré dans `application/calendar-month-view.ts` et non exporté par la facade : la
+  section (couche `application`) le consomme et ne doit pas dépendre de `pages/`. Aucun test ne l'importe.
+- Effacement de `focusDate` (mécanisme laissé libre) : à chaque écriture et à chaque `reload`, pas à la prise
+  de focus. Gardée, la date de navigation reprendrait le focus à chaque nouvelle vue, y compris quand la page
+  recharge le mois après une fermeture ajoutée (vol du focus depuis le formulaire de fermeture).
+- Entre la réponse de `PUT settings` et la relecture du mois, l'interrupteur montre encore l'ancien
+  `aria-pressed` alors que le statut annonce déjà le nouveau réglage (latence d'une lecture, conforme au plan :
+  écriture puis rechargement, non optimiste).
 
 ## Review code
 

@@ -4,6 +4,7 @@ import { aCalendarDay } from '@features/booking/testing/booking-builders';
 import {
   describeDay,
   toCalendarMonthView,
+  wantsOpen,
   type CalendarCell,
   type CalendarMonthView,
 } from './calendar-month-view';
@@ -296,4 +297,19 @@ describe('describeDay', () => {
   ])('Given a $day.state day When described Then it reads « $expected »', ({ day, expected }) => {
     expect(describeDay(aCalendarDay(day))).toBe(expected);
   });
+});
+
+describe('wantsOpen', () => {
+  it.each<{ state: CalendarDay['state']; holiday: string | null; open: boolean }>([
+    { state: 'closed', holiday: null, open: true },
+    { state: 'holiday', holiday: 'Armistice 1918', open: true },
+    { state: 'open', holiday: null, open: false },
+    { state: 'open', holiday: 'Armistice 1918', open: false },
+    { state: 'empty', holiday: null, open: false },
+  ])(
+    'Given a day shown $state (holiday: $holiday) When it is activated Then the wanted state is open: $open',
+    ({ state, holiday, open }) => {
+      expect(wantsOpen(aCalendarDay({ state, holiday }))).toBe(open);
+    },
+  );
 });

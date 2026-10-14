@@ -7,12 +7,17 @@ import type { Mock } from 'vitest';
 import { ToastStore } from '@core/notifications/toast-store';
 import { BookingGateway } from '@features/booking/domain/gateways/booking.gateway';
 import type {
+  AdminBooking,
   AvailabilityClosure,
   AvailabilityRule,
   BookingAdminFailure,
+  BookingAdminResult,
+  CalendarDay,
   CalendarMonth,
 } from '@features/booking/domain/models/booking-admin.model';
 import {
+  aCalendarDay,
+  anAdminBooking,
   anAvailabilityClosure,
   anAvailabilityRule,
 } from '@features/booking/testing/booking-builders';
@@ -68,6 +73,14 @@ const JANUARY = aCalendarMonthOf('2027-01', {
 const calendarMonth = (month: string | null): CalendarMonth =>
   ({ '2026-12': DECEMBER, '2027-01': JANUARY })[month ?? ''] ?? NOVEMBER;
 
+const resolvedDay = (date: string, open: boolean): CalendarDay => {
+  const day =
+    calendarMonth(date.slice(0, 7)).days.find((candidate) => candidate.date === date) ??
+    aCalendarDay({ date });
+  if (open) return { ...day, state: day.slotCount > 0 ? 'open' : 'empty' };
+  return { ...day, state: day.holiday === null ? 'closed' : 'holiday' };
+};
+
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'] as const;
 type DayLabel = (typeof DAYS)[number];
 
@@ -93,6 +106,9 @@ type Spies = {
   readonly createClosure: Mock<BookingGateway['createClosure']>;
   readonly deleteClosure: Mock<BookingGateway['deleteClosure']>;
   readonly getAvailabilityCalendar: Mock<BookingGateway['getAvailabilityCalendar']>;
+  readonly setDayOpen: Mock<BookingGateway['setDayOpen']>;
+  readonly setClosePublicHolidays: Mock<BookingGateway['setClosePublicHolidays']>;
+  readonly getBookings: Mock<BookingGateway['getBookings']>;
 };
 
 type Page = Spies & {
@@ -131,6 +147,13 @@ function spies(overrides: Partial<Spies> = {}): Spies {
     getAvailabilityCalendar: vi.fn<BookingGateway['getAvailabilityCalendar']>((month) =>
       defer(() => of(calendarMonth(month))),
     ),
+    setDayOpen: vi.fn<BookingGateway['setDayOpen']>((date, open) =>
+      defer(() => of({ success: true, data: resolvedDay(date, open) } as const)),
+    ),
+    setClosePublicHolidays: vi.fn<BookingGateway['setClosePublicHolidays']>((value) =>
+      defer(() => of({ success: true, data: value } as const)),
+    ),
+    getBookings: vi.fn<BookingGateway['getBookings']>(() => defer(() => of([]))),
     ...overrides,
   };
 }
@@ -1708,5 +1731,517 @@ describe('AdminAvailability: chargement et erreur du calendrier', () => {
       days: calendarDays(page.host).length,
       error: byTestId(calendar(page.host), 'load-error'),
     }).toEqual({ calls: [[null], [null]], month: 'Novembre 2026', days: 30, error: null });
+  });
+});
+
+const calendarStatus = (host: HTMLElement): HTMLElement | null =>
+  byTestId(calendar(host), 'admin-calendar-status');
+
+const holidaysToggle = (host: HTMLElement): HTMLButtonElement | null =>
+  nativeButton(byTestId(calendar(host), 'admin-calendar-holidays-toggle'));
+
+const iconsOf = (element: Element | null): readonly string[] =>
+  [...(element?.querySelectorAll('use') ?? [])].map(
+    (use) => use.getAttribute('href')?.split('#')[1] ?? '',
+  );
+
+const dayName = (host: HTMLElement, date: string): string => {
+  const day = calendarDayOn(host, date);
+  return day ? accessibleName(day, host) : '';
+};
+
+async function clickDay(page: Page, date: string): Promise<void> {
+  nativeButton(calendarDayOn(page.host, date))?.click();
+  await settleBounded(page.fixture);
+}
+
+async function pressHolidaysToggle(page: Page): Promise<void> {
+  holidaysToggle(page.host)?.click();
+  await settleBounded(page.fixture);
+}
+
+const withDayOpen = (write: BookingGateway['setDayOpen']): Spies =>
+  spies({ setDayOpen: vi.fn<BookingGateway['setDayOpen']>(write) });
+
+const withBookings = (read: BookingGateway['getBookings']): Spies =>
+  spies({ getBookings: vi.fn<BookingGateway['getBookings']>(read) });
+
+function holidaysServer(write?: BookingGateway['setClosePublicHolidays']): Spies {
+  let closed = true;
+  const accept: BookingGateway['setClosePublicHolidays'] = (value) =>
+    defer(() => {
+      closed = value;
+      return of({ success: true, data: value } as const);
+    });
+  const november = (): CalendarMonth =>
+    aCalendarMonthOf('2026-11', {
+      today: '2026-11-10',
+      previousMonth: null,
+      nextMonth: '2026-12',
+      closePublicHolidays: closed,
+      days: { '2026-11-11': { state: closed ? 'holiday' : 'open', holiday: 'Armistice 1918' } },
+    });
+  return spies({
+    getAvailabilityCalendar: vi.fn<BookingGateway['getAvailabilityCalendar']>((month) =>
+      defer(() => of(month === null || month === '2026-11' ? november() : calendarMonth(month))),
+    ),
+    setClosePublicHolidays: vi.fn<BookingGateway['setClosePublicHolidays']>(write ?? accept),
+  });
+}
+
+const BOOKING_ON_12TH: AdminBooking = anAdminBooking({
+  id: 'b-12',
+  startsAt: '2026-11-12T17:00:00.000Z',
+});
+const BOOKING_AFTER_MIDNIGHT: AdminBooking = anAdminBooking({
+  id: 'b-12-early',
+  startsAt: '2026-11-11T23:30:00.000Z',
+});
+
+describe('AdminAvailability: fermer ou rouvrir un jour', () => {
+  it('Given the calendar When it renders Then an empty status region waits in the calendar section', async () => {
+    const page = await openPage();
+    const status = calendarStatus(page.host);
+
+    expect({
+      present: status !== null,
+      role: status?.getAttribute('role'),
+      text: collapsed(status),
+    }).toEqual({ present: true, role: 'status', text: '' });
+  });
+
+  it('Given the open 12 November When it is clicked Then one write closes it, the cell shows the answer, the closing is announced, the month is not read again and no toast is shown', async () => {
+    const page = await openPage();
+
+    await clickDay(page, '2026-11-12');
+
+    expect({
+      writes: page.setDayOpen.mock.calls,
+      state: calendarDayOn(page.host, '2026-11-12')?.getAttribute('data-state'),
+      name: dayName(page.host, '2026-11-12'),
+      status: collapsed(calendarStatus(page.host)),
+      reads: page.getAvailabilityCalendar.mock.calls.length,
+      toasts: toasts(page),
+    }).toEqual({
+      writes: [['2026-11-12', false]],
+      state: 'closed',
+      name: 'jeudi 12 novembre 2026, fermé',
+      status: 'Fermé : jeudi 12 novembre 2026.',
+      reads: 1,
+      toasts: [],
+    });
+  });
+
+  it('Given the closed Armistice holiday When it is clicked Then one write reopens it and the reopened holiday is announced with its slots', async () => {
+    const page = await openPage();
+
+    await clickDay(page, '2026-11-11');
+
+    expect({
+      writes: page.setDayOpen.mock.calls,
+      state: calendarDayOn(page.host, '2026-11-11')?.getAttribute('data-state'),
+      name: dayName(page.host, '2026-11-11'),
+      status: collapsed(calendarStatus(page.host)),
+    }).toEqual({
+      writes: [['2026-11-11', true]],
+      state: 'open',
+      name: 'mercredi 11 novembre 2026, férié (Armistice 1918) rouvert, 4 créneaux',
+      status: 'Rouvert : mercredi 11 novembre 2026, 4 créneaux.',
+    });
+  });
+
+  it('Given a write in flight on the 12th When it is clicked again Then a single write is sent, only the 12th is marked pending without any ARIA change, until the answer replaces it', async () => {
+    const answer = new Subject<BookingAdminResult<CalendarDay>>();
+    const page = await openPage(withDayOpen(() => answer));
+
+    await clickDay(page, '2026-11-12');
+    await clickDay(page, '2026-11-12');
+    const day = (): HTMLElement | null => calendarDayOn(page.host, '2026-11-12');
+    const meanwhile = {
+      writes: page.setDayOpen.mock.calls.length,
+      pending: calendarDays(page.host)
+        .filter((cell) => cell.getAttribute('data-pending') === 'true')
+        .map((cell) => accessibleName(cell, page.host)),
+      disabled: day()?.getAttribute('aria-disabled') ?? null,
+      busy: day()?.getAttribute('aria-busy') ?? null,
+      state: day()?.getAttribute('data-state'),
+    };
+    answer.next({ success: true, data: aCalendarDay({ date: '2026-11-12', state: 'closed' }) });
+    answer.complete();
+    await settleBounded(page.fixture);
+
+    expect({
+      meanwhile,
+      after: {
+        pending: day()?.getAttribute('data-pending') ?? null,
+        state: day()?.getAttribute('data-state'),
+      },
+    }).toEqual({
+      meanwhile: {
+        writes: 1,
+        pending: ['jeudi 12 novembre 2026, ouvert, 4 créneaux'],
+        disabled: null,
+        busy: null,
+        state: 'open',
+      },
+      after: { pending: null, state: 'closed' },
+    });
+  });
+
+  it('Given the 12th focused When it is clicked Then after the answer the focus and the tab stop stay on it', async () => {
+    const page = await openPage();
+
+    calendarDayOn(page.host, '2026-11-12')?.focus();
+    await settleBounded(page.fixture);
+    await clickDay(page, '2026-11-12');
+
+    expect({
+      focused: focusedDay(page.host),
+      stops: calendarTabStops(page.host),
+    }).toEqual({
+      focused: 'jeudi 12 novembre 2026, fermé',
+      stops: ['jeudi 12 novembre 2026, fermé'],
+    });
+  });
+
+  it('Given December reached by PageDown on the 12th and the focus moved to the 13th When the 13th is clicked Then the focus and the tab stop stay on the 13th, not back on the 12th', async () => {
+    const page = await openPage();
+
+    await pressKeyOn(page, '2026-11-12', 'PageDown');
+    await pressKeyOn(page, '2026-12-12', 'ArrowRight');
+    await clickDay(page, '2026-12-13');
+
+    expect({
+      writes: page.setDayOpen.mock.calls,
+      focused: focusedDay(page.host),
+      stops: calendarTabStops(page.host),
+    }).toEqual({
+      writes: [['2026-12-13', false]],
+      focused: 'dimanche 13 décembre 2026, fermé',
+      stops: ['dimanche 13 décembre 2026, fermé'],
+    });
+  });
+
+  it('Given a past day and a day under a closure When they are clicked Then nothing is written and nothing is announced', async () => {
+    const page = await openPage(
+      withCalendar(() =>
+        of(
+          aCalendarMonthOf('2026-11', {
+            today: '2026-11-10',
+            nextMonth: '2026-12',
+            days: {
+              '2026-11-24': {
+                state: 'closed-period',
+                closure: { startsOn: '2026-11-24', endsOn: '2026-11-25', reason: 'Congés' },
+              },
+            },
+          }),
+        ),
+      ),
+    );
+
+    await clickDay(page, '2026-11-09');
+    await clickDay(page, '2026-11-24');
+
+    expect({
+      writes: page.setDayOpen.mock.calls,
+      status: collapsed(calendarStatus(page.host)),
+      present: calendarStatus(page.host) !== null,
+    }).toEqual({ writes: [], status: '', present: true });
+  });
+
+  it('Given the 12th focused When Enter is pressed Then no write is sent by the key itself, the activation being the native click', async () => {
+    const page = await openPage();
+
+    await pressKeyOn(page, '2026-11-12', 'Enter');
+
+    expect(page.setDayOpen.mock.calls).toEqual([]);
+  });
+
+  it.each<{ reason: BookingAdminFailure; detail: string; reads: number }>([
+    { reason: 'day-past', detail: 'Ce jour est passé : il ne peut plus être modifié.', reads: 2 },
+    {
+      reason: 'day-in-closure',
+      detail: 'Ce jour est couvert par une fermeture : modifiez-la dans la section Fermetures.',
+      reads: 2,
+    },
+    {
+      reason: 'network',
+      detail: 'Modification impossible : vérifiez votre connexion, puis réessayez.',
+      reads: 1,
+    },
+  ])(
+    'Given the API answers $reason When the 12th is clicked Then « $detail » is told, the cell keeps its state and the month is read $reads time(s)',
+    async ({ reason, detail, reads }) => {
+      const page = await openPage(
+        withDayOpen(() => defer(() => of({ success: false, reason } as const))),
+      );
+
+      await clickDay(page, '2026-11-12');
+
+      expect({
+        toasts: toasts(page),
+        state: calendarDayOn(page.host, '2026-11-12')?.getAttribute('data-state'),
+        reads: page.getAvailabilityCalendar.mock.calls.length,
+        status: collapsed(calendarStatus(page.host)),
+      }).toEqual({
+        toasts: [{ severity: 'error', detail }],
+        state: 'open',
+        reads,
+        status: '',
+      });
+    },
+  );
+});
+
+describe('AdminAvailability: interrupteur des jours fériés', () => {
+  it('Given holidays closed When the calendar renders Then a native toggle button named « Fermer les jours fériés » is pressed and checked', async () => {
+    const page = await openPage();
+    const toggle = holidaysToggle(page.host);
+
+    expect({
+      type: toggle?.getAttribute('type'),
+      name: toggle ? accessibleName(toggle, page.host) : null,
+      pressed: toggle?.getAttribute('aria-pressed'),
+      role: toggle?.getAttribute('role') ?? null,
+      icons: iconsOf(toggle),
+    }).toEqual({
+      type: 'button',
+      name: 'Fermer les jours fériés',
+      pressed: 'true',
+      role: null,
+      icons: ['solid-check'],
+    });
+  });
+
+  it('Given holidays open When the calendar renders Then the toggle is not pressed and shows no check', async () => {
+    const page = await openPage(
+      withCalendar(() => of(aCalendarMonthOf('2026-11', { closePublicHolidays: false }))),
+    );
+    const toggle = holidaysToggle(page.host);
+
+    expect({
+      name: toggle ? accessibleName(toggle, page.host) : null,
+      pressed: toggle?.getAttribute('aria-pressed'),
+      icons: iconsOf(toggle),
+    }).toEqual({ name: 'Fermer les jours fériés', pressed: 'false', icons: [] });
+  });
+
+  it('Given holidays closed When the toggle is pressed Then the setting is written once, the month is read again, the holiday opens, the label stays and the change is announced', async () => {
+    const page = await openPage(holidaysServer());
+
+    await pressHolidaysToggle(page);
+    const toggle = holidaysToggle(page.host);
+
+    expect({
+      writes: page.setClosePublicHolidays.mock.calls,
+      reads: page.getAvailabilityCalendar.mock.calls,
+      pressed: toggle?.getAttribute('aria-pressed'),
+      name: toggle ? accessibleName(toggle, page.host) : null,
+      holiday: dayName(page.host, '2026-11-11'),
+      status: collapsed(calendarStatus(page.host)),
+      toasts: toasts(page),
+    }).toEqual({
+      writes: [[false]],
+      reads: [[null], [null]],
+      pressed: 'false',
+      name: 'Fermer les jours fériés',
+      holiday: 'mercredi 11 novembre 2026, férié (Armistice 1918) rouvert, 4 créneaux',
+      status: 'Jours fériés ouverts selon la semaine type.',
+      toasts: [],
+    });
+  });
+
+  it('Given holidays opened by the toggle When it is pressed again Then they are closed again and announced so', async () => {
+    const page = await openPage(holidaysServer());
+
+    await pressHolidaysToggle(page);
+    await pressHolidaysToggle(page);
+
+    expect({
+      writes: page.setClosePublicHolidays.mock.calls,
+      pressed: holidaysToggle(page.host)?.getAttribute('aria-pressed'),
+      status: collapsed(calendarStatus(page.host)),
+    }).toEqual({
+      writes: [[false], [true]],
+      pressed: 'true',
+      status: 'Jours fériés fermés.',
+    });
+  });
+
+  it('Given the setting being written When the toggle is pressed again Then it is unavailable, nothing more is written, and it is available again after the answer', async () => {
+    const answer = new Subject<BookingAdminResult<boolean>>();
+    const page = await openPage(holidaysServer(() => answer));
+
+    await pressHolidaysToggle(page);
+    await pressHolidaysToggle(page);
+    const meanwhile = {
+      writes: page.setClosePublicHolidays.mock.calls.length,
+      unavailable: holidaysToggle(page.host)?.getAttribute('aria-disabled'),
+    };
+    answer.next({ success: true, data: false });
+    answer.complete();
+    await settleBounded(page.fixture);
+
+    expect({
+      meanwhile,
+      unavailable: holidaysToggle(page.host)?.getAttribute('aria-disabled') ?? null,
+    }).toEqual({ meanwhile: { writes: 1, unavailable: 'true' }, unavailable: null });
+  });
+
+  it('Given the API cannot be reached When the toggle is pressed Then the error is told, the toggle keeps the server setting and the month is not read again', async () => {
+    const page = await openPage(
+      holidaysServer(() => defer(() => of({ success: false, reason: 'network' } as const))),
+    );
+
+    await pressHolidaysToggle(page);
+
+    expect({
+      toasts: toasts(page),
+      pressed: holidaysToggle(page.host)?.getAttribute('aria-pressed'),
+      reads: page.getAvailabilityCalendar.mock.calls.length,
+      status: collapsed(calendarStatus(page.host)),
+    }).toEqual({
+      toasts: [
+        {
+          severity: 'error',
+          detail: 'Réglage des jours fériés impossible : vérifiez votre connexion, puis réessayez.',
+        },
+      ],
+      pressed: 'true',
+      reads: 1,
+      status: '',
+    });
+  });
+});
+
+describe('AdminAvailability: rendez-vous sur un jour fermé', () => {
+  const warningOf = (host: HTMLElement): HTMLElement | null =>
+    byTestId(calendar(host), 'admin-calendar-booking-warning');
+
+  it('Given one confirmed booking on the 12th When the 12th is closed Then it is closed anyway and the status warns, with a link to the bookings', async () => {
+    const page = await openPage(withBookings(() => of([BOOKING_ON_12TH])));
+
+    await clickDay(page, '2026-11-12');
+    const warning = warningOf(page.host);
+    const link = warning && byTestId(warning, 'admin-calendar-booking-warning-link');
+
+    expect({
+      reads: page.getBookings.mock.calls,
+      state: calendarDayOn(page.host, '2026-11-12')?.getAttribute('data-state'),
+      warning: collapsed(warning),
+      announced: warning !== null && calendarStatus(page.host)?.contains(warning) === true,
+      link: link?.tagName,
+      href: link?.getAttribute('href'),
+      linkName: link ? accessibleName(link, page.host) : null,
+    }).toEqual({
+      reads: [['upcoming']],
+      state: 'closed',
+      warning:
+        '1 rendez-vous reste prévu le jeudi 12 novembre 2026 : annulez-le depuis Rendez-vous si besoin.',
+      announced: true,
+      link: 'A',
+      href: '/admin/rendez-vous',
+      linkName: 'Rendez-vous',
+    });
+  });
+
+  it('Given two confirmed bookings on the 12th in Paris time When the 12th is closed Then the warning is in the plural', async () => {
+    const page = await openPage(withBookings(() => of([BOOKING_ON_12TH, BOOKING_AFTER_MIDNIGHT])));
+
+    await clickDay(page, '2026-11-12');
+
+    expect(collapsed(warningOf(page.host))).toBe(
+      '2 rendez-vous restent prévus le jeudi 12 novembre 2026 : annulez-les depuis Rendez-vous si besoin.',
+    );
+  });
+
+  it('Given a booking on the 12th only When the 16th is closed Then no warning is shown', async () => {
+    const page = await openPage(withBookings(() => of([BOOKING_ON_12TH])));
+
+    await clickDay(page, '2026-11-16');
+
+    expect({
+      state: calendarDayOn(page.host, '2026-11-16')?.getAttribute('data-state'),
+      warning: warningOf(page.host),
+    }).toEqual({ state: 'closed', warning: null });
+  });
+
+  it('Given the bookings never answer When the page opens Then the calendar shows its month', async () => {
+    const page = await openPage(withBookings(() => NEVER));
+
+    expect({
+      crash: page.crash,
+      month: monthLabel(page.host),
+      days: calendarDays(page.host).length,
+      reads: page.getBookings.mock.calls,
+    }).toEqual({ crash: null, month: 'Novembre 2026', days: 30, reads: [['upcoming']] });
+  });
+
+  it('Given the bookings cannot be read When the 12th is closed Then it is closed without warning nor toast', async () => {
+    const page = await openPage(withBookings(() => throwError(() => new Error('down'))));
+
+    await clickDay(page, '2026-11-12');
+
+    expect({
+      crash: page.crash,
+      state: calendarDayOn(page.host, '2026-11-12')?.getAttribute('data-state'),
+      warning: warningOf(page.host),
+      toasts: toasts(page),
+    }).toEqual({ crash: null, state: 'closed', warning: null, toasts: [] });
+  });
+});
+
+describe('AdminAvailability: rechargement du calendrier', () => {
+  it('Given the calendar When a closure is added Then the month is read again', async () => {
+    const page = await openPage();
+
+    await fillClosure(page, { startsOn: '2026-12-01', endsOn: '2026-12-02' });
+    await submitClosure(page);
+
+    expect(page.getAvailabilityCalendar.mock.calls).toEqual([[null], [null]]);
+  });
+
+  it('Given the calendar When a closure is deleted Then the month is read again', async () => {
+    const page = await openPage();
+
+    await askDeletion(page, CHRISTMAS_PERIOD);
+    await answer(page, dialogTitled(page.host, DELETE_HEADING), 'confirm');
+
+    expect(page.getAvailabilityCalendar.mock.calls).toEqual([[null], [null]]);
+  });
+
+  it('Given December shown When a closure is added Then December is read again by name', async () => {
+    const page = await openPage();
+
+    await press(page, calendar(page.host), 'admin-calendar-next');
+    await fillClosure(page, { startsOn: '2026-12-01', endsOn: '2026-12-02' });
+    await submitClosure(page);
+
+    expect(page.getAvailabilityCalendar.mock.calls).toEqual([[null], ['2026-12'], ['2026-12']]);
+  });
+
+  it('Given an added closure refused When the API answers an error Then the month is not read again', async () => {
+    const page = await openPage(
+      spies({
+        createClosure: vi.fn<BookingGateway['createClosure']>(() =>
+          defer(() => of({ success: false, reason: 'invalid' } as const)),
+        ),
+      }),
+    );
+
+    await fillClosure(page, { startsOn: '2026-12-01', endsOn: '2026-12-02' });
+    await submitClosure(page);
+
+    expect(page.getAvailabilityCalendar.mock.calls).toEqual([[null]]);
+  });
+
+  it('Given the week edited When it is saved Then the month is read again for its slot counts', async () => {
+    const page = await openPage();
+
+    await toggleSlots(page, 'Mardi', '18:00');
+    await save(page);
+
+    expect(page.getAvailabilityCalendar.mock.calls).toEqual([[null], [null]]);
   });
 });
