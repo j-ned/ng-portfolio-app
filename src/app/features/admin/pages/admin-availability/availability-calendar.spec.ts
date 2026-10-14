@@ -626,6 +626,73 @@ describe('AvailabilityCalendar: fermer ou rouvrir un jour', () => {
   });
 });
 
+const decemberSlowFirst = (): BookingGateway['getAvailabilityCalendar'] => {
+  let decemberReads = 0;
+  return (month) => {
+    if (month !== '2026-12') return byMonth(month);
+    decemberReads += 1;
+    return decemberReads === 1
+      ? NEVER
+      : defer(() => of(aCalendarMonthOf('2026-12', { closePublicHolidays: false })));
+  };
+};
+
+describe('AvailabilityCalendar: relecture pendant un changement de mois', () => {
+  it('Given December on its way When the holidays setting is written Then December is read again after the write and the switch is free again', async () => {
+    const opened = await openWriting({ getAvailabilityCalendar: decemberSlowFirst() });
+
+    opened.calendar.goToMonth('2026-12', null);
+    await flush();
+    opened.calendar.setHolidaysClosed(false);
+    await flush();
+
+    expect({
+      reads: opened.read.mock.calls,
+      saving: opened.calendar.holidaysSaving(),
+      month: opened.calendar.view()?.month,
+      shown: opened.calendar.view()?.closePublicHolidays,
+    }).toEqual({
+      reads: [[null], ['2026-12'], ['2026-12']],
+      saving: false,
+      month: '2026-12',
+      shown: false,
+    });
+  });
+
+  it('Given December on its way When a day is refused as past Then December is read again after the refusal', async () => {
+    const opened = await openWriting({
+      getAvailabilityCalendar: decemberSlowFirst(),
+      setDayOpen: () => refused('day-past'),
+    });
+
+    opened.calendar.goToMonth('2026-12', null);
+    await flush();
+    opened.calendar.toggleDay('2026-11-12');
+    await flush();
+
+    expect({
+      writes: opened.setDayOpen.mock.calls.length,
+      reads: opened.read.mock.calls,
+      month: opened.calendar.view()?.month,
+    }).toEqual({ writes: 1, reads: [[null], ['2026-12'], ['2026-12']], month: '2026-12' });
+  });
+
+  it('Given December on its way When the page asks a reload Then December is read again after the request', async () => {
+    const opened = await openWriting({ getAvailabilityCalendar: decemberSlowFirst() });
+
+    opened.calendar.goToMonth('2026-12', '2026-12-12');
+    await flush();
+    opened.calendar.reload();
+    await flush();
+
+    expect({
+      reads: opened.read.mock.calls,
+      month: opened.calendar.view()?.month,
+      focusDate: opened.calendar.focusDate(),
+    }).toEqual({ reads: [[null], ['2026-12'], ['2026-12']], month: '2026-12', focusDate: null });
+  });
+});
+
 describe('AvailabilityCalendar: jours fériés', () => {
   const holidaysServer = (initial: boolean): Writes => {
     let closed = initial;

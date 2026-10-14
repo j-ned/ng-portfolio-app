@@ -30,6 +30,11 @@ const isMonthOutOfRange = (err: unknown): boolean => {
   );
 };
 
+type HolidaysPhase =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'writing' }
+  | { readonly kind: 'rereading'; readonly token: number };
+
 const without = (dates: ReadonlySet<string>, date: string): ReadonlySet<string> =>
   new Set([...dates].filter((candidate) => candidate !== date));
 
@@ -41,18 +46,19 @@ export class AvailabilityCalendar {
 
   private readonly _month = signal<string | null>(null);
   private readonly _focusDate = signal<string | null>(null);
+  // Relire par les paramètres : `reload()` ne fait rien tant qu'une lecture est en cours.
+  private readonly _rereadToken = signal(0);
   // Écrit à chaque réponse : la ressource se vide au changement de mois, l'ancien doit rester affiché.
   private readonly _shown = signal<CalendarMonth | null>(null);
   private readonly _pending = signal<ReadonlySet<string>>(new Set());
-  private readonly _holidaysPhase = signal<'idle' | 'writing' | 'rereading'>('idle');
+  private readonly _holidaysPhase = signal<HolidaysPhase>({ kind: 'idle' });
   private readonly _announcement = signal('');
   private readonly _bookingWarning = signal<BookingWarning | null>(null);
 
   private readonly monthResource = rxResource({
-    params: () => ({ month: this._month() }),
-    stream: ({ params }) => {
-      const rereadingHolidays = this._holidaysPhase() === 'rereading';
-      return this.gateway.getAvailabilityCalendar(params.month).pipe(
+    params: () => ({ month: this._month(), token: this._rereadToken() }),
+    stream: ({ params }) =>
+      this.gateway.getAvailabilityCalendar(params.month).pipe(
         tap((month) => this._shown.set(month)),
         catchError((err: unknown) => {
           if (params.month === null || !isMonthOutOfRange(err)) return throwError(() => err);
@@ -60,11 +66,8 @@ export class AvailabilityCalendar {
           this._month.set(null);
           return EMPTY;
         }),
-        finalize(() => {
-          if (rereadingHolidays) this._holidaysPhase.set('idle');
-        }),
-      );
-    },
+        finalize(() => this.endHolidaysRereadAt(params.token)),
+      ),
   });
 
   private readonly upcomingBookings = rxResource({
@@ -93,7 +96,7 @@ export class AvailabilityCalendar {
   readonly busy = computed(() => this.monthResource.isLoading() && this._shown() !== null);
   readonly focusDate = this._focusDate.asReadonly();
   readonly pending = this._pending.asReadonly();
-  readonly holidaysSaving = computed(() => this._holidaysPhase() !== 'idle');
+  readonly holidaysSaving = computed(() => this._holidaysPhase().kind !== 'idle');
   readonly announcement = this._announcement.asReadonly();
   readonly bookingWarning = this._bookingWarning.asReadonly();
 
@@ -105,7 +108,7 @@ export class AvailabilityCalendar {
   // La date de navigation ne sert qu'une fois : gardée, elle reprendrait le focus à chaque nouvelle vue.
   reload(): void {
     this._focusDate.set(null);
-    this.monthResource.reload();
+    this.reread();
   }
 
   toggleDay(date: string): void {
@@ -121,7 +124,7 @@ export class AvailabilityCalendar {
         if (!result.success) {
           this.toast.add({ severity: 'error', detail: dayFailureMessage(result.reason) });
           if (result.reason === 'day-past' || result.reason === 'day-in-closure') {
-            this.monthResource.reload();
+            this.reread();
           }
           return;
         }
@@ -134,23 +137,34 @@ export class AvailabilityCalendar {
   setHolidaysClosed(value: boolean): void {
     if (this.holidaysSaving()) return;
     this._focusDate.set(null);
-    this._holidaysPhase.set('writing');
+    this._holidaysPhase.set({ kind: 'writing' });
     this.gateway
       .setClosePublicHolidays(value)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((result) => {
         if (!result.success) {
-          this._holidaysPhase.set('idle');
+          this._holidaysPhase.set({ kind: 'idle' });
           this.toast.add({ severity: 'error', detail: holidaysFailureMessage(result.reason) });
           return;
         }
-        this._holidaysPhase.set('rereading');
-        this.monthResource.reload();
+        this._holidaysPhase.set({ kind: 'rereading', token: this.reread() });
         this._announcement.set(
           result.data ? 'Jours fériés fermés.' : 'Jours fériés ouverts selon la semaine type.',
         );
         this._bookingWarning.set(null);
       });
+  }
+
+  private reread(): number {
+    this._rereadToken.update((token) => token + 1);
+    return this._rereadToken();
+  }
+
+  private endHolidaysRereadAt(token: number): void {
+    const phase = this._holidaysPhase();
+    if (phase.kind === 'rereading' && token >= phase.token) {
+      this._holidaysPhase.set({ kind: 'idle' });
+    }
   }
 
   private replaceDay(answer: CalendarDay): void {

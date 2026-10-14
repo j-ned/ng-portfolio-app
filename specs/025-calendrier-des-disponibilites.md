@@ -2014,3 +2014,34 @@ Correctifs du 2026-10-14 sur `420e0ba` (non commités), TDD : test rouge d'abord
    - RED : `admin-month-grid.spec.ts` › clavier dans le mois › « Given the 12th focused When $key is pressed with $modifier Then the grid leaves it to the browser » (7 cas : Alt+←, Alt+→, Ctrl+Home, Meta+End, Maj+↓, Maj+PageDown, Ctrl+PageUp) → 7 échecs, 41 passés (`prevented: true`, focus déplacé ou mois demandé).
 
 **GREEN** : `pnpm test --include=<les deux specs>` → 2 fichiers, 99 tests passés. Gates : `pnpm test; echo $?` → 254 fichiers, 4782 tests passés, `0` ; `pnpm lint; echo $?` → « All files pass linting. », `0` ; `pnpm run build --configuration production; echo $?` → 9 routes prérendues, `0`.
+
+5. **Relecture perdue pendant un changement de mois (re-revue, point 1, sur `a9ae949`).** `ResourceImpl.reload()` ne fait rien quand une lecture est en cours. Les trois `reload()` de la facade sont remplacés par un jeton de relecture : un compteur, incrémenté à chaque relecture demandée et porté par les `params` de la ressource (`{ month, token }`). Toute relecture demandée relance donc une lecture postérieure à la demande, et le flux annule celle qui est en vol. L'interrupteur garde le jeton pris au succès du `PUT` (phase `{ kind: 'rereading', token }`) et revient à `idle` à la fin (réponse, erreur ou annulation) de la première lecture dont le jeton est supérieur ou égal. Une lecture lancée avant le `PUT` et annulée ne le libère pas. Le comportement `month_out_of_range` est inchangé.
+   - RED : `availability-calendar.spec.ts` › relecture pendant un changement de mois, 3 échecs pour 51 passés : (a) `setHolidaysClosed` réussi pendant le `goToMonth('2026-12')` en cours → lectures reçues `[[null], ['2026-12']]`, `saving: true`, mois affiché `2026-11` ; (b) refus `day-past` pendant ce changement → pas de relecture de décembre ; (c) `reload()` public pendant ce changement → pas de relecture.
+   - GREEN : le spec, 54 tests passés. Gates : `pnpm test; echo $?` → 254 fichiers, 4785 tests passés, `0` ; `pnpm lint; echo $?` → « All files pass linting. », `0` ; `pnpm run build --configuration production; echo $?` → 9 routes prérendues, `0`.
+
+#### Re-revue des correctifs (`420e0ba..a9ae949`)
+
+Revue du 2026-10-14, limitée à `git diff 420e0ba..a9ae949` (4 fichiers de code ou de test, la doublure et cette spec).
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test`, exit 0 : 254 fichiers, 4782 tests passés, soit les 13 neufs) / lint ✅ (`pnpm lint`, exit 0) / build ✅ (`pnpm run build --configuration production`, exit 0) / image ✅ (`docker build -t ng-portfolio-app:review2 .`, exit 0).
+**Checks mécaniques** : checker non vendoré, greps à la main sur le diff : 0 hit d'archéologie, plus aucun commentaire de deux lignes, aucun motif interdit.
+**Warnings de gate** : aucun nouveau (a) ; les deux (b) de la revue initiale (`404 /api/config`, style Signal Forms bloqué par la CSP) restent présents et hors diff.
+**Rendu compilé** : N/A (aucun gabarit modifié)
+**Preuve de verify runtime** : ❌ image `review2` derrière `ci/api-stub`, Playwright jetable avec latence injectée par `page.route`. (1) Cas nominal (`PUT settings` 300 ms, relecture 1,2 s) : l'interrupteur reste `aria-disabled="true"` pendant la relecture, un appui y est ignoré, puis il se libère : ✅. (2) Clavier : Maj+→, Alt+↓ et Ctrl+End ne déplacent plus rien, → et ↓ continuent : ✅. (3) **Course** (`PUT settings` 800 ms, « Mois suivant » cliqué 150 ms après l'interrupteur, lecture du mois 2,5 s) : le `PUT` répond pendant la lecture du mois, et l'interrupteur reste ensuite **`aria-disabled="true"` pour de bon** (encore vrai 7 s après l'arrivée du mois, un nouvel appui reste ignoré) : ❌ (point 1).
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Conventions Angular 20** : ✅ (phase en `signal`, `holidaysSaving` en `computed`, aucune `effect()`)
+**Cross-platform** : N/A
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌ (point 1 : le correctif de l'interrupteur introduit un blocage)
+
+Constats :
+- **Point 1 de la revue initiale levé.** Les trois commentaires tiennent sur une ligne de WHY.
+- **Mois devenu passé : correct.** Un `400 month_out_of_range` sur un mois nommé renvoie au mois courant (`_month` à `null`, focus effacé). Le mois courant refusé, lui, reste une erreur, sans boucle. Un `500` garde le mois demandé pour « Réessayer ». Tests en RED d'abord.
+- **`HttpErrorResponse` lue par la facade (question de l'implémenteur) : acceptable, non bloquant.** La facade est instance-scopée au niveau de la page (`pages/`), ce qui correspond à la « gestion locale dans le smart component » que prévoit le CLAUDE.md. Le contrat F1 propage l'erreur de lecture brute, et `@angular/common/http` est un import du framework, pas de `infra/`. Réserve : `isMonthOutOfRange` recopie hors de `infra` la connaissance du format d'erreur de l'API (`status`, champ `error`), déjà portée par `apiErrorCode`. Ce sont deux sources à garder alignées. Plus propre, plus tard : la gateway traduit ce cas en une raison du domaine.
+- **Modificateurs : correct.** Ils sont ignorés avant tout `preventDefault`. Ignorer Maj est justifié (Maj+PageUp/PageDown réservés par l'APG au changement d'année).
+
+**Points à corriger** :
+1. **Bloquant, régression introduite par le correctif** : `src/app/features/admin/pages/admin-availability/availability-calendar.ts:148` (avec `:53-65`). `monthResource.reload()` est **sans effet quand une lecture est déjà en cours**. Angular `ResourceImpl.reload()` renvoie `false` si `status` vaut `'loading'`, ce qui est le cas pendant un changement de mois. La lecture en vol a été lancée avant le passage en `rereading`, et `rereadingHolidays` y vaut `false`. Son `finalize` ne remet donc pas la phase à `idle`, et aucune autre lecture ne démarre. L'interrupteur reste `aria-disabled` jusqu'à la prochaine navigation ou au prochain rechargement, et le mois affiché peut dater d'avant l'écriture du réglage. Scénario reproduit au navigateur : interrupteur, puis « Mois suivant » pendant le `PUT settings`. Correctif attendu : un `PUT` réussi doit toujours aboutir à une lecture **lancée après lui**, puis à `idle`. Par exemple, si `reload()` renvoie `false`, programmer une relecture à la fin de la lecture en vol, ou relancer la lecture par un changement de paramètres (jeton de relecture dans `params`) plutôt que par `reload()`. Ajouter un test de la facade : `setHolidaysClosed` réussi pendant un `goToMonth` en cours, puis `holidaysSaving` revenu à `false` et un mois relu après l'écriture. Même cause, même remède conseillé (non bloquant) pour les autres `reload()` du fichier : refus `day-past`/`day-in-closure` (`:124`) et `reload()` public (`:108`), appelé après une fermeture ou des plages enregistrées. Pendant un changement de mois, ces relectures sont aujourd'hui perdues en silence.
