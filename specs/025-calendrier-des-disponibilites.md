@@ -1187,3 +1187,27 @@ Constats vérifiés et conformes :
 
 **Points à corriger** :
 1. **Bloquant, robustesse / contrat d'usage** — `src/booking/booking-admin.controller.ts:46`, `:103`, `:118`, `:131` : les trois routes neuves restent sous la limite globale de **10 requêtes par minute, par route et par IP** (`ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }])`, clé `@nestjs/throttler` 6.7 = classe + méthode). L'écran du plan fait **un `PUT availability/days/:date` par clic**, autorise plusieurs jours en cours ensemble, et recharge `GET availability/calendar` à chaque navigation de mois (boutons, `PageUp`/`PageDown`, 13 mois parcourables). Prouvé sur l'image : 10 fermetures en rafale → 200, la 11ᵉ → **429** ; parcourir les 13 mois au clavier en moins d'une minute fera de même. Précédent exact dans le repo : `ADMIN_WRITE_THROTTLE` (60/min, ADR-0009) créé parce que les écritures de galerie dépassaient 10. Correctif attendu : `@AdminWriteThrottle()` sur `getCalendar`, `setDayOpen` et `updateSettings` (ou sur ces trois seules méthodes, pas sur la classe, pour laisser les autres routes à 10), commentaire de classe mis à jour, et un test de métadonnées par route comme ceux des contrôleurs d'images.
+
+#### Re-revue du correctif (`eb31c06..83c2aad`)
+
+Revue du 2026-10-14, limitée à `git diff eb31c06..83c2aad` (2 fichiers, commit `83c2aad`) et au replacement du
+journal A3 dans cette spec (`bb3c31f`).
+
+**Verdict** : APPROVED
+**Gates CI locaux** : tests ✅ (`pnpm test`, exit 0 : 66 suites passées, 3 ignorées ; 1584 tests passés, 50 ignorés, soit les 3 tests de métadonnées en plus) / lint ✅ (`pnpm lint`, exit 0, arbre propre après `--fix`) / build ✅ (`pnpm build`, exit 0) / image ✅ (`docker build -t nest-portfolio-app:review .`, exit 0). `tsc --noEmit` : toujours les 4 mêmes erreurs, déjà présentes sur `master` et hors diff.
+**Checks mécaniques** : greps à la main sur le diff : aucun snapshot, `.only` ni `.skip`. L'import `@nestjs/throttler/dist/throttler.constants` du test suit le précédent du repo (`booking.controller.spec.ts`, `profile.controller.spec.ts`, `common/throttle.spec.ts`). Aucun nouvel export.
+**Warnings de gate** : aucun nouveau (a).
+**Rendu compilé** : N/A (API)
+**Preuve de verify runtime** : ✅ image reconstruite sur `83c2aad`, démarrée sur une base jetable migrée par son `CMD` réel, JWT local. 61 `PUT availability/days/:date` en rafale sur 61 dates distinctes : les **60 premiers → 200**, le 61ᵉ → 429 (limite `ADMIN_WRITE_THROTTLE`). 13 `GET availability/calendar` (les 13 mois navigables) → 200 partout. Contre-épreuve : 11 `GET availability/rules` → le 11ᵉ toujours en 429, donc les autres routes restent bien à la limite globale de 10.
+**Score de mutation** : N/A (profil sans outil côté API)
+**Conventions** : ✅
+**Conventions Angular 20+** : N/A (API NestJS)
+**Cross-platform** : N/A
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+Constats :
+- **Point 1 levé.** `@AdminWriteThrottle()` est posé sur les seules méthodes `getCalendar`, `updateSettings` et `setDayOpen`, pas sur la classe. Le commentaire de classe dit maintenant quelles routes en relèvent et pourquoi. Le test `it.each` vérifie, route par route, la limite et la durée lues dans les métadonnées contre `ADMIN_WRITE_THROTTLE` : sans le décorateur, il échouerait.
+- Défaut de spec levé : l'entrée du journal A3 est revenue dans « Journal des tranches », et la description de la tranche A2 est de nouveau d'un seul tenant.
+- Les remarques non bloquantes de la revue initiale (règle férié écrite à deux endroits, `'main'` en littéral dans le `check`, exports prescrits sans consommateur) et le risque résiduel (verrou de création non pris par `setDayOpen`, rendez-vous existant sur un jour fermé, intégration hors CI) restent ouverts, sans bloquer.
