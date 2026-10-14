@@ -484,7 +484,6 @@ code de sortie fait foi.
   ligne insérée en SQL direct (l'effet sur les créneaux d'un férié est prouvé en unitaire, horloge simulée :
   l'intégration tourne sur la date réelle) ; `pnpm db:migrate` sur la base jetable.
 - **Tranche A2 — un jour se ferme ou se rouvre** : migration `0025_availability_override`,
-- **Tranche A3 — l'admin lit le mois résolu et règle les fériés** : GREEN 612 passed / 612 total + 45 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 45 passed / 45 total sur Postgres 17 réel (exit 0), suite complète 1581 passed / 1631 total + 50 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, démarrage réel `node dist/main.js` (routes mappées, 401 sans session, parcours admin vérifié au curl), non commité · refactor : `lastAllowedDay` dérivé de `daysOfMonth(addMonths(monthOf(today), 12))` (une seule arithmétique de mois) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `UpdateBookingSettingsDto`, comme A2
   `listOverrides`, priorité complète de `closedReason`, `toCalendarDay`, `setDayOpen` (état souhaité,
   422 / 409), `PUT availability/days/:date`, `freeSlots` lit les exceptions sous le même `executor`.
   Vérifiable : unitaires (matrices de priorité et d'état souhaité) ; supertest ; intégration : fermer une
@@ -954,6 +953,7 @@ créneaux du férié revenus sous `Date` simulée, sans blocage du pilote Postgr
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
 - **Tranche A2 — un jour se ferme ou se rouvre** : GREEN 543 passed / 543 total + 40 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 40 passed / 40 total sur Postgres 17 réel (exit 0), suite complète 1512 passed / 1557 total + 45 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : `kind` calculé une fois pour `values` et `set`, fermeture couvrante de `toCalendarDay` par filtre puis tri (plus de `reduce`) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `SetDayOpenDto` (le plan disait `@IsBoolean()` seul)
+- **Tranche A3 — l'admin lit le mois résolu et règle les fériés** : GREEN 612 passed / 612 total + 45 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 45 passed / 45 total sur Postgres 17 réel (exit 0), suite complète 1581 passed / 1631 total + 50 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, démarrage réel `node dist/main.js` (routes mappées, 401 sans session, parcours admin vérifié au curl), commité `eb31c06` · refactor : `lastAllowedDay` dérivé de `daysOfMonth(addMonths(monthOf(today), 12))` (une seule arithmétique de mois) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `UpdateBookingSettingsDto`, comme A2
 
 ### A1
 
@@ -1141,3 +1141,49 @@ Application et conteneurs arrêtés, port libéré.
   deux) : lecture seule, aucun invariant entre elles à protéger.
 - Le démarrage réel a tourné sur le `dist` d'avant le refactor de `lastAllowedDay` ; ce refactor est couvert
   par les tests `day_out_of_range` (dont `2027-11-30` accepté) et le `pnpm build` final.
+
+## Review code
+
+### API (A1-A3)
+
+Revue du 2026-10-14, repo `nest-portfolio-app`, branche `feat/booking-calendar`, `git diff origin/master...HEAD`
+(3 commits `bd45c0a`, `f208922`, `eb31c06` sur `c20acdb`, 30 fichiers).
+
+**Verdict** : REJECTED
+**Gates CI locaux** : install ✅ (`pnpm install --frozen-lockfile`, exit 0) / tests ✅ (`pnpm test`, exit 0 : 66 suites passées, 3 ignorées ; 1581 tests passés, 50 ignorés) / `TZ=Pacific/Kiritimati pnpm test -- src/booking` ✅ (exit 0, 612 passés, 45 ignorés) / lint ✅ (`pnpm lint`, exit 0, arbre propre après `--fix`) / build ✅ (`pnpm build`, exit 0) / intégration ✅ (`BOOKING_IT_DATABASE_URL=postgres://postgres:it@127.0.0.1:55433/postgres pnpm test -- booking.integration booking-scheduler.integration` sur `docker.io/postgres:17-alpine`, exit 0, 45 tests sur 45) / image ✅ (`docker build -t nest-portfolio-app:review .`, exit 0). Typecheck : `jest` transpile sans contrôle de type ; `npx tsc --noEmit -p tsconfig.json` sort en 1 sur 4 erreurs, **identiques sur `origin/master`** (worktree `c20acdb` rejoué : `analytics-tracker.service.spec.ts`, `referrer.spec.ts`, `auth.service.spec.ts`, `update-profile.dto.spec.ts`), aucune dans le diff. `pnpm exec drizzle-kit check` : « Everything's fine ».
+**Checks mécaniques** : `aak-checks.sh` non joué (checker Angular, sans objet pour un repo NestJS ; profil API absent : politique d'archéologie non vérifiée, les références ADR des commentaires suivent le style du repo). Greps à la main : aucun `toMatchSnapshot`, `.only`, `.skip` ajouté, aucune boucle générant des `it` (la seule boucle `for` des specs construit une liste de dates dans un helper) ; exports sans consommateur hors de leur fichier : `BookingSetting`, `CalendarDayState`, `DayClosedReason` (prescrits par le plan, non bloquant).
+**Warnings de gate** : (b) déjà présents, hors diff : les 4 erreurs `tsc` ; avis pnpm `approve-builds` ; NOTICE `relation "__drizzle_migrations" already exists` à chaque `db:migrate`. Aucun warning nouveau (a).
+**Rendu compilé** : N/A (API)
+**Preuve de verify runtime** : ✅ image `nest-portfolio-app:master-base` (construite depuis `c20acdb`) : `pnpm db:migrate` sur une base neuve → 24 migrations ; données de niveau `master` posées (7 plages, une fermeture « Congés » 27–28/10, un rendez-vous confirmé le 21/10 09:00). Puis image `review` démarrée sur cette base (`CMD` réel `pnpm db:migrate && node dist/main.js`, `--network host`) : 0024 et 0025 appliquées (26 lignes au journal), empreinte md5 d'`availability_rule` et comptes (7/1/1) **inchangés**, `booking_setting` et `availability_override` vides, trois routes mappées, 401 sans session sur les trois. `GET slots` (sans PII : clés `startsAt`, `endsAt`) : Toussaint absente (défaut vrai sans ligne), 27–28/10 absents, 21/10 réduit à 2 (battement), 25/10 (changement d'heure) à 4. Avec un JWT local : calendrier courant et `2026-11` (Toussaint et Armistice `holiday` nommés, `slotCount` 4), `2027-10` → `nextMonth: null`, `2027-11` / `2026-09` → 400 `month_out_of_range`, `2026-13` et `month` doublé → 400 ; `PUT days` : férié rouvert → `open` + nom, refermé → `holiday` (aucune ligne), 27/10 → 409 `day_in_closure`, 13/10 → 422 `day_in_past`, `2027-11-01` → 422 `day_out_of_range`, `2027-10-31` → 200, `2026-02-30` → 400, `"false"` / `0` / `{}` → 400 ; `PUT settings` false → Toussaint `open` avec nom, true → une ligne `main`. `POST bookings` sur un jour fermé à la main → 422 `slot_unavailable`, aucune insertion. **Et** le 11ᵉ `PUT availability/days/:date` de la minute → **429** (point 1).
+**Score de mutation** : N/A (profil sans outil côté API)
+**Conventions** : ✅
+**Conventions Angular 20+** : N/A (API NestJS)
+**Cross-platform** : N/A
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌ (point 1 : le plan ne traite pas le débit qu'impose un écran à un `PUT` par clic)
+
+Constats vérifiés et conformes :
+- **Fériés** : liste L3133-1 exacte (8 fixes, lundi de Pâques +1, Ascension +39, lundi de Pentecôte +50, dimanches non fériés). `easterSunday` comparé à un algorithme indépendant (Oudin / Tøndering) sur **1900–2400** : 501 dates identiques. Collisions possibles seulement Ascension × 1er mai et × 8 mai (le lundi de Pâques et celui de Pentecôte ne peuvent toucher un fixe) : 2008 « Fête du Travail et Ascension », 2059 / 2070 / 2081 / 2092 « Victoire 1945 et Ascension », dix fériés ces années-là. Année lue dans la date, mémoïsation par année ; la table ne grossit que sur des dates déjà bornées en amont (fenêtre, mois, borne de `setDayOpen`).
+- **Exigence 2** : `closedReason` applique passé → période → exception `closed` → exception `open` → férié sous interrupteur → semaine type, et c'est la **même** fonction qu'appellent `computeFreeSlots` et `toCalendarDay` ; `slotCount` vient du même `templateSlotsOn`, donc le calendrier et la page publique ne peuvent pas diverger (prouvé au runtime : jour fermé absent de `slots` et refusé à la création).
+- **Spec 024** : verrou `pg_advisory_xact_lock` inchangé ; réglage et exceptions lus par `tx` dans le même `Promise.all` que règles, fermetures et rendez-vous (tests unitaires d'ordre après le verrou) ; fenêtre des exceptions = fenêtre du calcul (`toParisDate(now)` → `toParisDate(now + maxAdvanceDays)`) ; `GET slots` sans PII ; 10 créations concurrentes toujours un seul succès (intégration).
+- **Contrat** : codes et corps (`error`) conformes ; ordre des refus passé → borne → fermeture avant toute écriture ; booléens lus bruts par `@Transform(({ obj }) => …)` avant `@IsBoolean()` (écart justifié, la conversion implicite du `ValidationPipe` global ferait de `"false"` un `true`) ; date stricte (`2026-02-30` refusé) ; bornes de mois lexicales sur `YYYY-MM` validé.
+- **Migrations** : deux `CREATE TABLE` neufs, aucune donnée lue ni modifiée, singleton garanti par `check (id = 'main')` (seconde ligne refusée en 23514), pas de ligne amorcée (défaut porté par `DEFAULT_CLOSE_PUBLIC_HOLIDAYS`, relu par la colonne et le service) ; snapshots chaînés (`prevId`), seule table ajoutée à chaque pas. Retour à l'image précédente sans risque : son migrateur ignore les deux entrées plus récentes, les tables restent inertes.
+- **README** : trois routes, borne 168, priorité, fériés, interrupteur, exceptions et calendrier décrits. Code mort : `nextDate` remplacé par `addDays`, boucle intérieure extraite, aucun reste.
+
+**Tests notables** :
+- ✨ `src/booking/french-public-holidays.spec.ts` — Pâques aux bornes du calcul (2285-03-22, 2038-04-25), collision 2008, dimanches non fériés, mémoïsation dans le désordre.
+- ✨ `src/booking/booking.integration.spec.ts` — fermer / rouvrir / férié rouvert sur Postgres réel, `getSlots` et `create` compris ; le mois testé est celui du **prochain férié** (indépendant de la date réelle) et l'interrupteur est posé à faux dans le `beforeEach`.
+- ⚠️ Les suites d'intégration restent hors de toute CI (risque déjà ouvert en 024).
+
+**Duplication / dérivation** :
+- ⚠️ `src/booking/availability.service.ts:145` — la base « férié et interrupteur actif → fermé » de `setDayOpen` (`openByRule`) réécrit la branche férié de `closedReason` (`src/booking/resolve-day.ts:41`) : deux sites pour la même règle. Non bloquant ; dérivable par `closedReason(date, { today, closures: [], overrides: new Map(), closePublicHolidays }) === null`.
+- ⚠️ `src/database/schema/booking.ts:83` — le `check` écrit `'main'` en littéral à côté de `BOOKING_SETTING_ROW_ID` (`:65`). Non bloquant (SQL généré, mais deux sources).
+
+**Risque résiduel** (advisory) :
+- Profil API absent : livraison et monitoring non renseignés. Réversibilité : un retour d'image ne retire pas les deux tables (inertes) ; aucune donnée existante migrée.
+- `setDayOpen` ne prend pas le verrou de création : une fermeture validée pendant une création concurrente peut laisser passer ce rendez-vous (fenêtre de quelques millisecondes, même comportement que `createClosure` en 024). Fermer un jour qui porte déjà un rendez-vous confirmé ne prévient pas le propriétaire et ne l'annule pas (idem fermetures 024) : à dire au front ou à traiter dans un suivi.
+- Non couvert par les gates : intégration hors CI ; écart doc dans cette spec, section « Tranches » : la ligne du journal A3 est insérée au milieu de la description de la tranche A2 (lignes 486–488), à remettre dans « Journal des tranches ».
+
+**Points à corriger** :
+1. **Bloquant, robustesse / contrat d'usage** — `src/booking/booking-admin.controller.ts:46`, `:103`, `:118`, `:131` : les trois routes neuves restent sous la limite globale de **10 requêtes par minute, par route et par IP** (`ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }])`, clé `@nestjs/throttler` 6.7 = classe + méthode). L'écran du plan fait **un `PUT availability/days/:date` par clic**, autorise plusieurs jours en cours ensemble, et recharge `GET availability/calendar` à chaque navigation de mois (boutons, `PageUp`/`PageDown`, 13 mois parcourables). Prouvé sur l'image : 10 fermetures en rafale → 200, la 11ᵉ → **429** ; parcourir les 13 mois au clavier en moins d'une minute fera de même. Précédent exact dans le repo : `ADMIN_WRITE_THROTTLE` (60/min, ADR-0009) créé parce que les écritures de galerie dépassaient 10. Correctif attendu : `@AdminWriteThrottle()` sur `getCalendar`, `setDayOpen` et `updateSettings` (ou sur ces trois seules méthodes, pas sur la classe, pour laisser les autres routes à 10), commentaire de classe mis à jour, et un test de métadonnées par route comme ceux des contrôleurs d'images.
