@@ -1355,6 +1355,70 @@ Avant la tranche : 4701 passed / 4701 total ; après : 4710 passed = 4701 + les 
 `calendar-month-view`, 32 facade, 25 page ; tous des `AssertionError` (`toEqual` / `toBe` / `toBeNull`),
 aucune erreur de harnais, aucun rejet non géré. Typecheck des specs vert. Aucun cache touché par le diff.
 
+### Tranche F5 — zéro violation axe sur le nouvel écran
+
+Front, branche `feat/025-calendrier-disponibilites` (F4 commitée `95a40a2`). Audit axe en navigateur réel
+contre l'image de production (ADR-0025), réseau fermé : l'API de production est rejouée sur la doublure,
+tout autre hôte est bloqué. Aucun code applicatif touché.
+
+**Doublure `ci/api-stub/server.mjs`** (sous `STUB_ADMIN_SESSION`, routes testées avant le 405) :
+- `GET availability/calendar[?month=]` : mois de Paris courant réel (jamais périmé), `previousMonth`
+  `null` au mois courant, `nextMonth` `null` à courant + 12, 400 `month_out_of_range` hors fenêtre, 400 si
+  le format est faux ; `today` = le 5 du mois courant ; états **par jour du mois** (consigne du plan) : 1–4
+  `past` (mois courant), 8 `holiday` « Armistice 1918 », 9 férié rouvert « Victoire 1945 », 12–14
+  `closed-period` « Congés », 16 `closed`, samedis et dimanches `empty`, autres `open` à 4 créneaux ; un
+  jour portant un rendez-vous confirmé à venir (`adminBookings('upcoming')`, date de Paris) n'est jamais
+  `past` ni `closed-period`, pour rester actionnable. Les fériés sont simulés (positions fixes) plutôt que lus
+  dans le calendrier réel : un vrai férié tombe parfois sur un jour passé, un week-end ou la période, et la
+  couverture des six états dépendrait alors de la date d'exécution.
+- `PUT availability/days/:date` `{ open }` → jour résolu : `true` → `open` (4) ou `empty` le week-end,
+  `false` → `closed`, ou `holiday` les 8 et 9 ; 400 si date ou corps invalide.
+- `PUT availability/settings` `{ closePublicHolidays }` → corps renvoyé (400 si non booléen). Sans état :
+  la relecture du mois rend toujours `closePublicHolidays: true` (les workers Playwright tournent en
+  parallèle sur la même doublure, un état partagé ferait dépendre un scénario de l'ordre d'exécution).
+
+**Scénarios**, clair et sombre (`e2e/a11y/scenarios.ts`, `e2e/a11y/booking-states.spec.ts`, describe
+`admin › disponibilités` ; chaque état est atteint par `openAvailability` — grille du mois et grille de
+pastilles visibles, aucun squelette, erreur ni toast — puis asserté avant l'analyse) :
+
+| Scénario | Repère | Assertion d'atteinte avant l'analyse |
+|---|---|---|
+| `/admin/disponibilites` (`ADMIN_PAGES`, repère recalé) | `admin-calendar-grid` | aucun squelette, erreur ni toast |
+| calendrier, tous les états | `admin-calendar-grid` | un jour visible pour chacun des 6 `data-state`, le 9 nommé « rouvert », un seul `aria-current="date"` |
+| jour fermé à la main | `admin-calendar-status` | premier jour `open` cliqué → `data-state="closed"`, statut « Fermé : … » |
+| avertissement rendez-vous | `admin-calendar-booking-warning` | date de Paris du premier rendez-vous confirmé lue dans la réponse `bookings?scope=upcoming` reçue par l'app ; mois suivant si besoin ; jour déjà fermé rouvert d'abord ; clic → fermé, avertissement visible, lien `href="/admin/rendez-vous"` |
+| interrupteur des fériés basculé | `admin-calendar-holidays-toggle` | `aria-pressed="true"`, clic → statut « Jours fériés ouverts selon la semaine type. », écriture finie (`aria-disabled` retiré), relecture finie (`aria-busy` retiré), aucun toast |
+| pastilles allumées | `admin-slot-grid` | « Mardi » choisi, titre « Créneaux du mardi », 08:00 et 08:30 `aria-pressed` faux puis vrais, `savebar-state` « 1 modification non enregistrée » |
+
+Le scénario « plages qui se chevauchent » était déjà retiré en F2 (`2ca30ca`). Le 2026-10-14, le premier
+rendez-vous confirmé tombe le 16 (jour `closed`) : la branche « rouvrir puis fermer » a joué (deux `PUT
+days/2026-10-16`) ; la branche « mois suivant » ne joue qu'en fin de mois.
+
+**Pas de RED : tout passe d'emblée** (tranche d'audit, exception actée en 024 F6). `pnpm a11y` le
+2026-10-14 22:15, 0 failed / 83 total (83 passed, dont 10 nouveaux scénarios ; les 73 existants restent
+verts), exit 0 ; aucune violation WCAG 2.0/2.1/2.2 A et AA, aucun `incomplete` à relire sur les 12
+analyses de l'écran (31 à 32 règles passées chacune). Réseau, relu dans `network.json` de chaque test
+(reporter JSON) : `blocked=0` sur les 12 scénarios de l'écran, chaque appel à l'API rejoué sur la doublure
+(`GET availability/calendar`, `GET bookings?scope=upcoming`, `PUT availability/days/…`, `PUT
+availability/settings`) ; sur la suite entière, seuls blocages : `https://giscus.app/client.js` sur
+`/blog/article-temoin` (existant, hors périmètre).
+
+```text
+$ docker build -t ng-portfolio-app:a11y .; echo $?   → 0
+$ ci/a11y-stack.sh up                                → Pile a11y prête
+$ pnpm a11y; echo $?
+  83 passed (1.2m)
+0
+$ ci/a11y-stack.sh down; echo $?                     → 0
+$ pnpm run a11y:typecheck; echo $?                   → 0
+$ pnpm test; echo $?
+ Test Files  254 passed (254)
+      Tests  4769 passed (4769)
+0
+$ pnpm lint; echo $?                                 → 0
+$ pnpm exec prettier --check e2e ci/api-stub; echo $? → 0
+```
+
 ## Journal des tranches
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
@@ -1364,6 +1428,7 @@ aucune erreur de harnais, aucun rejet non géré. Typecheck des specs vert. Aucu
 - **Tranche F2 — la semaine type se règle en pastilles** : GREEN 1833 passed / 1833 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4574 passed / 4574 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : conversion demi-heure → heure partagée par `toSlotTime` (brouillon et grille, plus de constante de 30 min dupliquée dans `admin-slot-grid`), tables de messages d'échec sorties dans `availability-messages.ts` · verify : PASS (surface `/admin/disponibilites` déjà atteignable et restructurée)
 - **Tranche F3 — le calendrier du mois s'affiche et se parcourt au clavier** : GREEN 1956 passed / 1956 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4701 passed / 4701 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : le clavier de la grille part de la date active plutôt que du bouton qui reçoit la touche (répétition clavier sans perte), navigation sous `min-w-11` · verify : PASS (section neuve sur la surface `/admin/disponibilites` déjà atteignable)
 - **Tranche F4 — un clic ferme ou rouvre un jour, l'interrupteur ferme les fériés** : GREEN 2024 passed / 2024 total (`pnpm test --include='src/app/features/admin/**/*.spec.ts'`, exit 0), suite complète 4769 passed / 4769 total (exit 0), `pnpm lint` exit 0, `pnpm run format:check` exit 0, `pnpm run a11y:typecheck` exit 0, `pnpm run build --configuration production` exit 0, non commité · refactor : aucun (passe manuelle sur le diff, rien à reprendre) · verify : PASS (surface `/admin/disponibilites` déjà atteignable, section calendrier rendue interactive)
+- **Tranche F5 — zéro violation axe sur le nouvel écran** : tranche d'audit, verte d'emblée par nature (exception actée le 2026-10-14, comme 024 F6) · `pnpm a11y` 83 passed / 83 total, exit 0, dont 12 analyses neuves (5 états + page, clair et sombre), aucun `incomplete`, réseau fermé ; `pnpm test` 4769 passed, exit 0 ; doublure `ci/api-stub` étendue (calendrier relatif à la date courante, `PUT days`, `PUT settings`)
 
 ### A1
 
