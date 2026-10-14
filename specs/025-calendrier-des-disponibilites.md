@@ -484,6 +484,7 @@ code de sortie fait foi.
   ligne insérée en SQL direct (l'effet sur les créneaux d'un férié est prouvé en unitaire, horloge simulée :
   l'intégration tourne sur la date réelle) ; `pnpm db:migrate` sur la base jetable.
 - **Tranche A2 — un jour se ferme ou se rouvre** : migration `0025_availability_override`,
+- **Tranche A3 — l'admin lit le mois résolu et règle les fériés** : GREEN 612 passed / 612 total + 45 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 45 passed / 45 total sur Postgres 17 réel (exit 0), suite complète 1581 passed / 1631 total + 50 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, démarrage réel `node dist/main.js` (routes mappées, 401 sans session, parcours admin vérifié au curl), non commité · refactor : `lastAllowedDay` dérivé de `daysOfMonth(addMonths(monthOf(today), 12))` (une seule arithmétique de mois) · écart : `@Transform` sur la valeur brute avant `@IsBoolean()` dans `UpdateBookingSettingsDto`, comme A2
   `listOverrides`, priorité complète de `closedReason`, `toCalendarDay`, `setDayOpen` (état souhaité,
   422 / 409), `PUT availability/days/:date`, `freeSlots` lit les exceptions sous le même `executor`.
   Vérifiable : unitaires (matrices de priorité et d'état souhaité) ; supertest ; intégration : fermer une
@@ -841,6 +842,114 @@ Intégration (`docker.io/postgres:17-alpine` sur 55433) :
 journal) : 8 failed / 40 total — les 8 neufs, sur assertion (journal sans `0025_availability_override`,
 réponses et lignes des écritures, créneaux du jour fermé, codes 409 / 422) ; les 32 autres verts.
 
+### Tranche A3 — l'admin lit le mois résolu et règle les fériés
+
+API `nest-portfolio-app`, branche `feat/booking-calendar` (A2 commitée `f208922`), fichiers sous
+`src/booking/` (74 tests neufs, dont 5 d'intégration ; 2 tests existants recalibrés sur 168 plages ;
+builders existants, aucun neuf).
+
+Signatures figées par les tests (squelettes sans comportement posés : `monthOf` rend `''`, `addMonths` le
+mois inchangé, `daysOfMonth` `[]`, `getCalendar` un mois vide à bornes nulles, `setClosePublicHolidays`
+`false`) :
+
+- `calendar-month.ts` : `monthOf(date: string): string` ; `addMonths(month: string, months: number): string`
+  (négatif accepté) ; `daysOfMonth(month: string): readonly string[]` (dates `YYYY-MM-DD` croissantes).
+  `currentMonth(today)` du plan n'est pas épinglé : avec `today` en date de Paris, il ferait double emploi
+  avec `monthOf` ; la dérivation à Paris est prouvée par `getCalendar` sous horloge simulée.
+- `AvailabilityService.getCalendar(month?: string): Promise<CalendarMonthResponse>`, type exporté du
+  service (champs du contrat d'API, `readonly`). `today` = date de Paris de `now` ; mois absent → mois de
+  `today` ; hors de [mois courant, courant + 12] → `BadRequestException({ error: 'month_out_of_range' })` ;
+  `previousMonth` nul au mois courant, `nextMonth` nul à courant + 12 ; jours par `toCalendarDay`. Lit
+  `listRules`, `listClosures`, `readClosePublicHolidays` et `listOverrides(executor, '<mois>-01',
+  '<dernier jour>')`, une fois chacune, **par le même exécuteur** (le plan ne prescrit pas de transaction ;
+  une transaction pour les quatre passe aussi).
+- `AvailabilityService.setClosePublicHolidays(value: boolean): Promise<boolean>` : `db.insert(booking_setting)
+  .values({ id: 'main', closePublicHolidays: value }).onConflictDoUpdate({ target: id, set })`, clés de
+  `set` exactement `closePublicHolidays` et `updatedAt` (`Date`, précédent `CvService`) ; rend la valeur
+  enregistrée.
+- `BookingAdminController` : `GET availability/calendar` (`month` en query, transmis tel quel, absent →
+  `undefined`), 200, corps = réponse du service ; `PUT availability/settings`, 200, corps
+  `{ closePublicHolidays }` = valeur rendue par le service, appel `setClosePublicHolidays(value)`. Les deux
+  sous le `JwtAuthGuard` de classe.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `calendar-month.spec.ts` (neuf) | 3 | `monthOf` | mois exact |
+| | 8 | `addMonths` : ±1, fin et début d'année, +12, +25, −13, 0 | mois exact |
+| | 8 | `daysOfMonth` : 30, 31, 28, 29, 2100 (28), 2000 (29), octobre et mars des changements d'heure | longueur, 1er, dernier jour |
+| | 4 | février simple et bissextile, 2026-10, 2027-03 | liste complète exacte (chaque date une fois, dans l'ordre) |
+| `availability.service.spec.ts` | 1 | mois courant 2026-11, `now = 2026-11-10T09:00Z` | `month`, `today`, `previousMonth: null`, `nextMonth: '2026-12'`, réglage, 30 dates exactes |
+| | 1 | exception `closed` le 12, `open` le 13, fermeture « Congés » du 24 au 26, Armistice, plages lun.–ven. 09:00–11:00 | `toEqual` de 10 jours : `past`, `open`, `holiday`, `closed`, `open`, `empty` (samedi), `open` la veille de la fermeture, `closed-period` aux deux bornes avec `closure`, `open` le lendemain |
+| | 1 | interrupteur coupé | `closePublicHolidays: false`, Armistice `open` avec son nom |
+| | 2 | 2027-02 et 2028-02 | 28 / 29 jours, premier et dernier |
+| | 3 | mois absent à `2026-11-10T09:00Z`, `2026-10-31T22:30Z`, `2026-10-31T23:30Z` | mois `2026-11` / `2026-10` / `2026-11`, `today` de Paris, `previousMonth: null` |
+| | 5 | bornes : courant, +1 (changement d'année), +6, +12, +12 avec mois courant pris à Paris | `previousMonth` / `nextMonth` exacts, `null` aux bornes |
+| | 5 | courant − 1, courant + 13, 2020-01, 2030-11, octobre quand Paris est déjà en novembre | `BadRequestException`, `month_out_of_range` |
+| | 2 | exceptions du mois | `listOverrides` une fois, `('2026-11-01', '2026-11-30')`, `('2028-02-01', '2028-02-29')` |
+| | 1 | lectures | quatre lectures, une fois chacune, un seul exécuteur |
+| | 2 | `setClosePublicHolidays(false / true)` | valeur rendue, table `booking_setting`, `values({ id: 'main', … })`, cible `id`, `set` = `closePublicHolidays` + `updatedAt` |
+| `booking-admin.controller.spec.ts` | 2 | routes déclarées sur le contrôleur gardé | `GET availability/calendar`, `PUT availability/settings` (métadonnées) |
+| | 2 | sans mois ; `month=2027-02` | 200, corps exact, mois `undefined` / `'2027-02'` transmis |
+| | 9 | `month` : 13, 00, sans zéro, année sur deux chiffres, date complète, mot, vide, deux valeurs, paramètre inconnu | 400 sans appel |
+| | 1 | service refuse | 400, `error: 'month_out_of_range'` |
+| | 2 | `closePublicHolidays` `false`, `true` | 200, `{ closePublicHolidays }`, appel avec le booléen |
+| | 7 | corps vide, `null`, `"false"`, `"true"`, `0`, `1`, champ inconnu | 400 sans appel (valeur lue brute, cf. écart A2) |
+| | 2 (recalibrés) | `PUT availability/rules` | 169 plages → 400 ; 168 plages → 200 (anciennement 51 / 50) |
+| `booking.integration.spec.ts` | 1 | calendrier sans mois, plages tous les jours, réglage à faux | mois de Paris courant, `today`, `previousMonth: null`, `nextMonth` = mois suivant, toutes les dates, `past` avant aujourd'hui et `open` après |
+| | 1 | mois du prochain férié : une exception fermée (par `setDayOpen`), une fermeture « Congés », fériés fermés | `toEqual` des quatre jours : `closed`, `closed-period` avec `closure`, `holiday` avec son nom, `open` ; `slotCount` = `templateSlotsOn` |
+| | 1 | interrupteur coupé puis remis | valeurs rendues, prochain férié `open` puis `holiday` avec son nom, une seule ligne `main` à vrai |
+| | 1 | aucune ligne de réglage | `setClosePublicHolidays(false)` crée la ligne `main`, relue fausse |
+| | 1 | `Date` seule simulée au `2027-11-06T08:00Z` (minuteries réelles pour le pilote Postgres), fériés fermés | `getSlots` : aucun créneau le 2027-11-11, puis 48 après l'interrupteur coupé |
+
+Le mois du calendrier intégré « reflète une plage, une exception, une fermeture et un férié » est le mois
+du **prochain férié** et non le mois courant : l'intégration tourne sur la date réelle et le mois courant
+peut n'avoir aucun férié (octobre 2026). Jours choisis après aujourd'hui et hors fériés dans ce mois.
+
+Contrôles verts par construction : 2 — `addMonths(…, 0)` (mois inchangé du squelette) et 169 plages
+(déjà refusées sous la borne 50) ; ils départageront une implémentation fausse.
+
+Recalibration (`@ArrayMaxSize` 50 → 168, sweep `grep` de `ArrayMaxSize`, `maxItems`, `50 plages`,
+`51 plages`, `length: 50|51` sur `src/` et `test/` de l'API et sur `src/` et `ci/` du front) : seule
+occurrence, `booking-admin.controller.spec.ts` (2 tests recalibrés ci-dessus) ; aucun test mort.
+
+Scaffold dû au GREEN : DTO `calendar-query.dto.ts` et `update-booking-settings.dto.ts` (non importés par
+les tests ; `@Transform` sur la valeur brute avant `@IsBoolean()`, comme `SetDayOpenDto`),
+`@ArrayMaxSize(168)` / `maxItems: 168`.
+
+Tous les tests de cette tranche échouent à ce stade, hors contrôles ci-dessus (RED confirmé via `pnpm test`
+le 2026-10-14 19:28, 70 failed / 1631 total). Détail, code de sortie lu à chaque fois :
+
+```text
+$ pnpm test -- src/booking; echo $?
+Test Suites: 3 failed, 2 skipped, 13 passed, 16 of 18 total
+Tests:       70 failed, 45 skipped, 542 passed, 657 total
+1
+$ TZ=Pacific/Kiritimati pnpm test -- src/booking; echo $?
+Tests:       70 failed, 45 skipped, 542 passed, 657 total
+1
+$ pnpm test; echo $?
+Test Suites: 3 failed, 3 skipped, 63 passed, 66 of 69 total
+Tests:       70 failed, 50 skipped, 1511 passed, 1631 total
+1
+```
+
+Avant la tranche : 1512 passed / 1557 total + 45 skipped, sortie 0. Les 70 échecs (`jest --json`) : 68
+neufs ; le test recalibré « 168 plages » ; et « plages qui se chevauchent → `rules_overlap` », **non
+régressé** : il hérite la réponse unique `mockResolvedValueOnce([])` que le test 168 ne consomme pas tant
+que la borne vaut 50 (`clearAllMocks` ne vide pas les réponses uniques). Contre-épreuve, borne passée à 168
+le temps d'un run puis rétablie : `PUT availability/rules` 18 passed / 18. Nature : toutes des assertions
+(`toBe` sur le statut HTTP — routes absentes, 404 —, `toEqual`, `toHaveLength`, `toHaveBeenCalledTimes`,
+`toBeDefined` des métadonnées, rejet attendu non survenu pour `month_out_of_range`) ; aucune erreur de
+harnais. `npx tsc --noEmit -p tsconfig.json` : 4 erreurs, toutes préexistantes (analytics ×2, auth,
+profile), aucune dans `src/booking` ; `eslint src/booking` 0 ; `prettier --check` vert.
+
+Intégration (`docker.io/postgres:17-alpine` sur 55433) :
+`BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration booking-scheduler.integration; echo $?` →
+5 failed / 45 total, sortie 1 : les 5 neufs, sur assertion (mois `''` du squelette, réglage relu vrai,
+48 créneaux attendus pour 0) ; les 40 autres verts. Contre-épreuve, upsert du réglage écrit à la main le
+temps d'un run puis retiré : les 2 tests qui ne dépendent pas de `getCalendar` passent (ligne créée,
+créneaux du férié revenus sous `Date` simulée, sans blocage du pilote Postgres), les 3 autres restent rouges.
+
 ## Journal des tranches
 
 - **Tranche A1 — les jours fériés sont fermés sur la page publique** : GREEN 465 passed / 465 total + 32 skipped (`pnpm test -- src/booking`, exit 0, aussi sous `TZ=Pacific/Kiritimati`), intégration 32 passed / 32 total sur Postgres 17 réel (exit 0), suite complète 1434 passed / 1471 total + 37 skipped (exit 0), `pnpm lint` exit 0, `pnpm build` exit 0, non commité · refactor : boucle intérieure de `computeFreeSlots` remplacée par `templateSlotsOn` (plus de `stepMinutes`, `isoWeekday` ni `parisWallTimeToUtc` dans le calcul), `nextDate` privé supprimé au profit d'`addDays`
@@ -947,3 +1056,88 @@ $ npx prettier --list-different src/booking src/database/schema   → seulement 
   `null` ou un corps vide répondent 400. À reprendre tel quel pour `PUT availability/settings` en A3.
 - `calendar-month.ts` créé dès A2 avec la seule borne nécessaire à `day_out_of_range` ; aucune fonction
   de mois exportée sans consommateur.
+
+### A3
+
+GREEN le 2026-10-14, API `nest-portfolio-app` branche `feat/booking-calendar` (A2 commitée `f208922`), non
+commité. Tests de `qa` inchangés.
+
+**Fichiers**
+- Créés : `src/booking/dto/calendar-query.dto.ts` (`@IsOptional() @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)`),
+  `src/booking/dto/update-booking-settings.dto.ts` (`@Transform(({ obj }) => obj.closePublicHolidays)` puis
+  `@IsBoolean()` ; champ inconnu refusé par `forbidNonWhitelisted` global).
+- Implémentés (squelettes de `qa`) : `src/booking/calendar-month.ts` (`monthOf` par découpe, `addMonths` et
+  `daysOfMonth` par `Date.UTC` sur des dates calendaires, donc sans fuseau ; `lastAllowedDay` réécrit sur
+  ces fonctions) ; `getCalendar` et `setClosePublicHolidays` dans `src/booking/availability.service.ts`
+  (`today` de Paris, mois absent → mois de `today`, hors [courant, courant + 12] →
+  `BadRequestException({ error: 'month_out_of_range' })` avant toute lecture ; quatre lectures en
+  `Promise.all` sur `this.db`, exceptions du 1er au dernier jour du mois ; chaque jour par
+  `toCalendarDay` ; bornes nulles au mois courant et à courant + 12 ; upsert `insert … values({ id: 'main',
+  closePublicHolidays }) … onConflictDoUpdate({ target: id, set: { closePublicHolidays, updatedAt } })
+  … returning`, valeur relue rendue).
+- Modifiés : `src/booking/booking-admin.controller.ts` (`GET availability/calendar`, `PUT
+  availability/settings` → 200 `{ closePublicHolidays }`, Swagger 200 / 400),
+  `src/booking/dto/replace-availability-rules.dto.ts` (`@ArrayMaxSize(168)`, `maxItems: 168`), `README.md`
+  (section Rendez-vous : trois routes, priorité de résolution, fériés et interrupteur, exceptions par date,
+  calendrier admin ; formatage Prettier du README non conforme avant le diff, laissé tel quel).
+
+**Sorties**
+
+```text
+$ pnpm test -- src/booking; echo $?
+Test Suites: 2 skipped, 16 passed, 16 of 18 total
+Tests:       45 skipped, 612 passed, 657 total
+0
+$ TZ=Pacific/Kiritimati pnpm test -- src/booking; echo $?
+Tests:       45 skipped, 612 passed, 657 total
+0
+$ BOOKING_IT_DATABASE_URL=postgres://postgres:it@127.0.0.1:55433/postgres pnpm test -- booking.integration booking-scheduler.integration; echo $?
+Tests:       45 passed, 45 total
+0
+$ pnpm test; echo $?
+Test Suites: 3 skipped, 66 passed, 66 of 69 total
+Tests:       50 skipped, 1581 passed, 1631 total
+0
+$ pnpm lint; echo $?     → 0
+$ pnpm build; echo $?    → 0
+$ npx tsc --noEmit -p tsconfig.json   → 4 erreurs, toutes préexistantes (analytics ×2, auth, profile), aucune dans src/booking
+```
+
+Démarrage réel (`node dist/main.js`, base `postgres:17-alpine` jetable migrée par `drizzle-kit migrate`,
+env minimal, S3 et SMTP factices, utilisateur inséré en SQL, JWT HS256 local signé avec le secret jetable ;
+plages lun.–dim. 09:00–11:00 posées par `PUT availability/rules`), le 2026-10-14 :
+
+```text
+Mapped {/api/booking/availability/calendar, GET} · {/api/booking/availability/settings, PUT} · {/api/booking/availability/days/:date, PUT}
+GET calendar sans session                → 401
+GET calendar                             → {"month":"2026-10","today":"2026-10-14","previousMonth":null,"nextMonth":"2026-11","closePublicHolidays":true,"days":31 jours}
+                                            2026-10-13 past · 2026-10-14 open (4) · 2026-10-20 open (4)
+GET calendar?month=2026-11               → previousMonth 2026-10, nextMonth 2026-12, 30 jours ;
+                                            2026-11-01 holiday « Toussaint », 2026-11-11 holiday « Armistice 1918 »
+GET calendar?month=2027-10 (+12)         → previousMonth 2027-09, nextMonth null, 31 jours
+GET calendar?month=2027-11 (+13)         → 400 {"error":"month_out_of_range"}
+GET calendar?month=2026-09 (−1)          → 400 {"error":"month_out_of_range"}
+GET calendar?month=2026-13               → 400 validation
+GET slots                                → 2026-10-20 : 4 / 76 ; 2026-11-01 : 0
+PUT days/2026-10-20 {open:false}         → 200 {"date":"2026-10-20","state":"closed","holiday":null,"slotCount":4,"closure":null}
+GET slots                                → 2026-10-20 : 0 / 72
+PUT days/2026-10-20 {open:true}          → 200 {"date":"2026-10-20","state":"open",…}
+GET slots                                → 2026-10-20 : 4 / 76 ; availability_override vide
+PUT settings {closePublicHolidays:false} → 200 {"closePublicHolidays":false}
+GET calendar?month=2026-11               → closePublicHolidays false, 2026-11-01 open « Toussaint » (4)
+GET slots                                → 2026-11-01 : 4 / 80
+PUT settings {closePublicHolidays:true}  → 200 {"closePublicHolidays":true}
+GET slots                                → 2026-11-01 : 0 / 76 ; booking_setting : une ligne main, t, updated_at posé
+PUT settings {"closePublicHolidays":"false"} → 400 ; sans session → 401
+```
+
+Application et conteneurs arrêtés, port libéré.
+
+**Écarts**
+- `UpdateBookingSettingsDto` : valeur brute lue par `@Transform` avant `@IsBoolean()` (le contrat disait
+  `@IsBoolean()` seul), même raison que `SetDayOpenDto` en A2.
+- `currentMonth(today)` du plan non créé : `monthOf(today)` le couvre (cf. plan de test A3).
+- Les quatre lectures de `getCalendar` passent par `this.db` sans transaction (le plan de test admet les
+  deux) : lecture seule, aucun invariant entre elles à protéger.
+- Le démarrage réel a tourné sur le `dist` d'avant le refactor de `lastAllowedDay` ; ce refactor est couvert
+  par les tests `day_out_of_range` (dont `2027-11-30` accepté) et le `pnpm build` final.
