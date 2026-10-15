@@ -56,8 +56,9 @@ Faits vérifiés le 2026-10-15 :
 4. **Secret absent** : un démarrage normal. Une chaîne vide vaut « absente ».
    - Le flux répond 404, l'admin lit `unconfigured` et affiche « Abonnement non configuré : ajoutez
      la variable `BOOKING_FEED_SECRET` », le `POST` répond 409 `feed_not_configured`.
-   - Une valeur **présente mais trop courte** fait échouer le démarrage, comme `JWT_SECRET` : une
-     erreur de saisie doit se voir.
+   - Une valeur **présente mais trop courte** vaut absente et journalise un avertissement qui nomme la
+     variable sans sa valeur : une faute de frappe dans Dokploy ne doit pas couper l'API (décision du
+     2026-10-15).
 5. **404 indistinct** : secret absent, chemin malformé, aucun sel ou jeton faux donnent la même
    `NotFoundException`. Le `path` du corps étant masqué, les corps sont identiques à l'horodatage
    près.

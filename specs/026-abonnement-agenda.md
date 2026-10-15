@@ -88,8 +88,9 @@ La **rotation du secret** invalide tous les liens : c'est documenté, et c'est a
 fuite du secret.
 
 **Variable absente** : le démarrage n'échoue pas (Dokploy ne casse pas), le flux répond 404 et l'admin
-affiche « Abonnement non configuré ». Une valeur **présente mais trop courte** fait échouer le démarrage,
-comme `JWT_SECRET` : une erreur de saisie doit se voir, pas désactiver le flux en silence.
+affiche « Abonnement non configuré ». Une valeur **présente mais trop courte** vaut absente et journalise un
+avertissement qui nomme la variable sans sa valeur (décision du 2026-10-15 : une faute de frappe dans
+Dokploy ne doit pas couper l'API ni les réservations).
 
 La fonction pure `redactUrl` (`src/common/log-redact.ts`) masque le segment du jeton dans pino, dans le
 corps et le log de `HttpExceptionFilter` et dans Sentry. Les requêtes du flux sont en plus exclues du
@@ -721,8 +722,8 @@ Le code de sortie fait foi.
 
 - **Variable oubliée ou mal saisie au déploiement** :
   - absente → flux en 404 et admin « non configuré », sans casse ;
-  - trop courte → l'API ne démarre pas (message Zod qui cite le nom, jamais la valeur), comportement
-    de Dokploy/Swarm sur un conteneur qui sort en erreur non vérifié : copier la valeur avec soin ;
+  - trop courte → traitée comme absente (admin « non configuré ») et avertissement journalisé sans la
+    valeur, l'API démarre (décision du 2026-10-15) ;
   - rotation ou perte du secret → tous les abonnements tombent en 404 jusqu'au remplacement du lien dans
     chaque agenda (documenté au README et dans l'ADR).
 - **Journaux hors de notre contrôle** : le journal d'accès de Traefik devant `api.nedellec-julien.fr`, s'il
@@ -756,3 +757,114 @@ Le code de sortie fait foi.
    réutilisé.
 
 Plus aucune question ouverte.
+
+## Plan de test
+
+### Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar
+
+API `nest-portfolio-app`, branche `feat/booking-feed` (depuis `b2486ce`) : 88 tests neufs (83 unitaires,
+5 d'intégration), dans 7 fichiers neufs et 2 suites existantes complétées (`env.validation.spec.ts`,
+`app-config.service.spec.ts`). Builder partagé `aBooking` ; `createMockDb` ; aucun module Nest pour les purs.
+`to-ics.spec.ts` n'est **pas modifié** et reste vert (sortie de `toIcs` identique à l'octet).
+
+Signatures figées par les tests (squelettes sans comportement posés pour que les suites se chargent :
+retours `''`, `null`, `false`, objets vides, contrôleur sans route, getter `undefined`) :
+
+- `feed-token.ts` : `deriveFeedToken(secret, salt): string`, `createFeedSalt(): string`,
+  `feedTokenMatches(candidate, expected): boolean`. **`timingSafeEqual` importé de `'node:crypto'`** (le
+  spec le double par `jest.mock('node:crypto')` ; `'crypto'` nu échapperait à la doublure). Vecteur figé,
+  calculé par `node -e` : `deriveFeedToken('a'.repeat(32), 'AAAAAAAAAAAAAAAAAAAAAA')` =
+  `XYJXH9MoGdppkZYT0jI3g2rP-qFcqKBWL0budyMj488`.
+- `booking-meeting.ts` : `type Meeting`, `meetingOf(row: Booking): Meeting` (valeurs actuelles du notifier).
+- `to-ics.ts` : `IcsFeedEvent`, `IcsFeed`, `toIcsFeed(feed: IcsFeed): string`.
+- `booking-feed.ts` : `BOOKING_FEED`, `parseFeedFile(file)`, `toFeedEvent(row, siteUrl)`.
+- `booking-feed.service.ts` : `FeedSubscription` (union du plan), `BookingFeedService(@Inject(DRIZZLE) db,
+  config: AppConfigService)`, `renderFeed(file): Promise<string | null>`, `regenerate()`. Forme Drizzle
+  attendue, sur le précédent `AvailabilityService` : lecture du sel `select … from booking_setting where id =
+  'main'` **terminée par `.limit(…)`** (`db.limit` y rend `[{ feedSalt }]`) ; lecture des rendez-vous
+  `select … from booking where … ` **terminée par `.orderBy(…starts_at…)`** ; régénération
+  `insert(bookingSettings).values({ id: 'main', feedSalt, … }).onConflictDoUpdate({ target: id, set: {
+  feedSalt, feedCreatedAt, updatedAt } }).returning(…)` qui rend `[{ feedCreatedAt: Date }]`, sans
+  `closePublicHolidays` ni dans `values` ni dans `set`.
+- `booking-feed.controller.ts` : `@Controller('booking')`, `GET feed/:file`, aucune garde de classe.
+- `AppConfigService.bookingFeedSecret: string | undefined`.
+- `validateEnv` (décision du 2026-10-15) : absente ou `''` → absente sans avertissement ; ≥ 32 → retenue ;
+  **31 caractères → absente, démarrage maintenu, avertissement qui nomme `BOOKING_FEED_SECRET` sans sa
+  valeur** (capté sur `Logger.prototype.warn`, `Logger.warn` ou `console.warn`, au choix de
+  l'implémentation).
+- Corps 404 en A1 : `{ statusCode: 404, error: 'Not Found', message: 'Not Found' }` comparé **hors `path` et
+  `timestamp`** ; le masquage de `path` est l'objet de A2.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `feed-token.spec.ts` | 1 | vecteur figé | jeton exact |
+| | 1 | deux appels | même valeur |
+| | 1 | forme | `^[A-Za-z0-9_-]{43}$`, accepté par `parseFeedFile` |
+| | 2 | autre sel, autre secret | jetons exacts calculés par `node -e` |
+| | 2 | `createFeedSalt` | 22 caractères base64url = 16 octets ; deux tirages différents |
+| | 2 | `feedTokenMatches` égal, un caractère différent | `true`, `false` |
+| | 3 | candidat plus court, plus long, vide | `false`, sans exception, `timingSafeEqual` jamais appelé |
+| | 2 | même longueur, égaux ou non | `timingSafeEqual` appelé une fois |
+| `booking-meeting.spec.ts` | 2 | visio, téléphone | objet `Meeting` exact (libellé, `tel:+33612345678`, aide, lieu) |
+| `to-ics-feed.spec.ts` | 1 | un événement | lignes de contenu exactes du contrat (enveloppe + VEVENT) |
+| | 1 | deux événements | aucune ligne `METHOD`, `ORGANIZER`, `ATTENDEE` |
+| | 4 | `NAME`, `X-WR-CALNAME`, `REFRESH-INTERVAL`, `X-PUBLISHED-TTL` | une seule fois, avant le premier VEVENT |
+| | 1 | deux événements | deux VEVENT, UID dans l'ordre reçu |
+| | 1 | zéro événement | enveloppe seule, exacte |
+| | 1 | virgule, point-virgule, retours à la ligne | `\,` `\;` `\n` |
+| | 3 | un, zéro, description multiligne | CRLF partout et en fin |
+| | 1 | nom et résumé à émojis | lignes physiques ≤ 75 octets, aucun demi-caractère, dépliage fidèle |
+| `booking-feed.spec.ts` | 1 | `BOOKING_FEED` | golden `toEqual` |
+| | 1 | 43 caractères + `.ics` | le jeton |
+| | 10 | 42, 44, `.ICS`, sans suffixe, `+`, `/`, `=`, vide, `.ics.ics`, préfixe de chemin | `null` |
+| | 1 | visio avec téléphone et société | `IcsFeedEvent` exact : UID, `stamp` = `createdAt`, résumé « Appel de cadrage · Marie Dupont », description ligne à ligne, lieu |
+| | 1 | téléphone sans société | une seule ligne téléphone, pas de « Société » (description exacte) |
+| | 1 | visio sans téléphone ni société | description exacte |
+| | 1 | message sur trois lignes | ligne `DESCRIPTION` dépliée exacte, `\n` échappés |
+| | 1 | deux rendus à une minute d'écart (horloge simulée) | flux identique, `DTSTAMP:20261020T071500Z` |
+| | 2 | visio, téléphone | ligne `LOCATION` du flux = celle de l'invitation émise par `BookingNotifier` |
+| `booking-feed.service.spec.ts` | 1 | secret absent | `null`, zéro appel à la base |
+| | 4 | fichiers malformés | `null`, zéro appel à la base |
+| | 2 | aucune ligne, sel `null` | `null`, rendez-vous jamais lus |
+| | 1 | lecture du sel | table `booking_setting`, paramètre `main` |
+| | 2 | jeton d'un autre sel, d'un autre secret | `null`, rendez-vous jamais lus |
+| | 1 | bon jeton | flux qui commence par `BEGIN:VCALENDAR\r\n`, nom du calendrier, UID dans l'ordre de la requête |
+| | 1 | bon jeton | table `booking`, `"ends_at" > now() - make_interval(months => $n)`, `status`, paramètres `confirmed` et `retentionMonths`, aucun littéral d'intervalle, tri par `starts_at` |
+| | 1 | `publicSiteUrl` avec barre finale | `Gérer : https://nedellec-julien.fr/admin/rendez-vous` |
+| | 2 | jeton valide, jeton faux | absent de tout argument passé au builder (SQL rendu compris) |
+| | 1 | `regenerate` sans secret | `ConflictException` `{ error: 'feed_not_configured', message: 'Abonnement non configuré.' }`, zéro appel |
+| | 1 | `regenerate` | insert `booking_setting`, `id: 'main'`, sel de 22 caractères, pas de `closePublicHolidays` ; `{ status: 'active', token: deriveFeedToken(secret, sel), createdAt }` exact |
+| | 1 | upsert | cible `id`, `set` = `feedCreatedAt`, `feedSalt`, `updatedAt` ; même sel qu'en `values` |
+| | 1 | deux régénérations | sels et jetons différents |
+| `booking-feed.controller.spec.ts` (supertest, service réel, base simulée) | 1 | bon jeton | 200, corps qui commence par `BEGIN:VCALENDAR\r\n`, UID présent |
+| | 1 | bon jeton | `text/calendar; charset=utf-8`, `no-store`, `noindex, nofollow` |
+| | 5 | secret absent, `.txt`, `%2F` dans le jeton, aucun sel, jeton faux | 404, corps égal hors `path`/`timestamp`, aucun `VCALENDAR`, rendez-vous jamais lus |
+| | 1 | contrôleur | aucune garde |
+| `env.validation.spec.ts` | 2 | absente, `''` | pas de valeur, aucun avertissement |
+| | 2 | 32 et 64 caractères | valeur retenue, aucun avertissement |
+| | 1 | 31 caractères | démarrage maintenu, valeur absente |
+| | 1 | 31 caractères | avertissement nommant la variable, sans la valeur ni ses 12 premiers caractères |
+| `app-config.service.spec.ts` | 2 | fourni, absent | getter = valeur, `undefined` |
+| `booking-feed.integration.spec.ts` (base dédiée `booking_feed_it`) | 1 | migrations | `0026_booking_feed` au journal ; sel sans date refusé `23514` `booking_setting_feed_check` |
+| | 1 | `regenerate()` puis `GET` | 200 `text/calendar` ; UID = fini il y a 150 jours puis à venir ; ni l'annulé à venir ni le fini il y a 210 jours |
+| | 1 | deux `regenerate()` | jetons différents, ancien 404, nouveau 200 |
+| | 1 | même sel, autre secret | 200 avec le premier secret, 404 avec l'autre |
+| | 1 | aucun lien créé | jeton bien formé → 404 |
+
+Preuves (code de sortie lu après chaque commande) :
+
+- `pnpm test -- src/booking src/config; echo $?` → `1` ; **53 failed / 794 total** (691 passed, 50 skipped).
+- `pnpm test; echo $?` → `1` ; **53 failed / 1807 total** (1699 passed, 55 skipped) ; les 8 suites en échec
+  sont les 6 neuves et les 2 complétées, et chaque échec est un test neuf.
+- Intégration (Postgres 17 jetable sur `55433`) : `BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration
+  booking-scheduler.integration booking-feed.integration; echo $?` → `1` ; **4 failed / 50 total** ;
+  `booking.integration` et `booking-scheduler.integration` verts.
+- Nature des échecs : uniquement des assertions (`toBe`, `toEqual`, `toHaveLength`, `toContain`,
+  `toHaveProperty`, `toHaveBeenCalledTimes`, statut HTTP) ; aucune erreur de compilation ts-jest, aucun
+  `TypeError`, aucun module introuvable. Prettier et ESLint propres sur les fichiers de test.
+- Verts par construction avant GREEN (gardes sur le squelette, discriminants une fois le code écrit) : rejets
+  de `parseFeedFile`, `feedTokenMatches` à longueurs différentes, `renderFeed` → `null`, absence de
+  `METHOD`, absence de garde, variable absente ou vide, getter absent, « aucun lien créé » en intégration.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-15 18:56, 53 failed / 1807 total).
