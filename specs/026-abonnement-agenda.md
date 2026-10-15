@@ -936,6 +936,77 @@ Preuves (code de sortie lu après chaque commande) :
 Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
 2026-10-15 19:15, 25 failed / 1840 total).
 
+### Tranche A3 — l'admin lit, crée et régénère le lien
+
+API `nest-portfolio-app`, branche `feat/booking-feed` (après `49a9469`) : 28 tests neufs (22 unitaires, 6
+d'intégration), tous dans des suites existantes complétées : `booking-feed.service.spec.ts`,
+`booking-admin.controller.spec.ts`, `booking-notifier.service.spec.ts`, `booking-feed.integration.spec.ts`.
+Sur consigne de l'orchestrateur, la mention d'annulation (`MANUAL_CALENDAR_NOTE`, tranche A4 du plan) est
+jouée dans cette tranche.
+
+Signatures figées (squelette sans comportement : `readSubscription` rend un objet vide) :
+
+- `BookingFeedService.readSubscription(): Promise<FeedSubscription>`. Forme Drizzle attendue, sur le précédent
+  de `renderFeed` : `select … from booking_setting where id = 'main'` **terminée par `.limit(…)`**, qui rend
+  `[{ feedSalt, feedCreatedAt }]` ; un seul `from`.
+- `BookingAdminController` injecte `BookingFeedService` ; `GET feed-subscription` (200) et
+  `POST feed-subscription` (201, `@Body` absent), `Cache-Control: no-store`, aucun décorateur de throttle
+  (limite globale, comme les autres routes admin hors calendrier), garde JWT de classe inchangée.
+- Introductions visiteur de l'annulation, texte exact : `Votre rendez-vous est bien annulé. <NOTE>` et
+  `Je dois malheureusement annuler notre rendez-vous. <NOTE> Vous pouvez réserver un autre créneau sur
+  <site>/rendez-vous.`, avec `<NOTE>` = « Si votre agenda avait enregistré l’invitation, le rendez-vous en est
+  retiré ; si vous l’y aviez ajouté à la main, supprimez-le. » (apostrophes typographiques). Lue dans le
+  premier `<p class="muted">` du gabarit ; l'égalité stricte exclut l'ancienne promesse sans test négatif.
+
+401 : prouvé par métadonnées (`GUARDS_METADATA` de classe = `[JwtAuthGuard]`, test existant, et routes
+déclarées sur ce contrôleur), comme les autres routes admin ; aucun spec du dépôt ne monte la stratégie
+Passport.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `booking-feed.service.spec.ts` | 1 | `readSubscription` sans secret | `{ status: 'unconfigured' }`, zéro appel à la base |
+| | 2 | aucune ligne, sel `null` | `{ status: 'none' }` |
+| | 1 | sel et date | `{ status: 'active', token: <vecteur figé A1>, createdAt: '2026-10-15T08:32:00.000Z' }` |
+| | 1 | lecture | table `booking_setting`, paramètre `main`, un seul `from` |
+| | 1 | deux relectures, sel inchangé | même jeton, même date |
+| | 1 | `regenerate` puis relecture du sel écrit | objet égal au retour de `regenerate` |
+| | 1 | lien actif | clés exactes `createdAt`, `status`, `token` ; ni sel ni secret sérialisés |
+| | 1 | `regenerate` puis `renderFeed` | ancien jeton → `null`, nouveau → `BEGIN:VCALENDAR` |
+| `booking-admin.controller.spec.ts` | 2 | `GET` / `POST feed-subscription` | déclarées sur le contrôleur gardé |
+| | 2 | `GET` / `POST feed-subscription` | aucune métadonnée de throttle propre |
+| | 3 | `GET` : non configuré, sans lien, actif | 200, corps égal au service, `cache-control: no-store`, `regenerate` jamais appelé |
+| | 1 | `POST` | 201, corps exact, `no-store`, `regenerate()` sans argument, `readSubscription` jamais appelé |
+| | 1 | `POST` sans secret | 409 `{ statusCode, error: 'feed_not_configured', message, path }` |
+| `booking-notifier.service.spec.ts` | 2 | annulation par le visiteur, par le propriétaire | introduction visiteur exacte avec la note |
+| | 2 | idem | introductions propriétaire exactes, inchangées |
+| `booking-feed.integration.spec.ts` (contrôleurs admin et flux, garde levée) | 1 | `GET` → `POST` → `GET` | `none`, 201 aux clés exactes et jeton de 43 caractères, relecture égale, flux 200 |
+| | 1 | lien créé | `createdAt` = `feed_created_at` en base ; ni le sel stocké ni le secret dans les deux corps |
+| | 1 | deux `POST` | jetons différents, relecture = dernier, ancien 404, nouveau 200 |
+| | 2 | fériés à `false` puis `true` | `close_public_holidays` inchangé après `POST` |
+| | 1 | sans secret | `unconfigured`, 409 `feed_not_configured`, `booking_setting` vide |
+
+Sweep : l'ancienne phrase « Il est retiré de votre agenda… » n'est assertée nulle part (`grep` sur `src` et
+`test`) ; `mail-templates.spec.ts` n'est pas touché. Les autres intégrations n'ont pas à remettre le sel à
+`null` : seul `booking-feed.integration.spec.ts` écrit `feed_salt`, dans sa base dédiée `booking_feed_it`.
+
+Preuves (code de sortie lu après chaque commande) :
+
+- `pnpm test -- src/booking; echo $?` → `1` ; **19 failed / 777 total** (702 passed, 56 skipped).
+- `pnpm test; echo $?` → `1` ; **19 failed / 1868 total** (1788 passed, 61 skipped) ; 3 suites en échec, les 3
+  suites unitaires complétées, chaque échec étant un test neuf.
+- Intégration (Postgres 17 jetable sur `55433`) : `BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration
+  booking-scheduler.integration booking-feed.integration; echo $?` → `1` ; **6 failed / 56 total** ; les 6 sont
+  les tests neufs (`Received: 404`, routes absentes), `booking.integration`, `booking-scheduler.integration` et
+  les 5 tests A1 du flux verts.
+- Nature des échecs : uniquement des assertions (`toBe`, `toEqual`, `resolves.toEqual`, `toBeDefined`,
+  `toHaveBeenCalledTimes`, statut HTTP) ; aucun `TypeError`, module introuvable ni erreur TS. ESLint et Prettier
+  propres ; `tsc --noEmit` : les 4 erreurs préexistantes seules.
+- Verts par construction avant GREEN (gardes) : les deux introductions propriétaire, et « ancien jeton → `null`
+  après `regenerate` » (comportement livré en A1, épinglé ici côté service).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-15 19:27, 19 failed / 1868 total).
+
 ## Journal des tranches
 
 - **Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar** : implémentée le
@@ -943,6 +1014,9 @@ Tous les tests de cette tranche échouent à ce stade (RED confirmé via la comm
   test lui-même (cf. `### A1`), à corriger par `qa`.
 - **Tranche A2 — le jeton n'apparaît dans aucun journal** : implémentée le 2026-10-15 (API `feat/booking-feed`,
   non commitée), verte ; contrôle runtime : jeton et secret absents de la sortie du processus (cf. `### A2`).
+- **Tranche A3 — l'admin lit, crée et régénère le lien** (avec la mention d'annulation, A4 du plan) : implémentée
+  le 2026-10-15 (API `feat/booking-feed`, non commitée), verte ; contrôle runtime : cycle `none` → lien → relecture
+  → régénération (ancien lien 404), 401 sans session, `unconfigured` et 409 sans secret (cf. `### A3`).
 
 ### A1
 
@@ -1051,3 +1125,49 @@ Preuves (code de sortie lu) :
   - processus et conteneur arrêtés.
 - Non vérifié en runtime : Sentry (aucun DSN local) ; couvert par `sentry-before-send.spec.ts` et
   `instrument.spec.ts`.
+
+### A3
+
+Fichiers (API `nest-portfolio-app`, tous modifiés, aucun créé hors tests de `qa`) :
+
+- `src/booking/booking-feed.service.ts` : `readSubscription()` (secret absent → `unconfigured` sans lecture ;
+  `select feedSalt, feedCreatedAt … where id = 'main' limit 1` ; sel ou date absents → `none` ; sinon jeton
+  recalculé par `deriveFeedToken` et date ISO). `regenerate()` inchangé : déjà livré en A1 conforme au plan (sel
+  `createFeedSalt()` de 16 octets, upsert `onConflictDoUpdate` limité à `feedSalt`, `feedCreatedAt`,
+  `updatedAt`, 409 `ConflictException({ error: 'feed_not_configured', message })` sans secret) ;
+- `src/booking/booking-admin.controller.ts` : `BookingFeedService` injecté, `GET feed-subscription` (200) et
+  `POST feed-subscription` (201, sans `@Body`), `@Header('Cache-Control', 'no-store')`, `@ApiOperation` /
+  `@ApiResponse` (409 `feed_not_configured`), aucun throttle propre, garde JWT de classe inchangée ;
+- `src/booking/booking-notifier.service.ts` : constante `MANUAL_CALENDAR_NOTE` (texte exact du plan de test),
+  insérée dans les deux introductions **visiteur** ; introductions du propriétaire inchangées ;
+- `README.md` : routes `GET|POST /feed-subscription` (et le flux) dans la liste des routes ; sous « Abonnement
+  d'agenda », lecture admin, création et régénération (409, `no-store`, fériés intacts), rotation du secret.
+
+Écarts au plan : aucun sur le comportement. Précision : une ligne avec un sel mais sans `feed_created_at` (état
+que `regenerate` n'écrit jamais) rend `none`, le contrat `active` exigeant une date. `@Header` s'applique aussi au
+409 (`no-store` sur l'erreur), sans effet sur le contrat.
+
+Preuves (code de sortie lu) :
+
+- `pnpm test -- src/booking; echo $?` → `0` : 721 passed, 56 skipped / 777.
+- Intégration (Postgres 17 jetable `55433`) `booking.integration booking-scheduler.integration
+  booking-feed.integration; echo $?` → `0` : 56/56.
+- `pnpm test; echo $?` → `0` : 1807 passed, 61 skipped / 1868.
+- `pnpm lint; echo $?` → `0` (aucun fichier modifié par `--fix`) ; `pnpm build; echo $?` → `0` ;
+  `npx tsc --noEmit -p tsconfig.json` : les 4 erreurs préexistantes seules (`analytics-tracker.service`,
+  `referrer`, `auth.service`, `update-profile.dto`).
+- `mail-templates.spec.ts` et les tests A1/A2 verts sans modification ; aucun test touché.
+- Contrôle runtime (`node dist/main.js`, `NODE_ENV=production`, base `rt` du Postgres jetable migrée jusqu'à
+  `0026` par `drizzle-kit migrate`, utilisateur inséré en SQL, JWT HS256 signé localement avec le `JWT_SECRET` de
+  test, `BOOKING_FEED_SECRET` aléatoire de 64 caractères, sortie capturée dans un fichier) :
+  - `Mapped {/api/booking/feed-subscription, GET}`, `Mapped {/api/booking/feed-subscription, POST}` ;
+  - `GET` → `{"status":"none"}`, `Cache-Control: no-store` ; `POST` → 201
+    `{"status":"active","token":<43 car.>,"createdAt":…}`, `no-store` ; `GET` → corps identique ; flux → 200 ;
+  - second `POST` → 201, jeton différent ; ancien flux → 404, nouveau → 200 ;
+  - sans session : `GET` 401, `POST` 401 ;
+  - redémarrage sans la variable : `GET` → `{"status":"unconfigured"}` ; `POST` → 409
+    `{"statusCode":409,"error":"feed_not_configured","message":"Abonnement non configuré.","path":"/api/booking/feed-subscription",…}` ;
+    flux → 404 ;
+  - sur la sortie capturée des deux démarrages : `grep -c <jeton 1>` → `0`, `grep -c <jeton 2>` → `0`,
+    `grep -cF <secret>` → `0` ; requêtes du flux journalisées en `/api/booking/feed/[Filtered]` ;
+  - processus et conteneur arrêtés.
