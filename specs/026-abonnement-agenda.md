@@ -1337,3 +1337,45 @@ Vérifications finales :
 Constat hors périmètre : `GET /api/health` produit lui aussi une transaction Sentry malgré
 `ignoreIncomingRequests`, par le même mécanisme de span racine Nest. Il n'y a pas de secret, seulement du
 bruit et du quota.
+
+#### Re-revue (verdict final)
+
+Re-revue du 2026-10-15 sur `git diff 2bd33c8..e38a83b`, branche `feat/booking-feed` à `e38a83b`, copie de travail propre.
+
+**Verdict** : APPROVED
+**Gates CI locaux** : install ✅ (`pnpm install --frozen-lockfile` → 0) / tests ✅ (`pnpm test` → 0, 1873 passed, 61 skipped / 1934) / intégration ✅ (`… booking.integration booking-scheduler.integration booking-feed.integration` → 0, 56/56) / lint ✅ (`pnpm lint` → 0, aucun fichier réécrit) / build ✅ (`pnpm build` → 0) / image ✅ (`docker build -t nest-portfolio-app:review-feed .` → 0)
+**Checks mécaniques** : checker non vendoré (dépôt NestJS sans `.claude/`) : auto-checks joués à la main
+**Warnings de gate** : (b) seulement : journaux `ERROR` attendus des specs `MailerService`/`ContactService`, et `tsc --noEmit` avec les 4 erreurs préexistantes de specs non touchés, aucune nouvelle
+**Rendu compilé** : N/A
+**Preuve de verify runtime** : ✅ (image reconstruite sur une base migrée au niveau de `master` puis passée à `0026`, collecteur Sentry local, `SENTRY_TRACES_SAMPLE_RATE=1`)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : N/A (API NestJS)
+**Cross-platform** : N/A
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+**Preuve rejouée** :
+
+- **Requêtes jouées** :
+  - variantes du flux : jeton valide, `?x=1`, `/api/BOOKING/feed/`, `/api/booking/Feed/` et `<jeton>%2eics` → 200 ;
+  - `/api//booking/feed/<jeton>.ics`, `/api/booking/%66eed/<jeton>.ics` et un jeton faux → 404 ;
+  - deux 5xx réels, provoqués en renommant la table `booking`, en minuscules et en `/api/BOOKING/feed/…?x=1` → 500.
+  - Les corps d'erreur portent `path` masqué : `/api/booking/feed/[Filtered]` et `/api/BOOKING/feed/[Filtered]`.
+- **Occurrences, enveloppes Sentry puis sortie pino** : jeton `0`/`0`, secret `0`/`0`, `x=1` `0`/`0`, jeton faux `0` dans Sentry.
+- **pino** : toutes les variantes sont journalisées en `[Filtered]`. Les deux logs 5xx portent `Unhandled 500 on GET /api/…/feed/[Filtered]`.
+- **Sentry, flux** : les transactions du flux sont toutes écartées. Les deux 5xx arrivent en **événements d'erreur**, avec `transaction` et `request.url` masqués.
+- **Sentry, autres routes** : leurs transactions arrivent (`GET /api/booking/slots` × 3 avec leur query string, `POST /api/booking/feed-subscription`, `GET /api/health`, `Create Nest App`).
+- **Code** :
+  - `sentryBeforeSendTransaction` ne parcourt que les champs sérialisés. Le test sur `sdkProcessingMetadata` circulaire couvre le `RangeError` trouvé en GREEN.
+  - Les exports `SerializedRequest` et `Meeting` sont retirés.
+  - Le maintien de l'export `IcsFeed`, type du paramètre d'une fonction exportée, est accepté.
+  - Le README décrit maintenant le masquage et la contrainte des transactions.
+
+**Risque résiduel** (advisory, § 8) :
+
+- réversibilité : profil absent ; monitoring : Sentry ;
+- **critère d'écart des transactions** : il s'appuie sur la forme des URL (chemin du flux, ou jeton suivi de `.ics`). Une montée de version de `@sentry/nestjs` qui ajouterait un champ d'URL hors des clés listées (`TRACE_URL_KEYS`, `request`, `spans[].data`) ne serait pas couverte. Rejouer la preuve avec collecteur à chaque montée majeure de Sentry ;
+- **non couvert par les gates** : l'acceptation d'un `VCALENDAR` vide par Apple et Google (à confirmer au test réel), et le journal d'accès de Traefik, hors de notre contrôle (ADR-0028).
+
+**Points à corriger** : aucun.
