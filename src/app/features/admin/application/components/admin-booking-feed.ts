@@ -123,8 +123,8 @@ import { AdminSectionHead } from './admin-section-head';
         <li>
           <strong class="font-semibold text-foreground">iPhone</strong>&nbsp;: touchez «&nbsp;Ouvrir
           dans Calendrier&nbsp;» puis «&nbsp;S'abonner&nbsp;», ou, dans Calendrier, Calendriers ›
-          Ajouter un calendrier › Ajouter un calendrier avec abonnement, et collez le lien.
-          Choisissez une mise à jour toutes les 15 minutes.
+          Ajouter un calendrier › Ajouter un calendrier avec abonnement, et collez le lien. Le
+          rythme de mise à jour suit le réglage de l'iPhone (Calendrier › Comptes › Récupérer).
         </li>
         <li>
           <strong class="font-semibold text-foreground">Google Agenda (ordinateur)</strong>&nbsp;:

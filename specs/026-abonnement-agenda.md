@@ -1312,10 +1312,10 @@ $ pnpm exec prettier --check e2e/a11y ci/api-stub    → All matched files use P
   dérivation vit déjà dans `toBookingFeedView` et la facade) ; verify ✅ PASS sur `/admin/rendez-vous`
   (surface atteignable restructurée : la page porte la section et une seconde confirmation) (cf. `### F2`).
 - **Tranche F3 — le lien se copie avec un retour annoncé** : GREEN 4852 passed / 4852 total · refactor :
-- **Tranche F4 — zéro violation axe sur la section** : tranche d'audit, verte d'emblée par nature (comme 024 F6 et 025 F5) · `pnpm a11y` 91 passed / 91 total, exit 0, dont 8 analyses neuves (lien affiché, dialogue de régénération, lien régénéré, toast « Lien copié », état non configuré ; clair et sombre), réseau fermé (`blocked=0`) ; repère du dialogue d'annulation recalé (adaptation mécanique) ; `pnpm test` 4852 passed, exit 0
   aucun (passe manuelle sur le diff : `writeToClipboard` déplacée telle quelle, deux sites d'appel réels,
   `code-copy.ts` et la facade) ; verify ✅ PASS sur `/admin/rendez-vous` (surface atteignable restructurée :
   la section `active` gagne un bouton, le `409` déplace désormais le focus) (cf. `### F3`).
+- **Tranche F4 — zéro violation axe sur la section** : tranche d'audit, verte d'emblée par nature (comme 024 F6 et 025 F5) · `pnpm a11y` 91 passed / 91 total, exit 0, dont 8 analyses neuves (lien affiché, dialogue de régénération, lien régénéré, toast « Lien copié », état non configuré ; clair et sombre), réseau fermé (`blocked=0`) ; repère du dialogue d'annulation recalé (adaptation mécanique) ; `pnpm test` 4852 passed, exit 0
 
 ### A1
 
@@ -1816,3 +1816,67 @@ Re-revue du 2026-10-15 sur `git diff 2bd33c8..e38a83b`, branche `feat/booking-fe
 - **non couvert par les gates** : l'acceptation d'un `VCALENDAR` vide par Apple et Google (à confirmer au test réel), et le journal d'accès de Traefik, hors de notre contrôle (ADR-0028).
 
 **Points à corriger** : aucun.
+
+### Front
+
+Revue du 2026-10-15, `ng-portfolio-app`, branche `feat/026-abonnement-agenda` (`b6c806c`, tranches F1-F4),
+`git diff origin/master...HEAD`. API de référence : `nest-portfolio-app` `origin/master` `99f5e6a` (#59).
+
+**Verdict** : APPROVED
+**Gates CI locaux** : install ✅ (`pnpm install --frozen-lockfile` → 0) / tests ✅ (`pnpm test` → 0, 4852 passed / 4852, 257 suites) / lint ✅ (`pnpm lint` → 0, « All files pass linting ») / format ✅ (`pnpm run format:check` → 0) / build ✅ (`pnpm run build --configuration production` → 0, CSP durcie sur 10 pages) / image ✅ (`docker build -t ng-portfolio-app:review .` → 0) / a11y ✅ (`ci/a11y-stack.sh up ng-portfolio-app:review && pnpm a11y` → 0, 91 passed / 91 ; `pnpm run a11y:typecheck` → 0)
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main sur les lignes ajoutées : archéologie 0 hit (motif du profil), `export default` 0, `effect(` 0, `fakeAsync`/`waitForAsync`/`flushMicrotasks` 0, `innerHTML`/`bypassSecurity`/`console.`/`debugger` 0, écriture en storage 0 ; 5 commentaires d'une ligne, tous des WHY intemporels
+**Warnings de gate** : aucun (sortie de test sans `stderr` ni rejet non géré, build et lint sans avertissement)
+**Rendu compilé** : N/A (aucun fichier `shared/ui/**` touché hors `testing/`, aucune nouvelle page ; la section est vérifiée au runtime ci-dessous)
+**Preuve de verify runtime** : ✅ (rejouée sur l'image `review`, cf. ci-dessous)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅ (profil `aucun` ; presse-papiers par `navigator.clipboard` dans une fonction partagée, sans plateforme native)
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+**Verify runtime** (image `ng-portfolio-app:review` devant la doublure `STUB_ADMIN_SESSION=1`, script Playwright jetable, indice `auth:session` posé, `api.nedellec-julien.fr` rejoué sur la doublure comme dans le harnais a11y ; 1280 px clair et 375 px sombre) :
+
+- `/admin/rendez-vous` : champ = `https://api.nedellec-julien.fr/api/booking/feed/stubFeedToken000…000.ics`, lien `webcal://api.nedellec-julien.fr/api/booking/feed/stubFeedToken000…000.ics` (pas de préfixe `unsafe:` : le sanitizer laisse passer `webcal:`), « Lien créé le jeudi 15 octobre 2026 à 10:32. », bouton « Régénérer le lien » ; aucun défilement horizontal.
+- Copier : presse-papiers mis à `avant`, focus sur « Copier le lien » + Entrée → presse-papiers = l'URL https du champ (pas le `webcal://`), toast « Lien copié dans le presse-papiers », focus resté sur le bouton.
+- Régénérer : focus + Entrée → confirmation (titre, corps, « Garder le lien actuel » focalisé, « Régénérer le lien ») ; confirmé → un `POST /api/booking/feed-subscription`, champ et `webcal://` sur `stubFeedRegenerated…`, toast de régénération, focus rendu au bouton d'action.
+- Après les deux scénarios : `localStorage` = thème + indice de session seulement, `sessionStorage` vide, `caches.keys()` vide, aucun service worker.
+- Console : aucune erreur JS ni avertissement Angular ; une seule entrée, `404 /api/config` sur l'origine du site, préexistante (la doublure n'a pas cette route, même constat en F2/F3).
+- Verdict : **PASS**. Captures (scratchpad de la revue) : `desktop-light-active`, `desktop-light-confirm`, `desktop-light-regenerated`, `mobile-dark-active`, `mobile-dark-confirm`, `mobile-dark-regenerated`.
+
+**Vérifié conforme** :
+
+- **Contrat = API réelle** (`origin/master` de l'API) : `@Controller('booking')` + `JwtAuthGuard` de classe, `GET`/`POST feed-subscription` avec `Cache-Control: no-store` ; union `unconfigured | none | active { token, createdAt }` = `BookingFeedSubscriptionDto` ; `POST` à corps `null` ; `409` `ConflictException({ error: 'feed_not_configured' })`, relu par `apiErrorCode` sur `body.error` → `not-configured`, les autres `409` inchangés (`day_in_closure`, `too-late`). Les deux appels passent par `silentErrors()`.
+- **URL du flux** : base `API_LINK_BASE_URL` (prod `https://api.nedellec-julien.fr/api`, dev `/api`) résolue contre `DOCUMENT.location.href` à chaque réponse, jeton par `encodeURIComponent`. Elle est absolue dans les deux cas et pointe sur l'hôte qui sert `GET /api/booking/feed/:file`. `toWebcalUrl` ne remplace que le préfixe `^https?:`.
+- **Sécurité, aucun stockage ni fuite côté navigateur** :
+  - aucun storage (test Vitest et runtime) ;
+  - pas de transfer cache : `admin/**` est en `RenderMode.Client` ;
+  - pas de cache HTTP : `no-store` côté API ;
+  - aucun `console.*` ;
+  - Sentry front : pas de Replay, `dataCollection.httpBodies: []` (le corps qui porte le jeton n'est jamais capturé), et les breadcrumbs/spans ne voient que l'URL `feed-subscription`, qui ne contient pas de jeton ; le breadcrumb `ui.click` relève un sélecteur, pas un `href` ;
+  - analytics : `outboundChannel('webcal://api.nedellec-julien.fr/…')` rend `null` (`api` est exclu des démos), et seul le chemin du routeur serait envoyé, jamais le `href`.
+- **Architecture** : `FeedSubscriptionPanel` est une facade `@Injectable()` instance-scopée dans `providers` de `AdminBookings`, sans suffixe `Store`, sans dépendance DOM ; signaux exposés en lecture seule (`computed`, `asReadonly()`), aucune `effect()`. `toBookingFeedView` est pur. `AdminBookingFeed` est présentationnel (`input`/`output`, seul état local la confirmation), et le sélecteur attribut `section[app-admin-booking-feed]` porte `aria-labelledby` sur le host, sans wrapper.
+- **Focus** : le bouton d'action unique vit hors du `@switch`, sous un `@if` stable, et survit à `none` → `active` (test et runtime). `aria-disabled="true"` pendant l'appel, jamais `disabled`, activation ignorée. Après un `409` → `unconfigured`, `afterRenderEffect({ write })` focalise le `h2` sans lecture de layout, et ne vole pas le focus si la page s'ouvre déjà en `unconfigured`.
+- **Presse-papiers** : `writeToClipboard` est déplacée à l'identique dans `shared/clipboard/`, `code-copy.ts` l'importe et `code-copy.spec.ts` n'est pas modifié (vert). La facade passe par `PendingTasks.run` et copie l'URL https.
+- **Conventions** : signals, `input`/`output`, `viewChild.required`, control flow `@switch`/`@if`/`@let`, aucun `styles:`, Tailwind et tokens existants seulement (`status-warn`, `line`, `surface`, `muted`), `appButton` pour le bouton et le lien, textes de toast avec insécable avant les deux-points (6/6). `admin-bookings.ts` fait 205 lignes, `admin-booking-feed.ts` 204 lignes, dont environ 130 de template (sous les seuils).
+- **Tests** : les adaptations déclarées sont mécaniques (`cancellationDialog(host)`, paramètre `root` facultatif d'`answerConfirmDialog`, repère a11y recalé), et aucune valeur attendue n'a bougé. Fixtures par builders (`aBookingFeedSubscription`, `aBookingFeedSubscriptionDto`). `it.each` pour la triangulation, et `data-testid` comme seuls sélecteurs.
+- **Doublure et axe** : `feed-subscription` est routé avant le 405, sans état. Cinq scénarios × deux thèmes : lien affiché, dialogue, lien régénéré avec son toast, toast de copie avec relecture du presse-papiers, `unconfigured` servi par `page.route`. Le toast reste visible après l'analyse, donc il est bien audité.
+
+**Tests notables** :
+
+- ✨ `admin-bookings.spec.ts` (création depuis `none`) : on vérifie que c'est le même élément qui garde le focus après la réponse, ce qui attrape un bouton recréé dans une branche du `@switch`.
+- ✨ `feed-subscription-panel.spec.ts` (gardes de `copyLink`) : écrites en « rien, puis copie dès que le lien existe », elles tuent aussi bien une garde trop large qu'une garde absente.
+- ⚠️ `booking-feed-view.spec.ts` + `feed-subscription-panel.spec.ts` + `admin-bookings.spec.ts` : la vue `active` est assertée à trois niveaux. C'est voulu par le plan (pur, facade, page) mais coûteux au refacto. Informatif.
+
+**Remarques non bloquantes** (à traiter dans la PR ou au test réel, au choix de l'orchestrateur) :
+
+1. **Texte, aide iPhone** (`admin-booking-feed.ts:242-245`, texte du plan repris mot pour mot) : « Choisissez une mise à jour toutes les 15 minutes ». À ma connaissance, l'ajout d'un calendrier avec abonnement dans l'app Calendrier d'iOS (Calendriers › Ajouter un calendrier › Ajouter un calendrier avec abonnement, puis « S'abonner » depuis un lien `webcal://`) propose nom, couleur, compte, alertes et pièces jointes, mais **pas de fréquence**. Ce réglage existe par calendrier dans Calendrier sur Mac ; sur iPhone, la fréquence est globale (Réglages › Calendrier › Comptes › Récupérer les données). Je n'ai pas d'appareil pour le confirmer : à vérifier au test réel du propriétaire, puis reformuler si besoin, par exemple « La mise à jour suit le réglage Récupérer les données de l'iPhone ; le lien demande 15 minutes ». Les menus Google (« Autres agendas › + › À partir de l'URL ») et le parcours iOS (Calendriers › Ajouter un calendrier › Ajouter un calendrier avec abonnement) correspondent aux libellés français connus.
+2. **Spec, Journal des tranches** (ligne « Tranche F4 ») : elle a été insérée au milieu de l'entrée F3, entre « refactor : » et « aucun (passe manuelle… ». L'entrée F3 est coupée en deux. Remettre F4 après la fin de F3.
+3. **Visuel, `admin-booking-feed.ts:217`** : en `aria-disabled`, le bouton `outlined` garde son survol (bordure et texte primaires). Le précédent `admin-messages.ts:48` le neutralise (`aria-disabled:hover:border-foreground/15 aria-disabled:hover:text-foreground`). Cosmétique, sur un état de quelques centaines de millisecondes.
+4. **Export, `booking-feed-view.ts:31`** : `toWebcalUrl` n'a que son spec comme consommateur hors du fichier. L'export est prescrit par le plan (pur testé seul) : accepté, à inliner si le plan est révisé.
+
+**Risque résiduel** (advisory, § 8) :
+
+- réversibilité : profil absent ; monitoring : Sentry (front) ;
+- aucun état persistant touché côté front ; le lien n'est jamais écrit dans le navigateur ;
+- non couvert par les gates : l'abonnement réel sur iPhone et Google Agenda (aide, `VCALENDAR` vide, délai Google), et le comportement du lien `webcal://` hors Apple (Windows, Android : sans gestionnaire, le clic ne fait rien ; l'aide oriente vers le copier-coller).

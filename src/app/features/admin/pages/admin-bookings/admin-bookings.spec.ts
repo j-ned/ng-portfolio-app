@@ -717,7 +717,7 @@ const storedValues = (): readonly string[] =>
   );
 
 const FEED_HELP = [
-  "iPhone : touchez « Ouvrir dans Calendrier » puis « S'abonner », ou, dans Calendrier, Calendriers › Ajouter un calendrier › Ajouter un calendrier avec abonnement, et collez le lien. Choisissez une mise à jour toutes les 15 minutes.",
+  "iPhone : touchez « Ouvrir dans Calendrier » puis « S'abonner », ou, dans Calendrier, Calendriers › Ajouter un calendrier › Ajouter un calendrier avec abonnement, et collez le lien. Le rythme de mise à jour suit le réglage de l'iPhone (Calendrier › Comptes › Récupérer).",
   "Google Agenda (ordinateur) : Autres agendas › + › À partir de l'URL, collez le lien. Google met l'agenda à jour toutes les quelques heures : une annulation peut y rester visible jusqu'à un jour.",
   'Ce lien donne accès aux coordonnées de vos visiteurs : ne le partagez pas. En cas de doute, régénérez-le.',
   "Une fois abonné, n'ajoutez plus les rendez-vous à la main depuis l'email : ces copies ne suivent pas les annulations.",
