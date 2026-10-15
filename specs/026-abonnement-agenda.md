@@ -1007,6 +1007,60 @@ Preuves (code de sortie lu après chaque commande) :
 Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
 2026-10-15 19:27, 19 failed / 1868 total).
 
+### Tranche F1 — la gateway parle le contrat de l'abonnement
+
+Front, branche `feat/026-abonnement-agenda` : 16 tests neufs (4 dans l'adapter, 12 dans la gateway), dans deux
+suites existantes complétées (`booking.adapter.spec.ts`, `http-booking.gateway.spec.ts`). Contrat relu sur le
+code API de `origin/master` : `GET`/`POST booking/feed-subscription` sous la garde JWT de classe, union
+`unconfigured | none | active { token, createdAt }`, 409 `{ error: 'feed_not_configured' }`.
+
+Signatures figées (squelettes sans comportement : l'adapter rend un `active` vide, les deux méthodes HTTP
+rendent `NEVER`, donc aucune requête) :
+
+- `BookingFeedSubscription` (`booking-admin.model.ts`), union du plan ; `'not-configured'` ajouté à
+  `BookingAdminFailure` (tous les consommateurs sont des `Partial<Record<…>>`, aucune casse).
+- `BookingGateway.getFeedSubscription(): Observable<BookingFeedSubscription>` et
+  `regenerateFeedSubscription(): Observable<BookingAdminResult<BookingFeedSubscription>>`.
+- `BookingFeedSubscriptionDto` (`booking-api.types.ts`) ; `toBookingFeedSubscription(raw, feedBaseUrl)`
+  (`booking.adapter.ts`), où `feedBaseUrl` finit par `/booking/feed/` et l'URL vaut
+  `${feedBaseUrl}${encodeURIComponent(token)}.ics`.
+- Requêtes sur `API_BASE_URL` (comme les autres routes), URL du flux sur `API_LINK_BASE_URL` résolue contre
+  `DOCUMENT.location.href` : le test fournit deux bases différentes pour distinguer les deux jetons.
+- Doublures : `stubBookingGateway` double les deux méthodes (`active` par défaut) ; builders
+  `aBookingFeedSubscription` (domaine, `active`) et `aBookingFeedSubscriptionDto` (DTO `active`, jeton
+  `stubFeedToken000000000000000000000000000000`, 43 caractères, celui de la doublure F4).
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `booking.adapter.spec.ts` | 2 (`it.each`) | DTO `unconfigured` / `none` avec un champ en trop (`feedSalt`) | `toEqual({ kind })` seul |
+| `booking.adapter.spec.ts` | 1 | DTO `active` avec `feedSalt` en trop | `{ kind: 'active', url: '<base>XYJX…488.ics', createdAt }` : ni `token`, ni `feedSalt` recopiés |
+| `booking.adapter.spec.ts` | 1 | jeton `a/b?c#d` | segment encodé `a%2Fb%3Fc%23d.ics` |
+| `http-booking.gateway.spec.ts` | 3 (`it.each`) | `GET` rend `unconfigured`, `none`, `active` | `GET` sur `https://api.test/api/booking/feed-subscription`, `SKIP_ERROR_TOAST` vrai, modèle exact ; en `active` : `https://api.example.test/api/booking/feed/<43 a>.ics` |
+| `http-booking.gateway.spec.ts` | 1 | `API_LINK_BASE_URL` relatif (`/api`) | URL `${document.location.origin}/api/booking/feed/<jeton>.ics`, absolue |
+| `http-booking.gateway.spec.ts` | 3 (`it.each`) | lecture en 500, 401, réseau coupé | l'erreur atteint l'appelant (`'error'`) |
+| `http-booking.gateway.spec.ts` | 1 | création, 201 `active` | `POST`, corps `null`, silencieux, `{ success: true, data: { kind: 'active', url, createdAt } }` |
+| `http-booking.gateway.spec.ts` | 4 (`it.each`) | création en échec : réseau, 409 `feed_not_configured`, 500, 502 HTML | `network`, `not-configured`, `server`, `server` |
+
+Les 409 aux autres codes restent couverts par les tests existants (`cancel_too_late` → `too-late`,
+`day_in_closure` → `day-in-closure`) : un `toAdminFailure` qui rendrait `not-configured` pour tout 409 les
+casserait.
+
+Hors F1 (plan) : `toWebcalUrl` et `toBookingFeedView` vivent dans `booking-feed-view.ts`, contenu de F2 ; leurs
+tests y seront écrits.
+
+Preuve RED (cache invalidé par `pnpm exec ng cache clean`) :
+
+- `pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?` → `1` ; **16 failed / 282 total**
+  (266 passed) ; 2 suites en échec, les deux complétées.
+- `pnpm test; echo $?` → `1` ; **16 failed / 4802 total** (4786 passed) ; 252 suites vertes sur 254, aucune
+  erreur TS, aucun rejet non géré.
+- Nature des échecs : 4 `AssertionError` `toEqual` (adapter) et 12 `Expected one matching request for criteria
+  "Match URL: https://api.test/api/booking/feed-subscription", found none` (`HttpTestingController.expectOne` :
+  la requête n'est pas émise). Aucun échec de harnais. Prettier et ESLint propres sur `features/booking`.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-15 20:37, 16 failed / 4802 total).
+
 ## Journal des tranches
 
 - **Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar** : implémentée le
@@ -1017,6 +1071,10 @@ Tous les tests de cette tranche échouent à ce stade (RED confirmé via la comm
 - **Tranche A3 — l'admin lit, crée et régénère le lien** (avec la mention d'annulation, A4 du plan) : implémentée
   le 2026-10-15 (API `feat/booking-feed`, non commitée), verte ; contrôle runtime : cycle `none` → lien → relecture
   → régénération (ancien lien 404), 401 sans session, `unconfigured` et 409 sans secret (cf. `### A3`).
+- **Tranche F1 — la gateway parle le contrat de l'abonnement** : GREEN 4802 passed / 4802 total (booking :
+  282 passed / 282 total) · refactor : `toAdminFailure` lit le code métier une seule fois (`const code`, comme
+  `toBookingFailure`) au lieu de trois appels à `apiErrorCode` ; verify reportée : aucune surface atteignable
+  restructurée (cf. `### F1`).
 
 ### A1
 
@@ -1171,6 +1229,37 @@ Preuves (code de sortie lu) :
   - sur la sortie capturée des deux démarrages : `grep -c <jeton 1>` → `0`, `grep -c <jeton 2>` → `0`,
     `grep -cF <secret>` → `0` ; requêtes du flux journalisées en `/api/booking/feed/[Filtered]` ;
   - processus et conteneur arrêtés.
+
+### F1
+
+Fichiers (front, branche `feat/026-abonnement-agenda`, non commités ; squelettes de `qa` remplis, tests et
+doublures inchangés) :
+
+- `infra/booking.adapter.ts` : `toBookingFeedSubscription(raw, feedBaseUrl)` par `switch` sur `status`,
+  copie champ par champ (`unconfigured`/`none` → `{ kind }` ; `active` → `url` =
+  `${feedBaseUrl}${encodeURIComponent(token)}.ics`, `createdAt`) ; ni `token` ni champ inconnu recopiés ;
+- `infra/http-booking.gateway.ts` : `getFeedSubscription()` (`GET feed-subscription`, `silentErrors()`, erreur
+  propagée) et `regenerateFeedSubscription()` (`POST feed-subscription`, corps `null`, `silentErrors()`,
+  `toResult(toAdminFailure)`) ; `DOCUMENT` et `API_LINK_BASE_URL` injectés ; la base du flux est résolue à
+  chaque réponse par `new URL(linkBase + '/booking/feed/', document.location.href)`, donc absolue aussi
+  quand la base vaut `/api` ; `toAdminFailure` : `409` + `feed_not_configured` → `not-configured`, `day_in_closure`
+  → `day-in-closure`, tout autre `409` → `too-late` (inchangé) ; import `NEVER` du squelette retiré ;
+- `domain/models/booking-admin.model.ts`, `domain/gateways/booking.gateway.ts`, `infra/booking-api.types.ts` :
+  conformes aux squelettes, sans changement.
+
+Écarts au plan : aucun. Précision : la base du flux est calculée dans un `map` plutôt qu'à la construction, pour
+qu'un `document.location` sans origine exploitable (`about:blank`) ne fasse pas échouer l'instanciation de la
+gateway, dont dépendent toutes les autres routes de réservation.
+
+Preuves (code de sortie lu) :
+
+- `pnpm test --include='src/app/features/booking/**/*.spec.ts'; echo $?` → `0` : 282 passed / 282, 10 suites.
+- `pnpm test; echo $?` → `0` : 4802 passed / 4802, 254 suites.
+- `pnpm lint; echo $?` → `0` ; `pnpm run format:check` → `0`.
+- `pnpm run build --configuration production; echo $?` → `0` (CSP durcie sur 10 pages).
+- Verify runtime reportée : aucun composant ne consomme encore ces méthodes (F2), aucune surface atteignable n'est
+  modifiée ; le seul changement sur un chemin existant (`toAdminFailure` en `409`) est tenu par les tests
+  `cancel_too_late` et `day_in_closure` verts sans modification.
 
 ## Review code
 
