@@ -154,7 +154,7 @@ flowchart LR
     LOG -.-> SEN[sentryBeforeSend<br/>ignoreIncomingRequests]
   end
   subgraph front[Front /admin/rendez-vous]
-    P[AdminBookings] --> F[BookingFeedSubscription<br/>facade de page]
+    P[AdminBookings] --> F[FeedSubscriptionPanel<br/>facade de page]
     P --> C[admin-booking-feed<br/>section présentationnelle]
     F --> V[toBookingFeedView · toWebcalUrl<br/>purs]
     F --> CB[writeToClipboard<br/>shared, extrait de code-copy]
@@ -249,7 +249,7 @@ flowchart LR
   `<section aria-labelledby>` avec un `h2`, sous l'unique `h1` (`AdminPageHeader`), sans
   `header`/`main`/`footer`.
 - **Frontière facade / présentation** :
-  - `BookingFeedSubscription` (`pages/admin-bookings/booking-feed-subscription.ts`) : **facade** déclarée
+  - `FeedSubscriptionPanel` (`pages/admin-bookings/feed-subscription-panel.ts`, renommée le 2026-10-15 : le type du domaine porte déjà `BookingFeedSubscription`) : **facade** déclarée
     dans les `providers` de la page, sans suffixe `Store`. Elle possède la ressource de l'abonnement,
     l'état « création en cours », la copie au presse-papiers et les toasts. Aucune dépendance DOM. Le
     lien n'est **jamais écrit en storage**. La page reste sous le seuil de 250 LOC.
@@ -501,14 +501,14 @@ export function toWebcalUrl(url: string): string; // ^https?: → webcal:
 | `src/app/features/blog/application/components/code-copy.ts` | importe `writeToClipboard` (fonction privée supprimée) |
 | `src/app/features/admin/application/booking-feed-view.ts` | vue pure, `toWebcalUrl` |
 | `src/app/features/admin/application/components/admin-booking-feed.ts` | section, aide, confirmation |
-| `src/app/features/admin/pages/admin-bookings/booking-feed-subscription.ts` | facade |
+| `src/app/features/admin/pages/admin-bookings/feed-subscription-panel.ts` | facade |
 | `src/app/features/admin/pages/admin-bookings/admin-bookings.ts` | `providers: [BookingFeedSubscription]`, section sous la liste |
 | `ci/api-stub/server.mjs` | `GET` / `POST /api/booking/feed-subscription` |
 | `e2e/a11y/booking-states.spec.ts` | scénario « lien affiché » |
 
 ### Réactivité / état
 
-- **`BookingFeedSubscription`** (facade : rien n'est partagé hors de l'écran, donc pas de store) :
+- **`FeedSubscriptionPanel`** (facade : rien n'est partagé hors de l'écran, donc pas de store) :
   - `subscription = rxResource({ stream: () => gateway.getFeedSubscription() })`. Les erreurs de lecture
     arrivent brutes, comme `getAvailabilityCalendar`.
   - `_regenerating = signal(false)`.
@@ -1061,6 +1061,102 @@ Preuve RED (cache invalidé par `pnpm exec ng cache clean`) :
 Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
 2026-10-15 20:37, 16 failed / 4802 total).
 
+### Tranche F2 — la section montre l'état et crée ou régénère le lien
+
+Front, branche `feat/026-abonnement-agenda` : 37 tests neufs dans deux suites neuves
+(`booking-feed-view.spec.ts`, `feed-subscription-panel.spec.ts`) et une suite existante complétée
+(`admin-bookings.spec.ts`). La copie au presse-papiers et son toast restent en F3 : aucun test ne cible
+`admin-booking-feed-copy` ici.
+
+**Nommage (arbitrage de l'orchestrateur, 2026-10-15)** : le type du domaine garde le nom
+`BookingFeedSubscription` ; la facade de page s'appelle **`FeedSubscriptionPanel`**
+(`pages/admin-bookings/feed-subscription-panel.ts`, `@Injectable()` instance-scopé, déclaré dans les
+`providers` de `AdminBookings`). Le plan la nomme encore `BookingFeedSubscription` : ce nom-là désigne
+désormais le seul type.
+
+Signatures figées (squelettes sans comportement : `toBookingFeedView` rend un `active` vide, `toWebcalUrl`
+rend `''`, la facade expose des signaux constants et deux méthodes vides, sans lire la gateway) :
+
+- `booking-feed-view.ts` : `BookingFeedView` (union du plan, libellés littéraux) ;
+  `toBookingFeedView(subscription)` ; `toWebcalUrl(url)` (`^https?:` → `webcal:`, préfixe seul).
+- `FeedSubscriptionPanel` : `view: Signal<BookingFeedView | null>`, `state: Signal<LoadState>`,
+  `regenerating: Signal<boolean>`, `regenerate(): void`, `reload(): void`. `copyLink()` viendra en F3.
+- Le composant `admin-booking-feed` n'est pas squelettisé : présentationnel, il est prouvé par la page
+  (aucun spec isolé). Il n'est pas encore branché : la page ne rend pas la section.
+
+Copie proposée (le plan n'en fixait pas trois) :
+
+- erreur de lecture (`load-error-message` de la section) : « L'abonnement d'agenda n'a pas pu être chargé.
+  Vérifiez votre connexion, puis réessayez. » ;
+- squelette (`role="status"`) : « Chargement de l'abonnement… » ;
+- corps de la confirmation, complété comme le demande l'orchestrateur : « L'ancien lien cessera aussitôt
+  de fonctionner sur tous vos appareils : les agendas qui y sont abonnés ne recevront plus vos rendez-vous
+  tant que vous ne les aurez pas abonnés au nouveau. » ;
+- titre de la section : « Abonnement d'agenda » ; titre de la confirmation : « Régénérer le lien
+  d'abonnement ? ».
+
+Le reste reprend le plan mot pour mot (message `unconfigured`, `none`, `since`, quatre aides, libellés du
+bouton et de la confirmation, cinq toasts). Les textes du DOM sont comparés espaces repliés (`\s+`, insécables
+compris) ; les toasts sont comparés exacts, avec l'insécable avant les deux-points, comme ceux de
+l'annulation.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `booking-feed-view.spec.ts` | 2 (`it.each`) | `unconfigured`, `none` | `{ kind }`, `{ kind: 'none', actionLabel: "Créer le lien d'abonnement" }` |
+| `booking-feed-view.spec.ts` | 1 | `active` créé le 15 octobre 08:32Z | objet exact : `since` « jeudi 15 octobre 2026 à 10:32 », `url`, `webcalUrl`, « Régénérer le lien » |
+| `booking-feed-view.spec.ts` | 2 (`it.each`) | 30 septembre 22:30Z, 1er décembre 08:00Z | « jeudi 1er octobre 2026 à 00:30 » (jour de Paris, pas d'UTC), « mardi 1er décembre 2026 à 09:00 » (heure d'hiver) |
+| `booking-feed-view.spec.ts` | 4 (`it.each`) | `https:`, `http:` avec port, déjà `webcal:`, `https` répété dans le chemin | `webcal://…` ; inchangé ; seul le préfixe remplacé |
+| `feed-subscription-panel.spec.ts` | 1 | lien actif au serveur | une lecture, `ready`, vue exacte |
+| `feed-subscription-panel.spec.ts` | 2 (`it.each`) | `unconfigured`, `none` | une lecture, `ready`, vue exacte |
+| `feed-subscription-panel.spec.ts` | 1 | lecture en attente | une lecture, `loading`, vue `null` |
+| `feed-subscription-panel.spec.ts` | 1 | lecture en échec puis `reload()` | `error` sans vue, puis deux lectures et `ready` |
+| `feed-subscription-panel.spec.ts` | 1 | création depuis `none` | un `POST`, nouvelle vue, `regenerating` faux, toast « Lien d'abonnement créé : … » |
+| `feed-subscription-panel.spec.ts` | 1 | régénération depuis `active` | un `POST`, aucune relecture, nouvelle vue, toast « Nouveau lien créé : … » |
+| `feed-subscription-panel.spec.ts` | 1 | deuxième `regenerate()` en vol | un seul `POST`, `regenerating` vrai et ancienne vue pendant, faux et nouvelle vue après |
+| `feed-subscription-panel.spec.ts` | 3 (`it.each`) | échecs `network`, `server`, `invalid` | toast par raison (`invalid` → message serveur), ancienne vue gardée, aucune relecture |
+| `feed-subscription-panel.spec.ts` | 1 | échec `not-configured` | toast « Abonnement non configuré : … », deuxième lecture, vue `unconfigured` |
+| `admin-bookings.spec.ts` | 1 | page chargée | `section` après la liste, `aria-labelledby` = id du `h2` « Abonnement d'agenda », un seul `h1`, aucun landmark ni `region` dans la section |
+| `admin-bookings.spec.ts` | 1 | lien relu au chargement | `input` texte `readonly` non `disabled`, valeur https, `label for` « Lien d'abonnement » ; `a` `webcal://…` nommé « Ouvrir dans Calendrier » ; « Lien créé le … » ; `ul role="list"` des quatre aides ; bouton « Régénérer le lien » |
+| `admin-bookings.spec.ts` | 1 | `none` | message, bouton « Créer le lien d'abonnement », ni lien, ni date, ni aide |
+| `admin-bookings.spec.ts` | 1 | `unconfigured` | message qui nomme `BOOKING_FEED_SECRET`, zéro bouton dans la section, ni lien ni aide |
+| `admin-bookings.spec.ts` | 1 | lecture en attente | `role="status"`, « Chargement de l'abonnement… », pas de bouton d'action |
+| `admin-bookings.spec.ts` | 1 | lecture en échec, Réessayer de la section | message proposé, pas de bouton ; deux lectures, lien affiché, liste intacte |
+| `admin-bookings.spec.ts` | 1 | créer depuis `none` | pas de confirmation, un `POST`, nouveau lien et date, toast, **même** bouton et focus dessus, libellé « Régénérer le lien » |
+| `admin-bookings.spec.ts` | 1 | régénérer depuis `active` | confirmation ouverte, titre, corps, « Régénérer le lien » / « Garder le lien actuel », aucun `POST` |
+| `admin-bookings.spec.ts` | 1 | confirmation acceptée | un `POST`, nouveaux https et webcal, toast, même bouton focalisé, aucune annulation de rendez-vous |
+| `admin-bookings.spec.ts` | 2 (`it.each`) | confirmation refusée, Échap | dialogue fermé, aucun `POST`, lien inchangé, aucun toast |
+| `admin-bookings.spec.ts` | 1 | double appui pendant la création | un `POST`, `aria-disabled="true"` sans `disabled` pendant, attribut retiré après, nouveau lien |
+| `admin-bookings.spec.ts` | 1 | appui pendant une régénération | aucune nouvelle confirmation, un seul `POST`, `aria-disabled="true"` |
+| `admin-bookings.spec.ts` | 1 | régénération en `network` | toast d'échec, ancien lien et ancienne date gardés, bouton de nouveau disponible |
+| `admin-bookings.spec.ts` | 1 | création en `not-configured` | toast, deuxième lecture, message `unconfigured`, plus de bouton |
+| `admin-bookings.spec.ts` | 1 | lecture puis création | lien affiché ; aucune entrée de `localStorage`/`sessionStorage` ne contient le jeton ni `/booking/feed/` |
+
+Le focus : happy-dom ne déplace pas le focus à l'ouverture ni à la fermeture d'un `<dialog>`. Le test
+focalise le bouton avant de l'activer et vérifie que le **même élément** est toujours dans le DOM et
+focalisé après la réponse : un bouton rendu dans les branches du `@switch` serait recréé et perdrait le focus.
+
+Sweep d'état seedé : la page porte désormais deux `app-confirm-dialog`. Les tests de l'annulation lisaient le
+premier `confirm-dialog` de la page ; ils ciblent maintenant celui qui n'est pas dans `admin-booking-feed`,
+quel que soit l'ordre que retiendra l'implémentation. `answerConfirmDialog` reçoit un troisième paramètre
+facultatif `root` (défaut : la fixture), sans changement pour ses autres appelants. Le harnais `spies()` de la
+page double `getFeedSubscription` (actif par défaut) et `regenerateFeedSubscription`.
+
+Adaptation mécanique : `admin-bookings.spec.ts` (annulation) — 9 sites repointés vers
+`cancellationDialog(host)`, `shared/ui/testing/confirm-dialog-page.ts` — paramètre `root` ajouté ; aucune
+valeur attendue modifiée.
+
+Preuve RED (cache invalidé par `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+
+- `pnpm test --include='src/app/features/{admin,booking}/**/*.spec.ts'; echo $?` → `1` ;
+  **37 failed / 2359 total** (2322 passed) ; 3 suites en échec : les deux neuves et `admin-bookings.spec.ts`.
+- `pnpm test; echo $?` → `1` ; **37 failed / 4839 total** (4802 passed, soit tout l'existant) ; 253 suites
+  vertes sur 256, aucune erreur TS, aucun rejet non géré.
+- Nature des échecs : uniquement des `AssertionError` (`toEqual`/`toBe`) : vue vide, gateway jamais lue,
+  section absente de la page. Aucun échec de harnais. Prettier et ESLint propres sur les six fichiers touchés.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-15 20:51, 37 failed / 4839 total).
+
 ## Journal des tranches
 
 - **Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar** : implémentée le
@@ -1075,6 +1171,10 @@ Tous les tests de cette tranche échouent à ce stade (RED confirmé via la comm
   282 passed / 282 total) · refactor : `toAdminFailure` lit le code métier une seule fois (`const code`, comme
   `toBookingFailure`) au lieu de trois appels à `apiErrorCode` ; verify reportée : aucune surface atteignable
   restructurée (cf. `### F1`).
+- **Tranche F2 — la section montre l'état et crée ou régénère le lien** : GREEN 4839 passed / 4839 total
+  (admin : 2077 passed / 2077 total) · refactor : aucun (passe manuelle sur le diff : rien à extraire, la
+  dérivation vit déjà dans `toBookingFeedView` et la facade) ; verify ✅ PASS sur `/admin/rendez-vous`
+  (surface atteignable restructurée : la page porte la section et une seconde confirmation) (cf. `### F2`).
 
 ### A1
 
@@ -1260,6 +1360,66 @@ Preuves (code de sortie lu) :
 - Verify runtime reportée : aucun composant ne consomme encore ces méthodes (F2), aucune surface atteignable n'est
   modifiée ; le seul changement sur un chemin existant (`toAdminFailure` en `409`) est tenu par les tests
   `cancel_too_late` et `day_in_closure` verts sans modification.
+
+### F2
+
+Fichiers (front, non commités ; tests et helper de `qa` inchangés) :
+
+- `application/booking-feed-view.ts` : `toBookingFeedView` par `switch` sur `kind` (`since` =
+  `formatParisDateTime(createdAt)`) ; `toWebcalUrl` remplace le seul préfixe `^https?:` par `webcal:` ;
+- `pages/admin-bookings/feed-subscription-panel.ts` : facade `@Injectable()` instance-scopée.
+  `rxResource` sur `getFeedSubscription()`, `view`/`state` en `computed` (`loadState(…, () => false)`),
+  `regenerating` en lecture seule. `regenerate()` : ignorée si en vol ; toast de création si l'état d'avant
+  est `none`, de régénération sinon ; `subscription.set(data)` au succès ; échec → toast par raison
+  (`not-configured`, `network`, sinon message serveur, `invalid` compris) et relecture seulement en
+  `not-configured` ; `finalize` remet `regenerating` à faux ; `takeUntilDestroyed` ;
+- `application/components/admin-booking-feed.ts` : `section[app-admin-booking-feed]` (host
+  `aria-labelledby`, `AdminSectionHead` pour le `h2`, grammaire des sections `Fermetures`). Entrées `view`,
+  `state`, `regenerating` ; sorties `regenerateRequested`, `retry` (`copyRequested` viendra en F3).
+  Squelette `role="status"`, `app-load-error`, message `unconfigured` en encadré `status-warn` avec les deux
+  `code`, `none`, puis en `active` le `label for` + `input readonly form-input font-mono` et la date. Le
+  bouton d'action unique (`primary` en `none`, `outlined` en `active`) et le lien `webcal://` sont **hors**
+  des branches d'état, sous un `@if` booléen stable : l'élément survit au passage `none` → `active`.
+  `aria-disabled="true"` pendant l'appel, activation ignorée. L'aide (`ul role="list"`) et la confirmation
+  ne sont rendues qu'en `active` (zéro bouton en `unconfigured`) ;
+- `pages/admin-bookings/admin-bookings.ts` : `providers: [FeedSubscriptionPanel]`, section `mt-14` entre
+  la liste et la confirmation d'annulation.
+
+Écarts : le lien `webcal://` porte le libellé du plan et des tests, « Ouvrir dans Calendrier », et non
+« S'abonner depuis cet appareil » évoqué dans le brief de l'orchestrateur (l'aide iPhone cite ce libellé).
+Pas de focus déplacé quand la section bascule en `unconfigured` après un `409` (le bouton disparaît ; non
+demandé par les tests).
+
+Preuves (code de sortie lu) :
+
+- `pnpm test --include='src/app/features/admin/**/*.spec.ts'; echo $?` → `0` : 2077 passed / 2077, 74 suites.
+- `pnpm test; echo $?` → `0` : 4839 passed / 4839, 256 suites.
+- `pnpm lint; echo $?` → `0` ; `pnpm run format:check` → `0`.
+- `pnpm run build --configuration production; echo $?` → `0` (chunk `admin-bookings` 19,18 kB ; CSP durcie
+  sur 10 pages).
+
+#### Verify
+
+Steps : `STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs` + `pnpm start`, script Playwright jetable
+(`page.route('**/api/booking/feed-subscription')`, état en mémoire, `POST` différé de 400 ms), indice
+`auth:session` posé, `/admin/rendez-vous`.
+
+- `none` : bouton « Créer le lien d'abonnement » ; focus + Entrée deux fois → `aria-disabled="true"`, **un**
+  `POST` ; lien `http://localhost:4200/api/booking/feed/<jeton>.ics`, `webcal://localhost:4200/api/booking/feed/<jeton>.ics` ;
+  focus resté sur le même bouton, libellé « Régénérer le lien ».
+- `active` : Entrée → confirmation ; Échap → aucun `POST`, focus rendu au bouton ; Entrée → « Régénérer le
+  lien » → nouveau jeton affiché, focus rendu au bouton, toast « l'ancien ne fonctionne plus », 2 `POST` au
+  total ; `localStorage`/`sessionStorage` sans jeton.
+- `none` puis secret retiré : création → `409 feed_not_configured` → toast « ajoutez BOOKING_FEED_SECRET »,
+  section `unconfigured`, plus de bouton.
+- `unconfigured` au chargement : zéro bouton dans la section.
+- Aucun débordement horizontal à 375 px (clair et sombre).
+
+Verdict : **PASS**. Captures (`scratchpad/s026-f2/`) : `desktop-light-none`, `desktop-light-active`,
+`desktop-light-confirm`, `desktop-light-regenerated-page`, `desktop-dark-active`, `mobile-light-active`,
+`mobile-dark-active`, `desktop-light-unconfigured`, `mobile-dark-unconfigured`. Console : aucune erreur JS ni
+avertissement Angular ; seules entrées, des ressources réseau : `404 /api/config`, préexistant (la doublure
+n'a pas cette route ; même 404 sur `/admin/messages`), et le `409` voulu du scénario `not-configured`.
 
 ## Review code
 
