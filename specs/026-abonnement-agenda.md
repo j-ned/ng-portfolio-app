@@ -1171,3 +1171,169 @@ Preuves (code de sortie lu) :
   - sur la sortie capturée des deux démarrages : `grep -c <jeton 1>` → `0`, `grep -c <jeton 2>` → `0`,
     `grep -cF <secret>` → `0` ; requêtes du flux journalisées en `/api/booking/feed/[Filtered]` ;
   - processus et conteneur arrêtés.
+
+## Review code
+
+### API
+
+Revue du 2026-10-15, `nest-portfolio-app`, branche `feat/booking-feed` (`b47c4f1`, `49a9469`, `2bd33c8`),
+`git diff origin/master...HEAD`.
+
+**Verdict** : REJECTED
+**Gates CI locaux** : install ✅ (`pnpm install --frozen-lockfile` → 0) / tests ✅ (`pnpm test` → 0, 1807 passed, 61 skipped / 1868) / intégration ✅ (`BOOKING_IT_DATABASE_URL=… pnpm test -- booking.integration booking-scheduler.integration booking-feed.integration` → 0, 56/56) / lint ✅ (`pnpm lint` → 0, aucun fichier réécrit par `--fix`) / build ✅ (`pnpm build` → 0) / image ✅ (`docker build -t nest-portfolio-app:review-feed .` → 0)
+**Checks mécaniques** : checker non vendoré (dépôt NestJS sans `.claude/`) : auto-checks joués à la main ; profil absent pour ce dépôt, politique d'archéologie non appliquée (trace)
+**Warnings de gate** : (b) `pnpm test` : deux journaux `ERROR` attendus de `MailerService` et `ContactService`, suites hors diff ; (b) `npx tsc --noEmit -p tsconfig.json` → 2 : les 4 erreurs préexistantes dans des specs non touchés (`analytics-tracker.service`, `referrer`, `auth.service`, `update-profile.dto`), aucune nouvelle
+**Rendu compilé** : N/A
+**Preuve de verify runtime** : ❌ (image démarrée sur une base au niveau de `master` : flux, routes admin et déploiement conformes ; mais le jeton part dans les transactions Sentry, cf. point 1)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : N/A (API NestJS)
+**Cross-platform** : N/A
+**Tests** : ❌ (`instrument.spec.ts` ne prouve que le prédicat `ignoreIncomingRequests`, pas l'absence du jeton dans ce que Sentry envoie : vert alors que la fuite existe)
+**Sécurité** : ❌
+**Alignement spec** : ❌ (exigence 3 « absent des logs et de Sentry » non tenue)
+
+**Vérifié conforme** :
+
+- HMAC-SHA256 `booking-feed:<sel>` en base64url (43 caractères) ; `feedTokenMatches` compare les longueurs avant `timingSafeEqual` ; le jeton présenté ne part jamais en paramètre SQL.
+- 404 indistinct au runtime : jeton faux bien formé, `.txt`, `%2F`, `.ICS`, aucun sel, secret absent, court ou vide : même corps JSON, `path` masqué, `Content-Type: application/json` ; `text/calendar` seulement sur le 200 ; `no-store` et `noindex, nofollow` sur les deux.
+- Déploiement : secret de 31 caractères, absent ou vide → API démarrée, `/api/health` 200, flux 404, `GET` → `unconfigured`, `POST` → 409 `feed_not_configured`. Avertissement `[Env] BOOKING_FEED_SECRET ignored…` sans la valeur (0 occurrence). Le getter revérifie la longueur, donc le repli de `ConfigService.get` sur `process.env` ne ressuscite pas une valeur écartée.
+- Migration `0026` (chaîne `prevId` du snapshot correcte) appliquée par le `CMD` de l'image sur une base migrée par `master`, avec une ligne `booking_setting` existante (`close_public_holidays = false`) : deux colonnes nullables et le `check`, ligne intacte, `false` conservé après `POST`. Migration additive, donc un retour à l'image précédente ne pose pas de problème.
+- Admin : 401 sans session ; `none` → `POST` 201 → `GET` identique (jeton et `createdAt`) ; une régénération fait passer l'ancien lien en 404 et le nouveau en 200 ; `no-store` ; ni sel ni secret dans les corps.
+- iCalendar validé par `ical.js` 2.1.0 et `node-ical` 0.20.1 (cas réel : émojis, `,` `;`, message de trois lignes, visio et téléphone) : aucun `METHOD`, `NAME`/`X-WR-CALNAME`/`REFRESH-INTERVAL;VALUE=DURATION:PT15M`/`X-PUBLISHED-TTL:PT15M`, CRLF seul, 75 octets au plus par ligne, dépliage fidèle. `UID` = `booking.id` comme `invitation()`, `SEQUENCE:0`, `DTSTAMP` = `created_at`. Présents : le rendez-vous fini il y a 150 jours et ceux à venir. Absents : l'annulé à venir et celui fini il y a 210 jours. Le format convient aux abonnements Apple et Google : UTC sans `VTIMEZONE`, nom lu par `X-WR-CALNAME`.
+- `toIcs` : `to-ics.spec.ts` non modifié et vert ; note d'annulation dans les deux introductions visiteur, introductions propriétaire et `mail-templates.spec.ts` inchangés.
+- Journaux pino au runtime : `"url":"/api/booking/feed/[Filtered]"` ; jetons, secret, JWT et `x=1` à 0 occurrence ; corps et log des 5xx masqués ; événements d'erreur Sentry (5xx réel provoqué) masqués (`request.url`, `transaction`).
+
+**Risque résiduel** (advisory, § 8) :
+
+- réversibilité : profil absent ; monitoring : Sentry (actif en prod, 20 % de traces) ;
+- le seul état persistant ajouté est la migration `0026`, additive, et un revert du code n'a rien à défaire ;
+- non couvert par les gates : l'acceptation réelle du `VCALENDAR` vide par Apple et Google (risque déjà acté, à confirmer au test réel).
+
+**Points à corriger** :
+
+1. **Bloquant, sécurité.** `src/instrument.ts:15-33` et `src/common/sentry-before-send.ts` : le jeton du flux
+   part en clair dans les **transactions** Sentry. `ignoreIncomingRequests` ne supprime que le span `http.server`.
+   Le span `request_context.nestjs` de `@sentry/nestjs` 10.73 (`wrapRequestContextHandler`, `core.startSpan` sans
+   parent requis) ouvre alors une transaction racine `GET /api/booking/feed/:file`. Elle porte
+   `request.url = https://<hôte>/api/booking/feed/<jeton>.ics`, `query_string`, et `contexts.trace.data`
+   `http.url`/`url`, plus une transaction `HttpExceptionFilter` pour les 404 et 5xx. `beforeSend` ne s'applique
+   pas aux transactions.
+   - Preuve : image `review-feed`, DSN vers un collecteur local, `SENTRY_TRACES_SAMPLE_RATE=1`. Trois
+     transactions contiennent le jeton valide (deux `GET /api/booking/feed/:file`, dont une avec `x=1`, et un
+     `HttpExceptionFilter`) ; l'événement d'erreur du 5xx est propre.
+   - En prod, à 20 %, environ un rafraîchissement sur cinq envoie le lien à Sentry.
+   - Correctif : un `beforeSendTransaction` qui **écarte** (`return null`) toute transaction dont `transaction`,
+     `request.url` ou `contexts.trace.data['http.url']` désigne le flux, à défaut qui les masque avec
+     `query_string`, `http.query` et les `spans[].data`. Ou, en amont, un `tracesSampler` qui rend `0` pour le
+     flux.
+   - Tests : un test pur sur un événement de transaction de la forme réelle ci-dessus, et une preuve runtime
+     avec un collecteur local. `instrument.spec.ts` doit vérifier le branchement de ce hook, pas seulement le
+     prédicat.
+2. **Bloquant, sécurité.** `src/common/log-redact.ts:36` et `src/common/sentry-before-send.ts:62-63` : la
+   comparaison est sensible à la casse, alors que le routage Express ne l'est pas.
+   - `GET /api/BOOKING/feed/<jeton>.ics` (ou `/Feed/`) rend **200** avec le flux, et pino journalise
+     `"url":"/api/BOOKING/feed/<jeton>.ics"` en clair. `isUntracedIncomingRequest` rend `false` (la requête est
+     tracée), et un 404/429 renvoie le chemin non masqué dans `path`.
+   - Correctif : drapeau `i` sur `FEED_PATH` et comparaison en minuscules dans `isUntracedIncomingRequest`.
+   - En défense en profondeur, `/api//booking/feed/<jeton>.ics` et `/api/booking/%66eed/<jeton>.ics` (404, non
+     servis) journalisent aussi le jeton. Envisager en plus un masquage par la forme
+     (`[A-Za-z0-9_-]{43}\.ics`).
+   - Tests `it.each` sur ces variantes dans `log-redact.spec.ts` et `sentry-before-send.spec.ts`.
+3. Mineur : `README.md` ne documente ni le masquage du jeton (pino, corps d'erreur, Sentry), prévu au plan
+   (tableau des fichiers, ligne README), ni la contrainte sur les traces Sentry.
+4. Mineur : exports sans consommateur hors du fichier : `SerializedRequest` (`src/common/log-redact.ts:43`) et
+   `Meeting` (`src/booking/booking-meeting.ts:4`) ; `IcsFeed` n'est consommé que par un test.
+
+Informatif, non bloquant :
+
+- **Temps de réponse** : un jeton faux bien formé coûte une requête SQL, alors qu'un fichier malformé ou un
+  secret absent n'en coûte aucune. Le corps reste identique et aucun secret n'est révélé.
+- **Commentaires** : ils citent `ADR-0028`, `(spec 026)` et `(décision du 2026-10-15)`. Le dépôt API n'a pas
+  de profil et `master` cite déjà des ADR dans une trentaine de fichiers ; les deux derniers relèvent tout de
+  même de l'archéologie.
+- **Avertissement d'environnement** : il sort par le `ConsoleLogger` de Nest et non en JSON pino, car il est
+  émis avant le logger applicatif.
+
+#### Correctifs
+
+Correctifs du 2026-10-15 sur `feat/booking-feed` (au-dessus de `2bd33c8`, non commités). Le jeton est noté
+`<T>` ci-dessous.
+
+1. **Transactions Sentry (bloquant).**
+   - **Choix** : `beforeSendTransaction` plutôt que `tracesSampler`. Le hook voit l'événement final, quel que soit
+     le span devenu racine : `request_context.nestjs`, `http.server` sur les chemins non reconnus, ou le filtre
+     d'exceptions. Le sampler, lui, ne reçoit que le nom et les attributs du span au démarrage, et la racine
+     `HttpExceptionFilter` n'y porte pas d'URL.
+   - **Forme réelle** : relevée sur un collecteur local avec `@sentry/nestjs` 10.73. Le nom est la route
+     (`GET /api/booking/feed/:file`), mais l'URL concrète figure dans `request.url`, dans
+     `contexts.trace.data['http.url' | 'url']`, et dans `url.full`, `url.path` et `http.target` pour une racine
+     `http.server`.
+   - **RED** (`sentry-before-send.spec.ts`, `instrument.spec.ts`) : 35 tests en échec, dont
+     `sentryBeforeSendTransaction is not a function`. Sept variantes de chemin sont testées sur trois formes de
+     transaction (route, `http.server`, filtre), plus une donnée de trace seule, un span qui cite le jeton, trois
+     transactions d'autres routes à rendre intactes et la non-mutation. `instrument.spec.ts` vérifie
+     maintenant le branchement : le hook passé à `Sentry.init` est la fonction exportée, et il écarte une
+     transaction du flux.
+   - **GREEN** : `sentryBeforeSendTransaction` (`src/common/sentry-before-send.ts`) rend `null` dès que
+     `transaction`, `request.url` ou une clé URL de `contexts.trace.data` désigne le flux. Sinon, il masque par
+     `redactUrl` les chaînes de `request`, de `contexts.trace.data` et des `spans[]` (`description`, `data`).
+     Le hook est branché dans `src/instrument.ts`.
+   - **Défaut trouvé au runtime, puis corrigé en TDD** : la première version parcourait tout l'événement. Or
+     l'événement remis au hook porte `sdkProcessingMetadata`, qui contient les scopes et est circulaire : le
+     parcours finissait en `RangeError: Maximum call stack size exceeded`, et Sentry remontait cette erreur à la
+     place de chaque transaction. RED : un test avec des métadonnées circulaires. GREEN : le parcours est limité
+     aux champs sérialisés, et les métadonnées gardent leur référence.
+   - **Preuve runtime** (`node dist/main.js`) :
+     - Montage : base jetable `postgres:16-alpine` migrée (port 55433), secret de 64 caractères, sel posé,
+       `SENTRY_DSN=http://k@127.0.0.1:3912/1`, `SENTRY_TRACES_SAMPLE_RATE=1`, collecteur HTTP jetable
+       (`POST /api/<id>/envelope/`).
+     - Appels : bon jeton, `?x=1`, faux jeton, `/api/BOOKING/feed/`, `/api/booking/Feed/`, `.ICS`, `//`,
+       `%66eed`, `/slots`, `/health`, `/feed-subscription`. Trois 5xx réels sont provoqués en renommant
+       `booking_setting` : flux, flux en majuscules, `/slots`.
+     - Avant correctif (code de `2bd33c8`) : 22 enveloppes, dont **7** contiennent `<T>` (cinq
+       `GET /api/booking/feed/:file`, dont `?x=1`, `BOOKING`, `Feed` et `.ICS`, et un `HttpExceptionFilter`).
+     - Après correctif : 11 enveloppes, `grep -c <T>` → **0**. Le collecteur reçoit bien les transactions
+       `GET /api/booking/slots`, `GET /api/health`, `Create Nest App` et les spans SQL, mais aucune transaction
+       du flux. Les trois événements d'erreur 500 arrivent masqués :
+       `request.url = …/api/booking/feed/[Filtered]` et `…/api/BOOKING/feed/[Filtered]`,
+       `transaction = GET /api/booking/feed/[Filtered]`.
+2. **Masquage insensible à la casse (bloquant).**
+   - **RED** : 17 tests en échec.
+     - `log-redact.spec.ts` : `redactUrl` et une ligne pino via `serializeRequest`, sur `BOOKING`, `Feed`,
+       `.ICS`, `//`, `%66eed`, `%2Eics?x=1` et l'URL absolue `Booking/FEED`. Trois URL sans forme de jeton
+       doivent rester intactes.
+     - `http-exception.filter.spec.ts` : corps 404 et log 500 sur cinq variantes.
+     - `sentry-before-send.spec.ts` : événement d'erreur et `isUntracedIncomingRequest` sur les sept variantes.
+   - **GREEN** (`src/common/log-redact.ts`) :
+     - `FEED_PATH` prend le drapeau `i`.
+     - En renfort, `FEED_TOKEN_SEGMENT = /[A-Za-z0-9_-]{43}(?:\.|%2e)ics/gi` est remplacé par `[Filtered]` où
+       qu'il apparaisse.
+     - `isUntracedIncomingRequest` passe par le même critère (`redactUrl(url) !== url`) : casse, `//` et
+       encodages sont couverts sans seconde règle.
+   - **Preuve runtime** (même montage) : avant correctif, `grep -c <T>` dans la sortie pino → **4**. Après →
+     **0**, avec `"url":"/api/BOOKING/feed/[Filtered]"` (3), `"/api//booking/feed/[Filtered]"` (1),
+     `"/api/booking/%66eed/[Filtered]"` (1) et `"/api/booking/feed/[Filtered]"` (6).
+3. **README** : la section Logging décrit le sérialiseur, le masquage par chemin et par forme, et le `path`
+   du filtre. La section Observabilité décrit pourquoi `ignoreIncomingRequests` ne suffit pas, le
+   `beforeSendTransaction` qui écarte et masque, `beforeSend` sur les erreurs, et la consigne pour toute
+   future route qui porterait un secret dans son chemin.
+4. **Exports** :
+   - `SerializedRequest` et `Meeting` ne sont plus exportés. Le grep sur `src` et `test`, specs comprises, ne
+     trouve aucun consommateur hors de leur fichier, et le build (`declaration: true`) passe.
+   - `IcsFeed` reste exporté : il type le paramètre de `toIcsFeed`, fonction exportée et API publique du module
+     (consommée par `booking-feed.service.ts`). Un appelant doit pouvoir nommer ce type pour construire son
+     argument, comme le fait le builder du test.
+
+Vérifications finales :
+
+- `pnpm test; echo $?` → 0 (1873 passed, 61 skipped / 1934) ;
+- `pnpm lint; echo $?` → 0, aucun fichier réécrit par `--fix` ;
+- `pnpm build; echo $?` → 0 ;
+- intégration `booking.integration booking-scheduler.integration booking-feed.integration` sur la base
+  jetable → 0, 56/56 ;
+- `npx tsc --noEmit -p tsconfig.json` : les 4 erreurs préexistantes seulement ;
+- conteneur et processus arrêtés.
+
+Constat hors périmètre : `GET /api/health` produit lui aussi une transaction Sentry malgré
+`ignoreIncomingRequests`, par le même mécanisme de span racine Nest. Il n'y a pas de secret, seulement du
+bruit et du quota.
