@@ -868,3 +868,66 @@ Preuves (code de sortie lu après chaque commande) :
 
 Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
 2026-10-15 18:56, 53 failed / 1807 total).
+
+## Journal des tranches
+
+- **Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar** : implémentée le
+  2026-10-15 (API `feat/booking-feed`, non commitée), verte sauf 2 tests du service bloqués par un défaut du
+  test lui-même (cf. `### A1`), à corriger par `qa`.
+
+### A1
+
+Fichiers (API `nest-portfolio-app`) :
+
+- créés : `src/booking/feed-token.ts`, `booking-meeting.ts`, `booking-feed.ts`, `booking-feed.service.ts`,
+  `booking-feed.controller.ts`, `drizzle/0026_booking_feed.sql`, `drizzle/meta/0026_snapshot.json` (générés
+  par `drizzle-kit generate --name booking_feed`, SQL identique au plan) ;
+- modifiés : `to-ics.ts` (`calendarLines` / `veventLines` / `serialize` internes, `toIcsFeed`),
+  `booking-notifier.service.ts` (importe `meetingOf`, rien d'autre), `booking.module.ts`,
+  `src/config/env.schema.ts`, `env.validation.ts`, `app-config.service.ts`, `src/database/schema/booking.ts`,
+  `drizzle/meta/_journal.json`, `README.md` (ligne `BOOKING_FEED_SECRET` « à ajouter dans Dokploy »,
+  `openssl rand -base64 48`, paragraphe « Abonnement d'agenda »).
+
+Écarts au plan :
+
+1. **`Content-Type` posé au succès seulement** (`res.setHeader` via `@Res({ passthrough: true })`), pas par
+   `@Header` : Nest applique les `@Header` avant le gestionnaire, donc aussi au 404, dont le corps JSON partait
+   en `text/calendar` (supertest le voyait vide). `Cache-Control` et `X-Robots-Tag` restent en `@Header`.
+2. **`new NotFoundException('Not Found')`** : sans argument, Nest ne renseigne pas `error` et le filtre
+   écrivait `NOT_FOUND` ; le corps vaut désormais celui du contrat.
+3. **Secret trop court** : la règle des 32 caractères vit dans `validateEnv` (avertissement `Logger('Env')`
+   sans la valeur, variable retirée de la config) et non dans le schéma Zod (qui ferait échouer le démarrage).
+   Le getter `bookingFeedSecret` revérifie la longueur, parce que `ConfigService.get` retombe sur
+   `process.env`, où la valeur écartée reste présente : sans cette garde, le secret de 20 caractères aurait
+   été utilisé (prouvé au démarrage réel ci-dessous).
+4. README écrit dès A1 (le plan le plaçait en A3), à la demande de l'orchestrateur.
+
+**Défaut de test signalé (non corrigé, consigne « ne pas modifier les tests »)** :
+`booking-feed.service.spec.ts`, les deux cas « Given un jeton valide / faux, Then il n'apparaît dans aucun
+argument de requête » échouent en `TypeError: sql2.toQuery is not a function`. Leur `serialize` teste
+`isSQLWrapper(value)`, vrai aussi pour une table Drizzle (qui porte `getSQL`), puis appelle
+`PgDialect.sqlToQuery(table)`. Or `.from(table)` est inévitable (le test « sel lu » exige
+`getTableName(db.from.mock.calls[0][0])`). Correctif proposé : `is(value, SQL)` (import `is`, `SQL` de
+`drizzle-orm`) à la place de `isSQLWrapper(value)`. Copie temporaire du spec ainsi corrigée : **19/19 verts**
+avec l'implémentation actuelle (copie supprimée).
+
+Preuves (code de sortie lu) :
+
+- `pnpm test -- src/booking src/config; echo $?` → `1` : 2 failed (les deux ci-dessus), 742 passed, 50 skipped.
+- `pnpm test; echo $?` → `1` : 2 failed (les mêmes), 1750 passed, 55 skipped / 1807.
+- Intégration (Postgres 17 jetable `55433`) `booking.integration booking-scheduler.integration
+  booking-feed.integration` → `0`, 50/50.
+- `pnpm lint` → `0` (aucun fichier modifié par `--fix`) ; `pnpm build` → `0` ; `npx tsc --noEmit` : 4 erreurs,
+  toutes dans des specs préexistants non touchés (`analytics-tracker.service`, `referrer`, `auth.service`,
+  `update-profile.dto`), aucune nouvelle.
+- `to-ics.spec.ts`, `booking-notifier.service.spec.ts`, `booking-policy.spec.ts` verts sans modification.
+- Démarrage réel (`node dist/main.js`, base migrée jusqu'à `0026`) :
+  - sans la variable : API démarrée, route `Mapped {/api/booking/feed/:file, GET}`, `GET
+    /api/booking/feed/<43 A>.ics` → 404 JSON, `no-store`, `noindex, nofollow` ;
+  - variable de 20 caractères : API démarrée (`/api/health` 200), avertissement
+    `BOOKING_FEED_SECRET ignored: it must be at least 32 characters…`, valeur absente du journal (0
+    occurrence) ; 404 pour un jeton quelconque **et** pour le jeton dérivé de ce secret court et du sel posé en
+    base ;
+  - contrôle positif, secret de 64 caractères et même sel : 200 `text/calendar; charset=utf-8`, corps
+    `BEGIN:VCALENDAR` … `END:VCALENDAR`, aucun avertissement.
+- Reste A2 : le chemin du 404 et le journal pino portent encore le jeton en clair (masquage prévu en A2).
