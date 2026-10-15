@@ -869,11 +869,80 @@ Preuves (code de sortie lu après chaque commande) :
 Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
 2026-10-15 18:56, 53 failed / 1807 total).
 
+### Tranche A2 — le jeton n'apparaît dans aucun journal
+
+API `nest-portfolio-app`, branche `feat/booking-feed` (après `b47c4f1`) : 33 tests neufs dans 2 fichiers neufs
+(`src/common/filters/http-exception.filter.spec.ts`, `src/instrument.spec.ts`) et 2 suites complétées
+(`log-redact.spec.ts`, `sentry-before-send.spec.ts`) ; 5 tests existants de `booking-feed.controller.spec.ts`
+recalibrés sur le contrat (`path` n'est plus exclu de la comparaison). Purs sans Nest ; le filtre est exercé
+seul (hôte simulé, espion `Logger.prototype.error`) et à travers le contrôleur (supertest).
+
+Signatures figées (squelettes sans comportement : `redactUrl` rend l'URL telle quelle, `serializeRequest` ne
+rend que `id`, `isUntracedIncomingRequest` rend `false`) :
+
+- `log-redact.ts` : `redactUrl(url: string): string` et `redactUrl(url: string | undefined): string | undefined`
+  (surcharges, pour que `path: redactUrl(req.url)` reste un `string`) ; `type SerializedRequest = { id?; method?;
+  url? }` ; `serializeRequest(req: SerializedRequest): SerializedRequest`.
+- `sentry-before-send.ts` : `isUntracedIncomingRequest(url: string): boolean`.
+
+**Écart au plan relevé (à trancher par l'implémentation, pas par le test)** : Sentry 10.73 remplit
+`event.request.url` avec l'URL **absolue** (`getAbsoluteUrl` : `https://<host>/api/booking/feed/…?x=1`) et
+`transaction` avec `GET /api/booking/feed/….ics` (`bestEffortTransactionName`). La regex ancrée du plan
+(`^(\/api\/booking\/feed\/)…`) ne masque ni l'une ni l'autre. Les tests `sentryBeforeSend` utilisent ces formes
+réelles : `request.url` → `https://api.nedellec-julien.fr/api/booking/feed/[Filtered]`, `transaction` →
+`GET /api/booking/feed/[Filtered]`. Les cas `redactUrl` restent ceux du plan (chemins relatifs, ceux de pino et
+du filtre) : désancrer la regex ou masquer le chemin dans `sentryBeforeSend` sont tous deux conformes.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `log-redact.spec.ts` | 5 | `redactUrl` : flux `.ics`, `.ics?x=1`, `abc.ics`, `%2F`, `.txt` | `/api/booking/feed/[Filtered]` exact |
+| | 4 | `feed-subscription`, `slots`, `bookings?from=…`, `health` | inchangés |
+| | 1 | `undefined` | `undefined` |
+| | 1 | `serializeRequest` sur le flux, avec en-têtes | `{ id, method, url: '/api/booking/feed/[Filtered]' }` exact, en-têtes absents |
+| | 1 | `serializeRequest` sur une autre route | `{ id, method, url }` exact |
+| | 1 | `serializeRequest` branché sur `pino` | ligne sans le jeton, `"url":"/api/booking/feed/[Filtered]"` |
+| `sentry-before-send.spec.ts` | 1 | URL absolue du flux | `request.url` = origine + `/api/booking/feed/[Filtered]` |
+| | 1 | flux avec `query_string` | clé `query_string` absente |
+| | 1 | flux | `transaction` = `GET /api/booking/feed/[Filtered]` |
+| | 1 | flux | jeton absent de l'événement sérialisé |
+| | 1 | sans `request`, transaction du flux | `transaction` masquée |
+| | 1 | autre route | `url`, `query_string`, `transaction` inchangés |
+| | 1 | flux | événement d'origine inchangé (`toEqual` du gabarit) |
+| | 6 | `isUntracedIncomingRequest` : `health`, flux (3 formes) / `slots`, `feed-subscription` | `true` / `false` |
+| `http-exception.filter.spec.ts` | 1 | 404 sur le flux | corps exact, `path: '/api/booking/feed/[Filtered]'` |
+| | 1 | `Error` 500 sur le flux | `logger.error({ err, path masqué, method }, 'Unhandled 500 on GET /api/booking/feed/[Filtered]')`, jeton absent des appels |
+| | 1 | 404 sur une autre route | `path` avec sa query string |
+| `instrument.spec.ts` (`@sentry/nestjs` et `dotenv/config` doublés, `SENTRY_DSN` posé) | 4 | `ignoreIncomingRequests` passé à `httpIntegration` : `health`, flux / `slots`, `feed-subscription` | `true` / `false` |
+| `booking-feed.controller.spec.ts` (préfixe `api` comme `main.ts`) | 5 (recalibrés) | secret absent, `.txt`, `%2F`, aucun sel, jeton faux | corps égal hors `timestamp` seul, `path: '/api/booking/feed/[Filtered]'` |
+
+Non couvert par un test unitaire, renvoyé au contrôle runtime de A2 (`node dist/main.js`, `grep -c <jeton>` et
+`grep -c <secret>` → `0`) : le branchement `serializers.req: serializeRequest` dans `app.module.ts` (fabrique
+inline, module complet non montable sans base) et l'absence du secret dans la sortie du processus (déjà
+couverte côté `validateEnv` en A1). Spans et breadcrumbs : le plan ne prescrit rien, les requêtes du flux
+n'étant plus tracées.
+
+Preuves (code de sortie lu après chaque commande) :
+
+- `pnpm test -- src/common src/booking; echo $?` → `1` ; **24 failed / 886 total** (812 passed, 50 skipped).
+- `pnpm test; echo $?` → `1` ; **25 failed / 1840 total** (1760 passed, 55 skipped) ; 5 suites en échec, les 4
+  touchées et `instrument.spec.ts`, chaque échec étant un test neuf ou recalibré.
+- Nature des échecs : uniquement des assertions (`toBe`, `toEqual`, `toHaveBeenCalledWith`, `toContain`,
+  `not.toHaveProperty`) ; aucun `TypeError`, module introuvable ni erreur TS. ESLint et Prettier propres ;
+  `tsc --noEmit` sans erreur dans les fichiers touchés.
+- Verts par construction avant GREEN (gardes contre le sur-masquage) : routes hors flux inchangées, `undefined`,
+  `isUntracedIncomingRequest` à `false`, `instrument` pour `health`/`slots`/`feed-subscription`, chemin d'une
+  autre route dans le filtre, non-mutation, et les deux 200 du contrôleur sous préfixe `api`.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-15 19:15, 25 failed / 1840 total).
+
 ## Journal des tranches
 
 - **Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar** : implémentée le
   2026-10-15 (API `feat/booking-feed`, non commitée), verte sauf 2 tests du service bloqués par un défaut du
   test lui-même (cf. `### A1`), à corriger par `qa`.
+- **Tranche A2 — le jeton n'apparaît dans aucun journal** : implémentée le 2026-10-15 (API `feat/booking-feed`,
+  non commitée), verte ; contrôle runtime : jeton et secret absents de la sortie du processus (cf. `### A2`).
 
 ### A1
 
@@ -931,3 +1000,54 @@ Preuves (code de sortie lu) :
   - contrôle positif, secret de 64 caractères et même sel : 200 `text/calendar; charset=utf-8`, corps
     `BEGIN:VCALENDAR` … `END:VCALENDAR`, aucun avertissement.
 - Reste A2 : le chemin du 404 et le journal pino portent encore le jeton en clair (masquage prévu en A2).
+
+### A2
+
+Fichiers (API `nest-portfolio-app`, tous modifiés, aucun créé hors tests de `qa`) :
+
+- `src/common/log-redact.ts` : `redactUrl` (regex `FEED_PATH`), `serializeRequest` ;
+- `src/app.module.ts` : `serializers: { req: serializeRequest }` (sérialiseur inline retiré) ;
+- `src/common/filters/http-exception.filter.ts` : `path = redactUrl(req.url)`, réutilisé dans le corps, l'objet
+  et le message du log 5xx ;
+- `src/common/sentry-before-send.ts` : `transaction` et `request.url` passés à `redactUrl`, `query_string`
+  retirée quand l'URL a été masquée ; `isUntracedIncomingRequest` (`/api/health` ou préfixe
+  `/api/booking/feed/`) ;
+- `src/instrument.ts` : `ignoreIncomingRequests: isUntracedIncomingRequest`.
+
+Écarts au plan :
+
+1. **Regex désancrée** (ambiguïté 1 du plan de test) : `/(\/api\/booking\/feed\/)[\s\S]*$/` remplacée par
+   `$1[Filtered]`, au lieu de `^(\/api\/booking\/feed\/)…`. Une seule fonction couvre ainsi les chemins
+   relatifs (pino, filtre), l'URL absolue de Sentry (`https://<hôte>/api/booking/feed/[Filtered]`) et la
+   transaction (`GET /api/booking/feed/[Filtered]`), sans extraire le chemin dans `sentryBeforeSend`. Coût : un
+   chemin qui contiendrait `/api/booking/feed/` ailleurs qu'en tête serait masqué aussi (sur-masquage sans
+   risque). `feed-subscription` n'est pas touché (le motif exige `feed/`). `[\s\S]` plutôt que `.` pour ne
+   rien laisser après un saut de ligne encodé puis décodé.
+2. **`query_string` retirée seulement si l'URL a changé** (`redactUrl(url) !== url`) : critère « URL du flux »
+   du plan, sans second motif.
+3. **`transaction` absente → clé non ajoutée** : un événement sans `transaction` ni `request` est rendu tel
+   quel (même référence), comme avant A2.
+
+Preuves (code de sortie lu) :
+
+- `pnpm test -- src/common src/booking; echo $?` → `0` : 836 passed, 50 skipped / 886.
+- `pnpm test; echo $?` → `0` : 1785 passed, 55 skipped / 1840 (les 2 tests du service signalés en A1 sont
+  verts, spec corrigé entre-temps par `qa`).
+- `pnpm lint; echo $?` → `0` (aucun fichier modifié par `--fix`) ; `pnpm build; echo $?` → `0` ;
+  `npx tsc --noEmit -p tsconfig.json` : les 4 mêmes erreurs préexistantes qu'en A1, aucune nouvelle.
+- Contrôle runtime (`node dist/main.js`, `NODE_ENV=production`, Postgres 17 jetable `55433` migré jusqu'à
+  `0026`, `BOOKING_FEED_SECRET` de 64 caractères, sel de 22 caractères posé en SQL, jeton dérivé par
+  `dist/booking/feed-token.js`, sortie standard et d'erreur capturées dans un fichier) :
+  - bon jeton → 200, corps `BEGIN:VCALENDAR` ; bon jeton `?x=1` → 200 ;
+  - jeton faux (bien formé, autre sel) → 404, corps
+    `{"statusCode":404,"error":"Not Found","message":"Not Found","path":"/api/booking/feed/[Filtered]",…}` ;
+    jeton faux `?x=1` → même corps ;
+  - lignes pino des quatre requêtes : `"req":{"id":…,"method":"GET","url":"/api/booking/feed/[Filtered]"}` ;
+  - `grep -c <jeton>` → `0`, `grep -c <jeton faux>` → `0`, `grep -c <secret>` → `0`, `grep -c 'x=1'` → `0` sur
+    la sortie capturée ; `grep -c <jeton>` sur le corps du 404 → `0` ;
+  - même démarrage **sans** la variable : `/api/health` 200, flux en 404 au chemin masqué, jeton absent de la
+    sortie (`0`) ; `GET /api/booking/slots?from=2026-10-20` journalisé avec son URL intacte (pas de
+    sur-masquage) ;
+  - processus et conteneur arrêtés.
+- Non vérifié en runtime : Sentry (aucun DSN local) ; couvert par `sentry-before-send.spec.ts` et
+  `instrument.spec.ts`.
