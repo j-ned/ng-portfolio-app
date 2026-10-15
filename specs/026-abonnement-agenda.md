@@ -1228,6 +1228,71 @@ Preuve RED (cache invalidé par `pnpm exec ng cache clean` et `rm -rf node_modul
 Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
 2026-10-15 21:49, 14 failed / 4852 total).
 
+### Tranche F4 — zéro violation axe sur la section
+
+Audit, branche `feat/026-abonnement-agenda` (F3 commitée `21b01b2`) : 4 scénarios neufs × 2 thèmes dans
+`e2e/a11y/booking-states.spec.ts` (`describe("abonnement d'agenda")`), repère recalé du scénario existant
+`/admin/rendez-vous`, doublure étendue.
+
+Doublure (`ci/api-stub/server.mjs`, sous `STUB_ADMIN_SESSION=1`, testée en tête de `routeBookingAdmin`,
+donc avant le 405) :
+
+- `GET /api/booking/feed-subscription` → 200
+  `{ status: 'active', token: 'stubFeedToken000000000000000000000000000000', createdAt: '2026-10-15T08:32:00.000Z' }` ;
+- `POST` → 201 `{ status: 'active', token: 'stubFeedRegenerated000000000000000000000000', createdAt: <maintenant> }` ;
+- sans état : la lecture rend toujours le premier lien (les workers parallèles ne se contaminent pas).
+  Les deux jetons font 43 caractères `[A-Za-z0-9_-]` (mesuré avec `node -e`).
+
+| Scénario (clair et sombre) | Repère | Assertion d'atteinte avant l'analyse |
+|---|---|---|
+| `/admin/rendez-vous` (`ADMIN_PAGES`, repère recalé) | `admin-booking-feed-url` | aucun squelette, erreur ni toast (liste des rendez-vous et section chargées) |
+| dialogue de régénération ouvert | `admin-booking-feed` | lien affiché ; « Régénérer le lien » activé → un seul `dialog[open]`, celui de la section, titre « Régénérer le lien d'abonnement ? » (U+202F) |
+| lien régénéré avec son toast | `toast` | confirmation → aucun `dialog[open]`, champ = `…/booking/feed/stubFeedRegenerated…ics`, un toast « Nouveau lien créé : l'ancien ne fonctionne plus. » ; toast **encore visible après l'analyse** (il se retire à 3 s) |
+| toast « Lien copié » | `toast` | `clipboard-read`/`clipboard-write` accordés à l'origine du site ; champ = `…/booking/feed/stubFeedToken…ics` ; « Copier le lien » → toast « Lien copié dans le presse-papiers », presse-papiers relu = valeur du champ ; toast encore visible après l'analyse |
+| abonnement non configuré | `admin-booking-feed-unconfigured` | `page.route` sur `feed-subscription` (GET seul, CORS de l'origine, aucun appel réseau) → `{ status: 'unconfigured' }` ; paragraphe visible, aucun bouton dans la section, aucun squelette, erreur ni toast |
+
+L'état `unconfigured` n'avait pas de scénario au plan (couvert par Vitest) : ajouté parce que `page.route`
+le sert sans toucher la doublure ni ouvrir le réseau.
+
+Adaptation mécanique : `booking-states.spec.ts`, scénario « open booking cancellation dialog » — 1 site
+repointé : repère `confirm-dialog` → `admin-booking-reason`, aucune valeur attendue modifiée. La section en
+état `active` rend désormais son propre `confirm-dialog`, fermé, avant celui de l'annulation : le repère
+`getByTestId('confirm-dialog').first()` visait le dialogue fermé (`hidden`). Le champ du motif, déjà
+attendu visible par le test, est propre au dialogue d'annulation.
+
+Premier passage, avant cette adaptation : `pnpm a11y` → exit 1, **2 failed / 91 total**, les deux thèmes
+du scénario d'annulation en `toBeVisible` sur `confirm-dialog` (« unexpected value "hidden" ») : échec de
+repère, pas une violation axe. Les 8 scénarios neufs passaient déjà. Non mesuré mais déductible du code :
+avant l'extension, la doublure répondait 404 à `feed-subscription`, la section s'affichait en
+`load-error` et `/admin/rendez-vous` tombait sur `ADMIN_PENDING_OR_FAILED` depuis F2.
+
+**Pas de RED : tout passe d'emblée** (tranche d'audit, exception actée en 024 F6). `pnpm a11y` le
+2026-10-15 22:15, 0 failed / 91 total (91 passed, dont 8 nouveaux scénarios ; les 83 existants restent
+verts), exit 0 ; aucune violation WCAG 2.0/2.1/2.2 A et AA sur les 12 analyses de l'écran
+(reporter JSON, sous-ensemble `abonnement|/admin/rendez-vous|cancellation dialog`, 12 passed).
+`incomplete` à relire : `color-contrast` sur le dialogue de régénération (deux thèmes), le lien régénéré
+(deux thèmes) et le dialogue d'annulation existant ; aucun sur la page chargée, la copie ni `unconfigured`.
+Le rapport axe des deux scénarios de toast contient le nœud `data-testid="toast"` (3 nœuds analysés) :
+le toast a bien été audité. Réseau, relu dans `network.json` de chaque test : `blocked=0` sur les 12,
+`GET /api/booking/feed-subscription` rejoué sur la doublure (et le `POST` dans le scénario de
+régénération) ; aucun appel à `feed-subscription` dans `unconfigured` (servi par `page.route`).
+
+```text
+$ docker build -t ng-portfolio-app:a11y .; echo $?   → 0
+$ ci/a11y-stack.sh up                                → Pile a11y prête
+$ pnpm a11y; echo $?
+  91 passed (1.4m)
+0
+$ ci/a11y-stack.sh down; echo $?                     → 0
+$ pnpm run a11y:typecheck; echo $?                   → 0
+$ pnpm test; echo $?
+ Test Files  257 passed (257)
+      Tests  4852 passed (4852)
+0
+$ pnpm exec eslint e2e/a11y ci/api-stub; echo $?     → 0
+$ pnpm exec prettier --check e2e/a11y ci/api-stub    → All matched files use Prettier code style!
+```
+
 ## Journal des tranches
 
 - **Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar** : implémentée le
@@ -1247,6 +1312,7 @@ Tous les tests de cette tranche échouent à ce stade (RED confirmé via la comm
   dérivation vit déjà dans `toBookingFeedView` et la facade) ; verify ✅ PASS sur `/admin/rendez-vous`
   (surface atteignable restructurée : la page porte la section et une seconde confirmation) (cf. `### F2`).
 - **Tranche F3 — le lien se copie avec un retour annoncé** : GREEN 4852 passed / 4852 total · refactor :
+- **Tranche F4 — zéro violation axe sur la section** : tranche d'audit, verte d'emblée par nature (comme 024 F6 et 025 F5) · `pnpm a11y` 91 passed / 91 total, exit 0, dont 8 analyses neuves (lien affiché, dialogue de régénération, lien régénéré, toast « Lien copié », état non configuré ; clair et sombre), réseau fermé (`blocked=0`) ; repère du dialogue d'annulation recalé (adaptation mécanique) ; `pnpm test` 4852 passed, exit 0
   aucun (passe manuelle sur le diff : `writeToClipboard` déplacée telle quelle, deux sites d'appel réels,
   `code-copy.ts` et la facade) ; verify ✅ PASS sur `/admin/rendez-vous` (surface atteignable restructurée :
   la section `active` gagne un bouton, le `409` déplace désormais le focus) (cf. `### F3`).
