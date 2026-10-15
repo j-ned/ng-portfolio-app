@@ -1081,7 +1081,7 @@ describe("AdminBookings: création et régénération du lien d'abonnement", () 
     });
   });
 
-  it('Given the secret removed from the API When a link is created Then the owner is told and the section switches to the unconfigured message without button', async () => {
+  it('Given the secret removed from the API When a link is created Then the owner is told, the section switches to the unconfigured message without button and the focus lands on its heading', async () => {
     let reads = 0;
     const gateway = spies({
       feed: () =>
@@ -1097,15 +1097,19 @@ describe("AdminBookings: création et régénération du lien d'abonnement", () 
 
     await pressFeedAction(rendered);
 
+    const heading = inFeed(rendered.host, 'admin-booking-feed-heading');
+
     expect({
       reads: gateway.getFeedSubscription.mock.calls.length,
       unconfigured: inFeed(rendered.host, 'admin-booking-feed-unconfigured') !== null,
       action: feedAction(rendered.host),
+      focused: heading !== null && rendered.host.ownerDocument.activeElement === heading,
       toasts: rendered.toast.add.mock.calls.map(([toast]) => toast),
     }).toEqual({
       reads: 2,
       unconfigured: true,
       action: null,
+      focused: true,
       toasts: [
         {
           severity: 'error',
@@ -1130,5 +1134,95 @@ describe("AdminBookings: création et régénération du lien d'abonnement", () 
         (entry) => entry.includes('FeedToken') || entry.includes('/booking/feed/'),
       ),
     }).toEqual({ shown: NEW_FEED_URL, leaked: [] });
+  });
+});
+
+const FEED_COPIED = 'Lien copié dans le presse-papiers';
+const FEED_COPY_FAILED = 'Copie impossible\u00a0: sélectionnez le lien et copiez-le à la main.';
+
+const feedCopy = (host: HTMLElement): HTMLElement | null => inFeed(host, 'admin-booking-feed-copy');
+
+async function pressFeedCopy(rendered: Rendered): Promise<void> {
+  const copy = feedCopy(rendered.host);
+  copy?.focus();
+  copy?.click();
+  await settleBounded(rendered.fixture);
+}
+
+describe("AdminBookings: copie du lien d'abonnement", () => {
+  beforeEach(async () => {
+    await navigator.clipboard.writeText('avant');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('Given an active link When « Copier le lien » is pressed Then its https address reaches the clipboard, the copy is told and the focus stays on the button', async () => {
+    const gateway = spies();
+    const rendered = await render(gateway);
+    const before = feedCopy(rendered.host);
+    const button = {
+      tag: before?.tagName,
+      type: before?.getAttribute('type'),
+      name: before ? accessibleName(before, rendered.host) : null,
+    };
+
+    await pressFeedCopy(rendered);
+    const after = feedCopy(rendered.host);
+
+    expect({
+      button,
+      clipboard: await navigator.clipboard.readText(),
+      toasts: rendered.toast.add.mock.calls.map(([toast]) => toast),
+      same: before !== null && before === after,
+      focused: after !== null && rendered.host.ownerDocument.activeElement === after,
+      requests: gateway.regenerateFeedSubscription.mock.calls.length,
+    }).toEqual({
+      button: { tag: 'BUTTON', type: 'button', name: 'Copier le lien' },
+      clipboard: FEED_URL,
+      toasts: [{ severity: 'success', detail: FEED_COPIED }],
+      same: true,
+      focused: true,
+      requests: 0,
+    });
+  });
+
+  it('Given a clipboard that refuses the text When « Copier le lien » is pressed Then the owner is told to select the link, which stays shown', async () => {
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(
+      new DOMException('The request is not allowed', 'NotAllowedError'),
+    );
+    const rendered = await render();
+
+    await pressFeedCopy(rendered);
+
+    expect({
+      clipboard: await navigator.clipboard.readText(),
+      toasts: rendered.toast.add.mock.calls.map(([toast]) => toast),
+      value: feedUrlField(rendered.host)?.value,
+    }).toEqual({
+      clipboard: 'avant',
+      toasts: [{ severity: 'error', detail: FEED_COPY_FAILED }],
+      value: FEED_URL,
+    });
+  });
+
+  it('Given no link yet When the page loads Then nothing offers a copy, until the link is created and its copy copies the new address', async () => {
+    const rendered = await render(spies({ feed: () => of({ kind: 'none' }) }));
+    const beforeCreation = feedCopy(rendered.host);
+
+    await pressFeedAction(rendered);
+    rendered.toast.add.mockClear();
+    await pressFeedCopy(rendered);
+
+    expect({
+      beforeCreation,
+      clipboard: await navigator.clipboard.readText(),
+      toasts: rendered.toast.add.mock.calls.map(([toast]) => toast),
+    }).toEqual({
+      beforeCreation: null,
+      clipboard: NEW_FEED_URL,
+      toasts: [{ severity: 'success', detail: FEED_COPIED }],
+    });
   });
 });

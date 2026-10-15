@@ -1,4 +1,13 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import {
+  Component,
+  afterRenderEffect,
+  computed,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { AppIcon } from '@shared/icons/app-icon';
 import { Button } from '@shared/ui/button';
 import { ConfirmDialog } from '@shared/ui/confirm-dialog';
 import { LoadError } from '@shared/ui/load-error';
@@ -9,7 +18,7 @@ import { AdminSectionHead } from './admin-section-head';
 
 @Component({
   selector: 'section[app-admin-booking-feed]',
-  imports: [Button, ConfirmDialog, LoadError, AppSkeleton, AdminSectionHead],
+  imports: [AppIcon, Button, ConfirmDialog, LoadError, AppSkeleton, AdminSectionHead],
   host: {
     'data-testid': 'admin-booking-feed',
     'aria-labelledby': 'admin-booking-feed-heading',
@@ -60,6 +69,17 @@ import { AdminSectionHead } from './admin-section-head';
               [value]="feed.url"
               class="form-input font-mono"
             />
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              data-testid="admin-booking-feed-copy"
+              class="mt-3"
+              (click)="copyRequested.emit()"
+            >
+              <app-icon name="clipboard" [size]="16" />
+              Copier le lien
+            </button>
             <p data-testid="admin-booking-feed-since" class="mt-2 text-sm text-muted">
               Lien créé le {{ feed.since }}.
             </p>
@@ -140,8 +160,11 @@ export class AdminBookingFeed {
   readonly view = input.required<BookingFeedView | null>();
   readonly state = input.required<LoadState>();
   readonly regenerating = input(false);
+  readonly copyRequested = output<void>();
   readonly regenerateRequested = output<void>();
   readonly retry = output<void>();
+
+  private readonly _sectionHead = viewChild.required(AdminSectionHead);
 
   private readonly _actionable = computed(() => {
     const view = this.view();
@@ -154,6 +177,19 @@ export class AdminBookingFeed {
     return view?.kind === 'active' ? view.webcalUrl : null;
   });
   protected readonly confirmOpen = signal(false);
+
+  // Le bouton d'action disparaît en « unconfigured » : sans relais, le focus tomberait sur <body>.
+  private _hadAction = false;
+  private readonly _focusHeadingOnActionLoss = afterRenderEffect({
+    write: () => {
+      if (this.hasAction()) {
+        this._hadAction = true;
+      } else if (this._hadAction && this.view()?.kind === 'unconfigured') {
+        this._hadAction = false;
+        this._sectionHead().focusHeading();
+      }
+    },
+  });
 
   protected requestAction(): void {
     if (this.regenerating()) return;

@@ -1,3 +1,4 @@
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NEVER, Subject, defer, of, throwError, type Observable } from 'rxjs';
 import type { Mock } from 'vitest';
@@ -302,6 +303,132 @@ describe('FeedSubscriptionPanel: création et régénération', () => {
           detail: "Abonnement non configuré : ajoutez BOOKING_FEED_SECRET à l'API.",
         },
       ],
+    });
+  });
+});
+
+const COPIED = 'Lien copié dans le presse-papiers';
+const COPY_FAILED = 'Copie impossible\u00a0: sélectionnez le lien et copiez-le à la main.';
+
+async function copied(panel: FeedSubscriptionPanel): Promise<void> {
+  panel.copyLink();
+  await TestBed.inject(ApplicationRef).whenStable();
+}
+
+describe('FeedSubscriptionPanel: copie du lien', () => {
+  beforeEach(async () => {
+    await navigator.clipboard.writeText('avant');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('Given an active link When it is copied Then its https address, not the webcal one, reaches the clipboard and the copy is told', async () => {
+    const { panel, toasts } = await openPanel();
+
+    await copied(panel);
+
+    expect({ clipboard: await navigator.clipboard.readText(), toasts: toasts() }).toEqual({
+      clipboard: CURRENT_URL,
+      toasts: [{ severity: 'success', detail: COPIED }],
+    });
+  });
+
+  it('Given a link just regenerated When it is copied Then the new address reaches the clipboard', async () => {
+    const { panel } = await openPanel();
+    panel.regenerate();
+    await flush();
+
+    await copied(panel);
+
+    expect(await navigator.clipboard.readText()).toBe(NEW_URL);
+  });
+
+  it('Given an active link copied once When it is copied again Then the copy is told twice', async () => {
+    const { panel, toasts } = await openPanel();
+
+    await copied(panel);
+    await copied(panel);
+
+    expect(toasts()).toEqual([
+      { severity: 'success', detail: COPIED },
+      { severity: 'success', detail: COPIED },
+    ]);
+  });
+
+  it('Given a clipboard that refuses the text When the link is copied Then the owner is told to select it and copy it by hand', async () => {
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(
+      new DOMException('The request is not allowed', 'NotAllowedError'),
+    );
+    const { panel, toasts } = await openPanel();
+
+    await copied(panel);
+
+    expect({ clipboard: await navigator.clipboard.readText(), toasts: toasts() }).toEqual({
+      clipboard: 'avant',
+      toasts: [{ severity: 'error', detail: COPY_FAILED }],
+    });
+  });
+
+  it('Given no link yet When it is copied Then nothing is written nor told, until a link is created and copied', async () => {
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText');
+    const opened = await openPanel(() =>
+      defer(() => of<BookingFeedSubscription>({ kind: 'none' })),
+    );
+
+    opened.panel.copyLink();
+    await flush();
+    const before = { writes: writeText.mock.calls.length, toasts: opened.toasts().length };
+    opened.panel.regenerate();
+    await flush();
+    await copied(opened.panel);
+
+    expect({ before, written: writeText.mock.calls.map(([text]) => text) }).toEqual({
+      before: { writes: 0, toasts: 0 },
+      written: [NEW_URL],
+    });
+  });
+
+  it('Given the subscription still on its way When it is copied Then nothing is written, until the link arrives and is copied', async () => {
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText');
+    const arrival = new Subject<BookingFeedSubscription>();
+    const { panel, toasts } = await openPanel(() => arrival);
+
+    panel.copyLink();
+    await flush();
+    const before = { writes: writeText.mock.calls.length, toasts: toasts().length };
+    arrival.next(CURRENT);
+    arrival.complete();
+    await flush();
+    await copied(panel);
+
+    expect({ before, written: writeText.mock.calls.map(([text]) => text) }).toEqual({
+      before: { writes: 0, toasts: 0 },
+      written: [CURRENT_URL],
+    });
+  });
+
+  it('Given the read failed When it is copied Then nothing is written, until the link is read again and copied', async () => {
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText');
+    let attempts = 0;
+    const { panel, toasts } = await openPanel(() =>
+      defer(() => {
+        attempts += 1;
+        return attempts === 1 ? throwError(() => new Error('offline')) : of(CURRENT);
+      }),
+    );
+
+    panel.copyLink();
+    await flush();
+    const before = { writes: writeText.mock.calls.length, toasts: toasts().length };
+    panel.reload();
+    await flush();
+    await copied(panel);
+
+    expect({ before, written: writeText.mock.calls.map(([text]) => text) }).toEqual({
+      before: { writes: 0, toasts: 0 },
+      written: [CURRENT_URL],
     });
   });
 });

@@ -102,6 +102,7 @@ const CANCEL_FAILURES: Partial<Record<BookingAdminFailure, string>> = {
       [view]="feed.view()"
       [state]="feed.state()"
       [regenerating]="feed.regenerating()"
+      (copyRequested)="feed.copyLink()"
       (regenerateRequested)="feed.regenerate()"
       (retry)="feed.reload()"
     ></section>

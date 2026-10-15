@@ -1,9 +1,10 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, PendingTasks, computed, inject, signal } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
 import { ToastStore } from '@core/notifications/toast-store';
 import { BookingGateway } from '@features/booking/domain/gateways/booking.gateway';
 import type { BookingAdminFailure } from '@features/booking/domain/models/booking-admin.model';
+import { writeToClipboard } from '@shared/clipboard/write-to-clipboard';
 import { loadState } from '@shared/ui/load-state';
 import { toBookingFeedView } from '../../application/booking-feed-view';
 
@@ -17,12 +18,15 @@ const CREATION_FAILURES: Partial<Record<BookingAdminFailure, string>> = {
 };
 const SERVER_FAILURE =
   "Création impossible : le serveur n'a pas répondu. Réessayez dans un instant.";
+const COPIED = 'Lien copié dans le presse-papiers';
+const COPY_FAILED = 'Copie impossible : sélectionnez le lien et copiez-le à la main.';
 
 @Injectable()
 export class FeedSubscriptionPanel {
   private readonly gateway = inject(BookingGateway);
   private readonly toast = inject(ToastStore);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly pendingTasks = inject(PendingTasks);
 
   private readonly subscription = rxResource({
     stream: () => this.gateway.getFeedSubscription(),
@@ -57,6 +61,19 @@ export class FeedSubscriptionPanel {
         this.subscription.set(result.data);
         this.toast.add({ severity: 'success', detail: created ? CREATED : REGENERATED });
       });
+  }
+
+  copyLink(): void {
+    const view = this.view();
+    if (view?.kind !== 'active') return;
+    void this.pendingTasks.run(async () => {
+      const copied = await writeToClipboard(view.url);
+      this.toast.add(
+        copied
+          ? { severity: 'success', detail: COPIED }
+          : { severity: 'error', detail: COPY_FAILED },
+      );
+    });
   }
 
   reload(): void {

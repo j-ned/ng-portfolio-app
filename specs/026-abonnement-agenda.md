@@ -1157,6 +1157,77 @@ Preuve RED (cache invalidé par `pnpm exec ng cache clean` et `rm -rf node_modul
 Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
 2026-10-15 20:51, 37 failed / 4839 total).
 
+### Tranche F3 — le lien se copie avec un retour annoncé
+
+Front, branche `feat/026-abonnement-agenda` : 13 tests neufs et 1 test existant complété, dans une suite
+neuve (`shared/clipboard/write-to-clipboard.spec.ts`) et deux suites existantes complétées
+(`feed-subscription-panel.spec.ts`, `admin-bookings.spec.ts`). `code-copy.spec.ts` n'est pas touché : il doit
+rester vert quand `code-copy.ts` importera la fonction partagée (aucune adaptation mécanique nécessaire).
+
+Signatures figées (squelettes sans comportement) :
+
+- `writeToClipboard(text: string): Promise<boolean>` (`shared/clipboard/write-to-clipboard.ts`) : le
+  squelette rend `true` sans écrire. Contrat : `true` quand `navigator.clipboard.writeText` a résolu ;
+  `false`, sans rejet, quand il rejette ou que `navigator.clipboard` est absent (repli de l'existant, aucun
+  `execCommand`). Le GREEN y déplace le corps de la fonction privée de `code-copy.ts` et l'y importe.
+- `FeedSubscriptionPanel.copyLink(): void` : squelette vide. Contrat : hors état `active`, rien ; sinon
+  `PendingTasks.run(() => writeToClipboard(view.url))` (l'URL https, jamais le `webcal://`), puis toast.
+  Les tests de la facade attendent par `ApplicationRef.whenStable()` : une copie hors `PendingTasks` n'y
+  est pas attendue.
+- Composant `admin-booking-feed` (non squelettisé, prouvé par la page) : sortie `copyRequested` branchée sur
+  `feed.copyLink()` ; bouton `type="button"` `data-testid="admin-booking-feed-copy"`, nom accessible
+  « Copier le lien », rendu en `active` seulement, élément stable (le focus y reste après la copie).
+- Focus en `unconfigured` après un `409` (ajout de l'orchestrateur, écart F2 n° 2) : le bouton d'action
+  disparaît, le focus va sur le `h2` de la section (`AdminSectionHead.focusHeading()`, `tabindex="-1"`
+  existant, précédent `AdminClosures`).
+
+Copie (plan, mot pour mot ; insécable avant les deux-points comme les autres toasts) :
+
+- succès : `{ severity: 'success', detail: 'Lien copié dans le presse-papiers' }` ;
+- échec : `{ severity: 'error', detail: 'Copie impossible\u00a0: sélectionnez le lien et copiez-le à la main.' }`.
+
+| Fichier | Tests | Scénario | Assertions clés |
+|---|---|---|---|
+| `write-to-clipboard.spec.ts` | 1 | presse-papiers qui accepte | `true`, presse-papiers = texte exact |
+| `write-to-clipboard.spec.ts` | 1 | `writeText` rejeté (`NotAllowedError`) | `false` sans rejet, presse-papiers inchangé (`avant`) |
+| `write-to-clipboard.spec.ts` | 1 | `navigator.clipboard` absent | résout `false` |
+| `feed-subscription-panel.spec.ts` | 1 | `active`, `copyLink()` | presse-papiers = URL https (pas le webcal), un toast succès |
+| `feed-subscription-panel.spec.ts` | 1 | régénéré puis copié | presse-papiers = nouvelle URL |
+| `feed-subscription-panel.spec.ts` | 1 | deux copies | deux toasts succès (deux annonces) |
+| `feed-subscription-panel.spec.ts` | 1 | `writeText` rejeté | presse-papiers inchangé, un toast d'erreur exact |
+| `feed-subscription-panel.spec.ts` | 1 | `none`, copie, puis création et copie | avant : aucune écriture, aucun toast ; après : une écriture de la nouvelle URL |
+| `feed-subscription-panel.spec.ts` | 1 | lecture en attente, copie, puis arrivée et copie | avant : rien ; après : une écriture de l'URL lue |
+| `feed-subscription-panel.spec.ts` | 1 | lecture en échec, copie, puis relecture et copie | avant : rien ; après : une écriture de l'URL lue |
+| `admin-bookings.spec.ts` | 1 | `active`, « Copier le lien » focalisé et activé | `BUTTON` `type="button"` nommé « Copier le lien » ; presse-papiers = URL https ; toast succès ; même élément, toujours focalisé ; aucun `POST` |
+| `admin-bookings.spec.ts` | 1 | `writeText` rejeté | presse-papiers inchangé, toast d'erreur, champ toujours affiché avec l'URL |
+| `admin-bookings.spec.ts` | 1 | `none`, puis création, puis copie | aucun bouton de copie avant ; après création, la copie écrit la nouvelle URL et annonce le succès |
+| `admin-bookings.spec.ts` (complété) | 1 | création en `not-configured` | en plus de l'existant : focus sur `admin-booking-feed-heading` |
+
+Hors état `active` côté page : l'absence du bouton de copie en `unconfigured` est déjà tenue par le test F2
+« zéro bouton dans la section » ; en `none`, par le troisième test de la page. Les gardes de la facade
+(`none`, chargement, échec) sont écrites en « rien, puis copie dès que le lien existe », pour échouer au
+squelette et tuer une garde trop large comme une garde absente ; `unconfigured` y partage le chemin de
+`none` et n'a pas de test dédié (il ne pourrait qu'être vert au squelette).
+
+Adaptation : aucune adaptation mécanique. Le test F2 `not-configured` de la page reçoit une assertion et un
+titre neufs (changement de contrat acté par l'orchestrateur, rouge d'assertion) ; aucune valeur attendue
+existante n'a bougé.
+
+Preuve RED (cache invalidé par `pnpm exec ng cache clean` et `rm -rf node_modules/.vite`) :
+
+- `pnpm test --include='src/app/{features/admin,shared}/**/*.spec.ts'; echo $?` → `1` ;
+  **14 failed / 2357 total** (2343 passed) ; 3 suites en échec : `write-to-clipboard.spec.ts`,
+  `feed-subscription-panel.spec.ts`, `admin-bookings.spec.ts`.
+- `pnpm test; echo $?` → `1` ; **14 failed / 4852 total** (4838 passed : les 4839 du GREEN F2 moins le test
+  complété) ; 254 suites vertes sur 257, `code-copy.spec.ts` compris ; aucune erreur TS, aucun rejet non géré.
+- Nature des échecs : uniquement des `AssertionError` (`toEqual`/`toBe`) : `true` au lieu de `false` ou
+  presse-papiers resté à `avant` (squelette), aucun toast ni écriture (facade vide), bouton de copie absent,
+  `focused: false` au lieu de `true`. Aucun échec de harnais. Prettier et ESLint propres sur les cinq
+  fichiers touchés.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-15 21:49, 14 failed / 4852 total).
+
 ## Journal des tranches
 
 - **Tranche A1 — qui détient le jeton lit ses rendez-vous confirmés en iCalendar** : implémentée le
@@ -1175,6 +1246,10 @@ Tous les tests de cette tranche échouent à ce stade (RED confirmé via la comm
   (admin : 2077 passed / 2077 total) · refactor : aucun (passe manuelle sur le diff : rien à extraire, la
   dérivation vit déjà dans `toBookingFeedView` et la facade) ; verify ✅ PASS sur `/admin/rendez-vous`
   (surface atteignable restructurée : la page porte la section et une seconde confirmation) (cf. `### F2`).
+- **Tranche F3 — le lien se copie avec un retour annoncé** : GREEN 4852 passed / 4852 total · refactor :
+  aucun (passe manuelle sur le diff : `writeToClipboard` déplacée telle quelle, deux sites d'appel réels,
+  `code-copy.ts` et la facade) ; verify ✅ PASS sur `/admin/rendez-vous` (surface atteignable restructurée :
+  la section `active` gagne un bouton, le `409` déplace désormais le focus) (cf. `### F3`).
 
 ### A1
 
@@ -1420,6 +1495,53 @@ Verdict : **PASS**. Captures (`scratchpad/s026-f2/`) : `desktop-light-none`, `de
 `mobile-dark-active`, `desktop-light-unconfigured`, `mobile-dark-unconfigured`. Console : aucune erreur JS ni
 avertissement Angular ; seules entrées, des ressources réseau : `404 /api/config`, préexistant (la doublure
 n'a pas cette route ; même 404 sur `/admin/messages`), et le `409` voulu du scénario `not-configured`.
+
+### F3
+
+Fichiers (front, non commités ; tests de `qa` inchangés) :
+
+- `shared/clipboard/write-to-clipboard.ts` : corps de la fonction privée de `code-copy.ts` déplacé tel quel
+  (`navigator.clipboard` absent ou `writeText` rejeté → `false`, jamais de rejet) ;
+- `features/blog/application/components/code-copy.ts` : fonction privée retirée, import de
+  `@shared/clipboard/write-to-clipboard` (`code-copy.spec.ts` vert sans modification) ;
+- `pages/admin-bookings/feed-subscription-panel.ts` : `copyLink()` lit `view()`, hors `active` → rien ;
+  sinon `PendingTasks.run` autour de `writeToClipboard(view.url)` (l'URL https, jamais le `webcal://`) puis
+  toast succès ou échec (textes du plan, insécable avant les deux-points) ;
+- `application/components/admin-booking-feed.ts` : sortie `copyRequested` ; bouton `appButton`
+  `variant="outlined"` `type="button"` `data-testid="admin-booking-feed-copy"`, icône `clipboard`
+  (`aria-hidden`), « Copier le lien », sous le champ, dans la branche `active` (élément stable tant que
+  l'état reste `active`). Focus : `afterRenderEffect({ write })` qui retient qu'un bouton d'action a été
+  rendu et, au passage en `unconfigured`, appelle `AdminSectionHead.focusHeading()` (`viewChild.required`) ;
+  aucune lecture de layout, aucun vol de focus quand la page s'ouvre déjà en `unconfigured` ;
+- `pages/admin-bookings/admin-bookings.ts` : `(copyRequested)="feed.copyLink()"`.
+
+Écarts : aucun sur le contrat. L'écart F2 n° 2 (focus non déplacé en `unconfigured`) est soldé.
+
+Preuves (code de sortie lu) :
+
+- `pnpm test; echo $?` → `0` : 4852 passed / 4852, 257 suites.
+- `pnpm lint; echo $?` → `0`.
+- `pnpm run build --configuration production; echo $?` → `0` (CSP durcie sur 10 pages).
+
+#### Verify
+
+Steps : `STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs` + `pnpm start`, script Playwright jetable
+(`scratchpad/verify-f3.mjs` : `context.grantPermissions(['clipboard-read','clipboard-write'])`,
+`page.route('**/api/booking/feed-subscription')`, état en mémoire), indice `auth:session` posé,
+`/admin/rendez-vous`.
+
+- `active` (1280 px clair, 375 px sombre) : presse-papiers mis à `avant`, focus sur « Copier le lien » +
+  Entrée → presse-papiers = `http://localhost:4200/api/booking/feed/<jeton>.ics` (l'URL du champ, pas le
+  `webcal://` ; la doublure sert en `http`), toast « Lien copié dans le presse-papiers », focus resté sur le
+  bouton, aucun `POST`, aucun débordement horizontal.
+- `none` : aucun bouton de copie ; secret retiré, création → `409` → section `unconfigured`, focus sur
+  `admin-booking-feed-heading`.
+- `unconfigured` au chargement : focus non déplacé (`BODY`).
+
+Verdict : **PASS**. Captures (`scratchpad/s026-f3/`) : `desktop-light-active`, `desktop-light-copied-page`,
+`mobile-dark-active`, `mobile-dark-copied-page`, `desktop-light-unconfigured-focus`. Console : aucune erreur
+JS ni avertissement Angular ; seules entrées, des ressources réseau : `404 /api/config`, préexistant (cf. F2),
+et le `409` voulu du scénario `not-configured`.
 
 ## Review code
 
