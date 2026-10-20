@@ -10,7 +10,7 @@ Le site est le portfolio personnel de Julien Nédellec, tourneur CN de haute pr�
 
 **1. Développeur (public principal)** : un pair qui arrive presque toujours par une recherche Google sur un problème technique précis (Angular, NestJS, PostgreSQL, auto-hébergement), et atterrit directement sur un article. Il veut une réponse exacte, du code qui tourne en production, les compromis assumés. Ses questions : est-ce que ça règle mon problème, est-ce que l'auteur sait de quoi il parle, qu'est-ce qu'il a écrit d'autre ?
 
-**2. Recruteur ou tech lead (public secondaire)** : arrive par le nom, LinkedIn ou GitHub. Il veut vérifier en quelques minutes le niveau réel : projets en production, choix techniques argumentés, parcours, CV. Ses questions : qu'est-ce qu'il a construit, comment il raisonne, d'où il vient ?
+**2. Recruteur ou tech lead (public secondaire)** : arrive par le nom, LinkedIn ou GitHub. Il veut vérifier en quelques minutes le niveau réel : projets en production, choix techniques argumentés, parcours, CV. Ses questions : qu'est-ce qu'il a construit, comment il raisonne, d'où il vient ? Julien n'est pas en recherche : le site ne porte **aucun signal de disponibilité** (ni bloc « Vous recrutez ? », ni « disponible en CDI », ni bouton d'embauche). Le CV reste téléchargeable comme pièce du parcours, pas comme candidature.
 
 Le blog est le moteur du site : c'est par lui qu'arrive le trafic organique. Les réalisations et le parcours en sont la preuve.
 
@@ -19,7 +19,7 @@ Le blog est le moteur du site : c'est par lui qu'arrive le trafic organique. Les
 Partager ce que Julien construit et apprend, et le rendre **trouvable**. Le site réussit quand :
 
 1. un développeur trouve un article par une recherche, obtient sa réponse, puis lit un deuxième article ou ouvre une réalisation ;
-2. un recruteur trouve projets, parcours et CV en un clic depuis n'importe quelle page.
+2. un recruteur ou un pair qui cherche le nom trouve projets, parcours et CV en un clic depuis n'importe quelle page.
 
 Le formulaire de contact reste ouvert à tous (question sur un article, échange entre pairs, prise de contact), sans qualification commerciale.
 
@@ -42,6 +42,7 @@ Le formulaire de contact reste ouvert à tous (question sur un article, échange
 ## Anti-references
 
 - **Vitrine commerciale** : prix, offres, « Décrire mon projet », « Réservez un appel », argumentaire « Pourquoi moi ». Le site ne vend rien.
+- **Signal de recherche d'emploi** : « disponible », « open to work », bloc « Vous recrutez ? ». Julien n'est pas en recherche.
 - **Template portfolio générique** : hero centré « Hi, I'm a passionate developer », barres de compétences en pourcentage, nuage de logos de technologies.
 - **Preuves inventées** : faux témoignages, chiffres non vérifiables, projets gonflés. Une démo est libellée « Démo ».
 - **Awwwards over-design** : cursor custom, scroll-jacking, intro animée. Le lecteur veut lire.

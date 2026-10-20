@@ -25,11 +25,16 @@ positionnement : public principal développeur (par le blog), public secondaire 
 2. **Formulaire de contact** : conservé, sans qualification commerciale (plus de « type de projet »
    dérivé du catalogue d'offres).
 3. **Réalisations** : toutes conservées.
-4. **Avis** : aucun avis n'a jamais été publié (`HOME_REVIEWS` vide). La section et son JSON-LD `Review`
+4. **Disponibilité** : Julien n'est pas ouvert aux opportunités. Aucun signal de recherche d'emploi
+   (bloc « Vous recrutez ? », mention CDI, lien `project_hiring` de la fiche projet). Le CV reste
+   téléchargeable depuis le parcours.
+5. **Accroche de la home** : « Tourneur CN le jour, développeur web le reste du temps. », accent
+   (`HeroData.headlineAccent`) sur « développeur web ».
+6. **Avis** : aucun avis n'a jamais été publié (`HOME_REVIEWS` vide). La section et son JSON-LD `Review`
    disparaissent.
-5. **Ordre de retrait** : front avant API. Une route d'API retirée avant son appelant casserait les
+7. **Ordre de retrait** : front avant API. Une route d'API retirée avant son appelant casserait les
    pages rendues à la requête (miroir de la règle « API puis front » des ajouts, `.claude/CLAUDE.md`).
-6. **Méthode** : soustraction d'abord, une PR par périmètre, chacune verte sur les gates du Dockerfile.
+8. **Méthode** : soustraction d'abord, une PR par périmètre, chacune verte sur les gates du Dockerfile.
    Aucune refonte d'architecture (monorepo, mode de rendu) dans ces PR : elle se décide une fois le
    périmètre réduit.
 
