@@ -93,9 +93,8 @@ Les quatre volets sont retenus, livrés l'un après l'autre :
 | 2 | front | plan technique (`architect`) du volet en cours | 1 |
 | 3+ | front | un volet par PR (ou deux PR pour V3 : moteur de calcul, puis interface) | 2 |
 
-Ordre proposé : **V1, V2, V3, V4**. V1 pose la page et l'entrée de menu dont les autres volets ont
-besoin ; V4 se fait au fil de l'eau une fois les trois premiers en ligne. L'ordre reste au choix du
-propriétaire.
+Ordre retenu : **V1, V2, V3, V4**. V1 pose la page et l'entrée de menu « L'atelier » dont les autres
+volets ont besoin ; V4 se fait au fil de l'eau une fois les trois premiers en ligne.
 
 ### Hors périmètre
 
@@ -103,12 +102,15 @@ propriétaire.
   est là.
 - Toute donnée de l'employeur ou de ses clients.
 
+### Arbitrages complémentaires (2026-10-21)
+
+1. **Ordre** : V1 (page), V2 (rubrique du blog), V3 (calculateur), V4 (pont usinage ↔ code).
+2. **Nom dans le menu** : « L'atelier ».
+
 ### Questions ouvertes
 
-1. **Ordre des volets** : V1, V2, V3, V4 comme proposé, ou commencer par le calculateur, plus
-   ludique ?
-2. **Photos** : as-tu des photos que tu peux publier sans risque (outillage, poste sans pièce, atelier
-   de formation) ? Ton employeur a-t-il une règle sur ce sujet ?
-3. **Calculateur** : quelles matières et quelles sources pour les vitesses de coupe (fabricant
-   d'outils, tes propres valeurs) ? Tournage seulement, ou aussi fraisage plus tard ?
-4. **Nom dans le menu** : « L'atelier », « Atelier », « Usinage » ?
+1. **Photos** : as-tu des photos que tu peux publier sans risque (outillage, poste sans pièce, atelier
+   de formation) ? Ton employeur a-t-il une règle sur ce sujet ? (à trancher avant V1)
+2. **Calculateur** : quelles matières et quelles sources pour les vitesses de coupe (fabricant
+   d'outils, tes propres valeurs) ? Tournage seulement, ou aussi fraisage plus tard ? (à trancher
+   avant V3)
