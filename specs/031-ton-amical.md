@@ -30,20 +30,20 @@ de la spec 029, qui a retiré l'activité commerciale mais gardé une voix sobre
 1. **`PRODUCT.md`** : la section « Voix » est réécrite (tutoiement, ton détendu et personnel, humour
    léger permis, toujours précis et vérifiable ; « aucun em-dash » et « aucune preuve inventée »
    restent). Les sections « Users », « Brand Personality » et « Anti-references » sont relues pour
-   un site de loisir (voir la question ouverte 1).
+   un site de loisir, sans le public recruteur (arbitrage complémentaire 1).
 2. **Textes publics du front** au tutoiement et dans le nouveau ton : accueil, à propos, liste du
    blog, réalisations et fiches, pied de page, 404, formulaire de contact, messages d'erreur et de
    confirmation, titres et descriptions des pages (`<title>`, meta, Open Graph, `index.html`).
 3. **Contenu en base** relu dans le même ton : parcours (`profile_content`), descriptions des
    projets. Modifié par l'admin, avec l'accord du propriétaire sur chaque texte.
 4. **E-mails envoyés par l'API** au visiteur (confirmation du formulaire de contact) : même ton,
-   si le propriétaire le veut (question ouverte 3). Ce serait une PR API.
+   au tutoiement (arbitrage complémentaire 3). PR API.
 5. **Brouillons A1 à A4** (`docs/articles/`) réécrits : même structure, mêmes faits, mêmes extraits
    de code ; seuls le ton et l'adresse au lecteur changent. Le front-matter `faits-verifies` ne
    bouge pas.
 6. **Verrou éditorial** (`src/app/editorial-identity.spec.ts`) : une règle empêche le retour du
-   vouvoiement dans les sources éditoriales publiques, avec la liste explicite des exceptions
-   retenues (pages légales si la question ouverte 2 les garde au « vous »).
+   vouvoiement dans les sources éditoriales publiques, pages légales comprises (arbitrage
+   complémentaire 2).
 7. **Aucune régression** : AXE à zéro violation, noms accessibles toujours distincts (un libellé
    reformulé reste unique), tests mis à jour sur les nouveaux textes.
 
@@ -69,7 +69,7 @@ de la spec 029, qui a retiré l'activité commerciale mais gardé une voix sobre
 | 1 | front | cette spec, `PRODUCT.md` (voix et publics) | — |
 | 2 | front | textes publics du front, titres et descriptions, verrou éditorial | 1 |
 | 3 | — | contenu en base (parcours, projets) par l'admin, texte par texte | 1 |
-| 4 | API | e-mail de confirmation du contact (si retenu) | 1 |
+| 4 | API | e-mail de confirmation du contact au tutoiement | 1 |
 | 5 | front | brouillons A1 à A4 réécrits | 1 |
 
 Les PR 2 à 5 sont indépendantes entre elles.
@@ -80,10 +80,11 @@ Les PR 2 à 5 sont indépendantes entre elles.
 - Admin et authentification (vues du seul propriétaire).
 - Articles déjà publiés : relus au cas par cas plus tard, pas réécrits ici.
 
-### Questions ouvertes
+### Arbitrages complémentaires (2026-10-21)
 
-1. **Publics** : avec un site de loisir, le recruteur reste-t-il un public déclaré dans
-   `PRODUCT.md`, ou le site ne vise-t-il plus que les développeurs et les curieux ?
-2. **Pages légales** (mentions légales, confidentialité) : tutoiement aussi, ou « vous » conservé
-   comme il est d'usage pour un texte juridique ?
-3. **E-mail de confirmation** envoyé par l'API au visiteur : le passer au tutoiement (PR API) ?
+1. **Publics** : le site ne vise plus le recruteur. `PRODUCT.md` déclare les développeurs et les
+   curieux du métier ; le CV et le parcours restent en ligne, sans viser un recrutement.
+2. **Pages légales** : tutoiement aussi. Le fond juridique (droits, CNIL, bases légales) ne change
+   pas ; aucune exception au vouvoiement dans le verrou éditorial.
+3. **E-mail de confirmation** du formulaire de contact : passé au tutoiement par une PR API
+   (PR 4 du découpage).
