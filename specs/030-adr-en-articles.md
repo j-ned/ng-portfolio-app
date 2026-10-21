@@ -591,11 +591,109 @@ de `PROJECT_TAGS`, `FURTHER_READING_COPY.projectLinkCtaLabel` (plus la clé du s
 volet projet de `blog-further-reading.ts` (avant les articles), branchement de `BlogDetail` (section
 rendue dès qu'il y a un projet **ou** un article proche, `trackCtaClick('blog_project_link', …)`).
 
+### Tranche 4 — la fiche projet liste les articles qui la concernent
+
+Contrat posé par les tests, non nommé au plan : `data-testid="project-articles"` sur l'hôte de
+`ProjectArticles` (ancêtre de la `section`, comme `architecture-decisions`), `headingId`
+`project-articles-title`, `data-testid="project-article"` sur chaque `a[app-link-card]` ; clé
+`PROJECT_ARTICLES_COPY.articleCtaLabel` (libellé de mesure, chaîne non vide, valeur laissée au
+GREEN), plus `heading` et `summary` (le titre est asserté en littéral, texte validé à l'arbitrage 5).
+« Publié » = `status === 'published'` (même règle que `relatedPosts`). Le slug sans tag de projet
+du plan, `mon-site`, est celui de `makeProject`. `ProjectArticles` n'a pas de spec isolé
+(présentationnel, couvert par `ProjectDetail`) ; `PROJECT_ARTICLES_COPY` est couvert par le `h2`,
+la mesure du clic et le verrou éditorial (`editorial-sources.ts`, 24 lignes de table).
+
+`src/app/features/blog/domain/posts-about-project.spec.ts` (9 tests, sans TestBed, `makeBlogPost`) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| filtre et tri | 6 articles : DashFlow × 3 dans le désordre, brouillon DashFlow, CandiDash, sans projet | `['recent', 'milieu', 'ancien']` |
+| tag du projet (`it.each` × 2) | un article par tag de projet ; `candidash`, `portfolio` | le seul article de son tag |
+| casse différente | `Candidash` lu pour `candidash` | `[]` |
+| slug hors table (`it.each` × 3) | `le-vieux-comptoir`, `DashFlow` (tag au lieu du slug), `''` | `[]` |
+| liste vide | aucun article | `[]` |
+| entrée intacte | liste gelée, ordre croissant | résultat `['second', 'premier']`, entrée inchangée |
+
+`src/app/features/projects/pages/project-detail/project-detail.spec.ts`,
+`describe('ProjectDetail: articles sur ce projet')` (7 tests ; projets `dashflow`, `candidash`,
+`mon-site` ; `stubBlogGateway`, `stubAnalyticsGateway`, `stubProjectsGateway`) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| section et liens | `dashflow`, 2 articles DashFlow + 1 sans rapport | `h2#project-articles-title` « Articles sur ce projet » dans `section[aria-labelledby]`, dans `project-articles` ; `href` `['/blog/recent', '/blog/ancien']`, titres, sur-titre au jour et à l'année |
+| position | `dashflow`, 1 article | après `architecture-decisions`, avant `nav` « Navigation entre projets » |
+| aucun article | `dashflow`, article sans rapport | fiche rendue (`h1` DashFlow), ni section ni `#project-articles-title` |
+| slug sans tag | `mon-site` | `getPublishedPosts` appelé **0** fois, pas de section, fiche rendue |
+| lecture en échec | `dashflow`, `throwError` | fiche rendue, ni section ni `project-error` |
+| changement de slug | instance réutilisée `dashflow` → `candidash` | `['/blog/sur-dashflow']` puis `['/blog/sur-candidash']` |
+| clic mesuré | 2 articles cliqués | `trackCtaClick('project_article', PROJECT_ARTICLES_COPY.articleCtaLabel)` × 2, libellé non vide, `navigateByUrl` vers `/blog/recent` puis `/blog/ancien` |
+
+Adaptation mécanique : `project-detail.spec.ts` — 4 sites (le `setup`, « suit le clic sur un lien
+projet », « affiche un état d'erreur », `renderProject` de « suite éditoriale ») reçoivent
+`{ provide: BlogGateway, useValue: stubBlogGateway() }` (`BlogGateway` est abstrait, sans provider
+racine : l'`inject` du GREEN lèverait `NullInjectorError`) ; aucune valeur attendue modifiée, verts
+avant et après.
+
+Harnais de test hors Vitest (fixtures de la doublure, scénario a11y) : `ci/api-stub/fixtures/projects.json`
+reçoit `dashflow` (`p-dashflow`, ordre 2, non mis en avant, sans image ni sections) ;
+`blog-posts.json` : `article-temoin` tagué `Angular`, `DashFlow`, nouvel article publié
+`article-voisin` (`Angular`, 3 sept. 2026) ; `e2e/a11y/scenarios.ts` : `/projects/dashflow`, prêt sur
+`project-articles`. Le brief demandait un « deuxième article tagué DashFlow » : le plan (Fichiers)
+fait foi, `article-voisin` porte `Angular` seul (il sert d'article proche à `article-temoin`).
+
+Sweep des fixtures modifiées : aucun test Vitest ne lit `projects.json` ni `blog-posts.json` (seul
+`profile.json` est importé, par `editorial-sources.ts`) ; `e2e/a11y` ne compte ni projets ni
+articles (`.first()` sur `admin-project-delete`, toujours `projet-temoin` à l'ordre 1 ;
+`/admin/blog/b-temoin` gagne une puce `DashFlow`, sans effet sur les scénarios du champ tags) ; la
+smoke CI (`ci.yml`) grep `témoin A`, `article-temoin` et `projet-temoin`, toujours présents. Sweep
+`ProjectDetail` : seul `project-detail.spec.ts` le monte. Aucun état seedé dont la sémantique
+change (la fiche `dashflow` de « suite éditoriale » lit un blog vide), aucune constante recalibrée.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-21 19:53, 8 failed / 4075 total). Nature des échecs : sur l'arbre réel, `pnpm test`
+(après `ng cache clean` et purge de `node_modules/.vite`, code de sortie 1, 19:52) s'arrête à la
+compilation, uniquement sur des symboles applicatifs dus au GREEN : `TS2307` `./posts-about-project`
+et `@features/projects/application/project-articles-copy` (× 2). Aucune faute de type propre aux
+specs ; prettier et eslint verts sur les fichiers touchés, `pnpm a11y:typecheck` vert ; le motif
+d'archéologie du profil ne trouve rien. Mesure du rouge comportemental : squelette jetable posé le
+temps d'une exécution puis retiré (`postsAboutProject` à `[]`, copie aux trois clés vides,
+`ProjectDetail` inchangé) : 8 failed / 4075 total, toutes en `AssertionError` (4 domaine, 4 page).
+Verts par nature sous le squelette (8, plus les 24 lignes du verrou éditorial) : casse
+différente, 3 slugs hors table, liste vide, aucun article, slug sans tag, lecture en échec. Harnais vérifié : une
+implémentation jetable complète (`postsAboutProject`, copie, `ProjectArticles` sur `SplitSection` et
+`LinkCard`, `_postsResource` D4 et mesure dans `ProjectDetail`) donne 4075 passed / 4075, code de
+sortie 0 ; deux mutants de la même implémentation (ressource sans `params`, `.value()` sans
+`hasValue()`) font tomber exactement « slug sans tag » et « lecture en échec » (2 failed / 4075).
+Scénario a11y : image Docker de l'implémentation jetable devant la doublure aux nouvelles fixtures,
+`pnpm a11y` 55 passed / 55 (dont `/projects/dashflow` et `/blog/article-temoin` avec sa section
+« Pour aller plus loin », clair et sombre) ; image de l'arbre réel (copie jetable seule, pour que le
+build compile) : 2 failed / 55, `/projects/dashflow` clair et sombre, `getByTestId('project-articles')`
+introuvable, les 53 autres scénarios verts. Tout a été retiré (`git checkout` de `project-detail.ts`,
+fichiers créés supprimés, images Docker supprimées ; `git status` ne montre que specs, fixtures,
+scénario et `editorial-sources.ts`). Non-régression : 4075 = 4035 + 40 tests ajoutés (9 domaine,
+7 page, 24 lignes de verrou éditorial) ; aucun test des tranches antérieures ne tombe.
+
+```
+ Test Files  2 failed | 218 passed (220)
+      Tests  8 failed | 4067 passed (4075)
+```
+
+Dû au GREEN : `src/app/features/blog/domain/posts-about-project.ts`
+(`postsAboutProject(posts, projectSlug)`), `src/app/features/projects/application/project-articles-copy.ts`
+(`PROJECT_ARTICLES_COPY.heading`, `.summary`, `.articleCtaLabel`),
+`src/app/features/projects/application/components/project-articles.ts` (hôte
+`data-testid="project-articles"`, `headingId="project-articles-title"`, liens `project-article`,
+sortie `articleFollowed`), branchement de `ProjectDetail` (`inject(BlogGateway)`, `_postsResource`
+D4, `articles`, `trackCtaClick('project_article', …)`), fiche DESIGN.md « Articles d'un projet ».
+Note pour la Verify : le build de production (et donc l'image Docker) échoue tant que
+`project-articles-copy.ts` n'existe pas, `editorial-sources.ts` étant compilé avec l'application.
+
 ## Journal des tranches
 
 - **Tranche 1 — les tags manquants tombent dans leur thème** : GREEN 3959 passed / 3959 total · refactor : aucun (ajout de données au catalogue).
 - **Tranche 2 — la page article propose jusqu'à trois articles proches dans le HTML rendu** : GREEN 4012 passed / 4012 total · refactor : cartes « article précédent / suivant » de `BlogDetail` passées sur `a[app-link-card]` (tests existants inchangés) ; `relatedPosts` sans type intermédiaire ni compteur mutable.
 - **Tranche 3 — un article renvoie vers la fiche de son projet** : GREEN 4035 passed / 4035 total · refactor : aucun (volet projet ajouté à la liste existante de `BlogFurtherReading`, même forme de sortie que `postFollowed`).
+- **Tranche 4 — la fiche projet liste les articles qui la concernent** : GREEN 4075 passed / 4075 total · refactor : aucun (`ProjectArticles` compose `SplitSection` et `LinkCard` existants ; la ligne de carte datée reste dupliquée avec `BlogFurtherReading`, deux sites aux sorties différentes).
 
 ## Verify
 
@@ -670,3 +768,44 @@ Verdict : **PASS** pour le rendu serveur, l'hydratation et la navigation vers la
 Non prouvé dans cette pile : le contenu de la fiche `/projects/dashflow` (absente des fixtures, la
 page lit l'API publique, refusée en CORS) ; le corps exact du `cta_click` émis, prouvé par
 `blog-detail.spec.ts`.
+
+### Tranche 4 (2026-10-21)
+
+Surface atteignable modifiée : la fiche projet (section « Articles sur ce projet » ajoutée, lecture
+du blog sur les seules fiches désignées par `PROJECT_TAGS`).
+
+Steps :
+
+1. `pnpm run build --configuration production` (code de sortie 0), puis `docker build` de l'image
+   (`ng-portfolio-app:a11y`, code de sortie 0).
+2. `ci/a11y-stack.sh up` : image derrière la doublure `ci/api-stub`, **fixtures du dépôt** (fiche
+   `dashflow`, `article-temoin` tagué `Angular`, `DashFlow`, `article-voisin`).
+3. `curl` de `/projects/dashflow` et `/projects/projet-temoin` (fiche sans tag de projet), puis
+   ouverture de `/projects/dashflow` dans un navigateur et clic sur la carte d'article ; enfin
+   `pnpm a11y`, puis `ci/a11y-stack.sh down` et suppression de l'image.
+
+Constats :
+
+- HTML servi, `/projects/dashflow` (200) : hôte `data-testid="project-articles"`,
+  `section[aria-labelledby="project-articles-title"]`, `h2#project-articles-title` « Articles sur ce
+  projet », résumé, un `a[data-testid="project-article"]` `href="/blog/article-temoin"` (sur-titre
+  « 1 oct. 2026 », titre « Article témoin A ») ; la section précède
+  `nav[aria-label="Navigation entre projets"]` (la fiche `dashflow` de la doublure n'a pas de
+  décisions d'architecture : position relative à elles prouvée par `project-detail.spec.ts`). L'état
+  de transfert porte la liste du blog (3 357 octets).
+- HTML servi, `/projects/projet-temoin` (200) : ni section ni `project-articles-title` ; l'état de
+  transfert ne contient aucun article (2 405 octets) : le blog n'est pas lu (D4).
+- Navigateur : page hydratée (`ng-version` 22.2.1), capture : « Articles sur ce projet » à gauche,
+  carte « 1 oct. 2026 / Article témoin A » à droite, navigation entre projets dessous. Aucune requête
+  `/api/blog/**` au chargement (liste reprise de l'état de transfert). Le clic émet un
+  `POST /api/analytics/track` et navigue vers `/blog/article-temoin`.
+- Console au chargement de la fiche : une seule erreur, `GET /api/config` 404 (route absente de la
+  doublure, préexistante).
+- `pnpm a11y` : **55 passed / 55** (code de sortie 0), dont `/projects/dashflow` clair et sombre.
+
+Verdict : **PASS** pour le rendu serveur, l'hydratation, la fiche sans tag et l'audit axe.
+
+Non prouvé dans cette pile : l'affichage de l'article atteint par le clic. Le navigateur lit l'API
+publique (`api.nedellec-julien.fr`), qui refuse l'origine `127.0.0.1` (CORS, même limite qu'aux
+tranches 2 et 3) : la page article retombe sur `/blog`, sans lien avec le diff. Le corps exact du
+`cta_click` (`project_article`, libellé constant) est prouvé par `project-detail.spec.ts`.

@@ -12,6 +12,9 @@ import { NgOptimizedImage, isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
 import { ProjectsGateway } from '@features/projects/domain/gateways/projects.gateway';
 import { AnalyticsGateway } from '@features/analytics/domain/gateways/analytics.gateway';
+import { BlogGateway } from '@features/blog/domain/gateways/blog.gateway';
+import { projectTagOf } from '@features/blog/domain/models/project-tag.model';
+import { postsAboutProject } from '@features/blog/domain/posts-about-project';
 import { Seo } from '@core/seo/seo';
 import { injectMarkNotFound } from '@core/ssr/response-status';
 import { truncateAtWord } from '@shared/seo/truncate-at-word';
@@ -24,6 +27,8 @@ import { ProjectDetailTechChoices } from '../../application/components/project-d
 import { ProjectDetailArchDecisions } from '../../application/components/project-detail-arch-decisions';
 import { ProjectDetailNav } from '../../application/components/project-detail-nav';
 import { ProjectGallery } from '../../application/components/project-gallery';
+import { ProjectArticles } from '../../application/components/project-articles';
+import { PROJECT_ARTICLES_COPY } from '../../application/project-articles-copy';
 import { Button } from '@shared/ui/button';
 
 @Component({
@@ -35,6 +40,7 @@ import { Button } from '@shared/ui/button';
     ProjectDetailArchDecisions,
     ProjectDetailNav,
     ProjectGallery,
+    ProjectArticles,
     Button,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -73,6 +79,11 @@ import { Button } from '@shared/ui/button';
         <app-project-detail-arch-decisions [architectureDecisions]="architectureDecisions()" />
       }
 
+      @let posts = articles();
+      @if (posts.length > 0) {
+        <app-project-articles [posts]="posts" (articleFollowed)="trackArticleClick()" />
+      }
+
       <app-project-detail-nav [previousProject]="previousProject()" [nextProject]="nextProject()" />
     } @else if (failed()) {
       <div class="page-container pt-10 text-center" role="alert" data-testid="project-error">
@@ -99,6 +110,7 @@ import { Button } from '@shared/ui/button';
 export class ProjectDetail {
   private readonly _gateway = inject(ProjectsGateway);
   private readonly _analytics = inject(AnalyticsGateway);
+  private readonly _blogGateway = inject(BlogGateway);
   private readonly _router = inject(Router);
   private readonly _seo = inject(Seo);
   private readonly _isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
@@ -113,6 +125,17 @@ export class ProjectDetail {
   });
   private readonly _allProjects = computed((): readonly Project[] =>
     this._projectsResource.hasValue() ? this._projectsResource.value() : [],
+  );
+
+  // `params` à `undefined` laisse la ressource inactive : aucune lecture du blog sans tag de projet.
+  private readonly _postsResource = rxResource({
+    params: () => projectTagOf(this.slug()) ?? undefined,
+    stream: () => this._blogGateway.getPublishedPosts(),
+  });
+  protected readonly articles = computed(() =>
+    this._postsResource.hasValue()
+      ? postsAboutProject(this._postsResource.value(), this.slug())
+      : [],
   );
 
   protected readonly loading = computed(() => this._projectsResource.isLoading());
@@ -178,6 +201,10 @@ export class ProjectDetail {
       },
     });
   });
+
+  protected trackArticleClick(): void {
+    this._analytics.trackCtaClick('project_article', PROJECT_ARTICLES_COPY.articleCtaLabel);
+  }
 
   protected trackClick(): void {
     const p = this.project();

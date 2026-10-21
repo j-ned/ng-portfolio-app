@@ -295,7 +295,7 @@ Aucun composant ne porte de shadow autre que les valeurs ci-dessous. Si un compo
 
 ### Carte de lien (`shared/ui/link-card.ts`)
 
-Un lien de navigation interne présenté en carte : « article précédent / suivant » et « Pour aller plus loin » (fiche du projet, articles proches) sur la page article.
+Un lien de navigation interne présenté en carte : « article précédent / suivant » et « Pour aller plus loin » (fiche du projet, articles proches) sur la page article, « Articles sur ce projet » sur la fiche projet.
 
 - **API:** composant à sélecteur d'attribut `a[app-link-card]`, posé sur le lien de l'appelant ; entrées `overline` et `heading` (requises), `align` (`'start'` par défaut, `'end'` aligne le texte à droite). `routerLink`, `data-testid` et le placement dans la grille (`sm:col-start-2`) restent sur l'`<a>`.
 - **Apparence:** carte « Cards / Containers » portée par l'hôte (`rounded-xl border border-foreground/8 bg-surface p-6`), sans élément enveloppant ; sur-titre mono `text-xs text-muted`, puis titre `text-[1.1875rem] font-semibold tracking-tight`.
@@ -335,6 +335,15 @@ Les captures d'écran d'une réalisation, sur sa page détail, quand le projet e
 - **Miniature:** un `button` natif par capture, qui porte l'image (`NgOptimizedImage`, `width`/`height` intrinsèques, `h-auto w-full`, chargement différé, **jamais** `priority`, ni `fill` ni `ngSrcset`) ; nom accessible « Agrandir : » en `sr-only` suivi de l'`alt`. Curseur `zoom-in`.
 - **Agrandissement:** `dialog` natif ouvert par `showModal()` (fond inerte, Échap natif), nommé « Capture agrandie : <alt> » ; bouton « Fermer » en premier, focus posé dessus à l'ouverture ; à la fermeture (bouton ou Échap), le focus revient à la miniature d'origine. `::backdrop` en `background/90`, dialog cerné de `line-strong`, image contenue dans le viewport (`object-contain`).
 - **Don't:** pas de carrousel ni de défilement automatique ; pas de lien ni de `div` cliquable à la place du `button` ; pas de dialog maison ni de bibliothèque de lightbox ; pas d'`alt` vide (une capture est un contenu, jamais une décoration).
+
+### Articles d'un projet (`features/projects/application/components/project-articles.ts`)
+
+Les articles du blog qui parlent d'un projet, sur sa fiche, calculés par `postsAboutProject` (articles publiés portant le tag du projet dans `PROJECT_TAGS`, ADR-0029).
+
+- **Entrée:** `posts` (déjà filtrés et triés du plus récent au plus ancien) ; sortie `articleFollowed`, la page mesure le clic (`trackCtaClick('project_article', …)`, libellé constant).
+- **Section:** `SplitSection` `headingId="project-articles-title"`, titre « Articles sur ce projet », résumé court, comme « Choix techniques » et « Décisions d'architecture » ; placée après les décisions d'architecture et avant la navigation entre projets. Non rendue sans article (`@if` côté page). Jamais sous `@defer` : les liens sont dans le HTML servi.
+- **Chargement:** la liste du blog n'est lue que pour un projet présent dans `PROJECT_TAGS` ; une lecture en échec retire la section sans état d'erreur (la fiche reste lisible).
+- **Liste:** `ul role="list"` en grille, une colonne en mobile, deux à partir de `sm` ; une carte de lien par article (vers `/blog/<slug>`, sur-titre = date de publication `d MMM y`, titre = titre de l'article).
 
 ### Étude de cas (`features/projects/application/components/project-case-study.ts`)
 

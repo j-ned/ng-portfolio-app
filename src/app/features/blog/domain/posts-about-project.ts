@@ -1,0 +1,15 @@
+import type { BlogPost } from './models/blog-post.model';
+import { projectTagOf } from './models/project-tag.model';
+
+/** Articles publiés qui portent le tag du projet (égalité exacte), du plus récent au plus ancien. */
+export function postsAboutProject(
+  posts: readonly BlogPost[],
+  projectSlug: string,
+): readonly BlogPost[] {
+  const tag = projectTagOf(projectSlug);
+  if (!tag) return [];
+
+  return posts
+    .filter((post) => post.status === 'published' && post.tags.includes(tag))
+    .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
+}
