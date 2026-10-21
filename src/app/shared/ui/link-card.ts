@@ -1,6 +1,5 @@
 import { Component, input } from '@angular/core';
 
-/** Carte de navigation posée sur le lien de l'appelant : sur-titre puis titre, une seule cible. */
 @Component({
   selector: 'a[app-link-card]',
   host: {

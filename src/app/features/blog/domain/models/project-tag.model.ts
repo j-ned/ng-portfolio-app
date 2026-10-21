@@ -6,7 +6,7 @@ export const PROJECT_TAGS = [
   { tag: 'Portfolio', projectSlug: 'portfolio' },
 ] as const satisfies readonly ProjectTag[];
 
-export type ProjectBlogTag = (typeof PROJECT_TAGS)[number]['tag'];
+type ProjectBlogTag = (typeof PROJECT_TAGS)[number]['tag'];
 
 export function projectTagOf(projectSlug: string): ProjectBlogTag | null {
   return PROJECT_TAGS.find((entry) => entry.projectSlug === projectSlug)?.tag ?? null;

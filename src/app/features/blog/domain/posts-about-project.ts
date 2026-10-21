@@ -1,7 +1,6 @@
 import type { BlogPost } from './models/blog-post.model';
 import { projectTagOf } from './models/project-tag.model';
 
-/** Articles publiés qui portent le tag du projet (égalité exacte), du plus récent au plus ancien. */
 export function postsAboutProject(
   posts: readonly BlogPost[],
   projectSlug: string,

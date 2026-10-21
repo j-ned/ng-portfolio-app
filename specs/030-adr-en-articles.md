@@ -904,3 +904,42 @@ Verdict : **PASS** pour le JSON-LD servi et sa compatibilité avec la CSP haché
 
 Non prouvé : la lecture par un validateur de résultats enrichis (Rich Results Test, Search Console),
 qui exige une URL publique ; à faire après déploiement.
+
+## Review code
+
+**Verdict** : REJECTED
+**Gates CI locaux** : install `pnpm install --frozen-lockfile` exit 0 / tests `pnpm test` exit 0 (220 fichiers, 4085 passed / 4085) / lint `pnpm lint` exit 0 (« All files pass linting ») / `pnpm a11y:typecheck` exit 0 / `pnpm run format:check` exit 0 / build `pnpm run build --configuration production` exit 0 (CSP durcie sur 3 pages) / a11y `docker build` + `ci/a11y-stack.sh up` + `pnpm a11y` exit 0, 55 passed / 55 (dont `/projects/dashflow` et `/blog/article-temoin`, clair et sombre), pile arrêtée, image supprimée
+**Checks mécaniques** : checker non vendoré dans `.claude/checks/`, lancé depuis le plugin — 11 hit(s) : archeologie, immutabilite, altitude, presenter (advisory : altitude, presenter). `immutabilite` levé : les deux `.sort` portent sur le tableau neuf rendu par `filter`/`map`, entrée gelée testée (profil sans champ Immutabilité : check advisory). `archeologie` : voir point 1.
+**Warnings de gate** : aucun (logs test, build et install sans warning)
+**Rendu compilé** : ✅ (`a[app-link-card]` : classes Tailwind posées par `host`, sans `styles:` ; HTML servi vérifié sur la pile locale)
+**Preuve de verify runtime** : ✅ (section Verify, tranches 2 à 5 ; recontrôlé : HTML servi de `/blog/article-temoin` avec `project-link`, `related-post`, `older-post` et `about`, de `/projects/dashflow` avec `project-article` et `subjectOf`)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ❌ (point 1)
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌ (point 2)
+
+**Tests notables** :
+- ✨ `project-detail.spec.ts` « slug sans tag » — `getPublishedPosts` à 0 appel : épingle D4 ; mutant « ressource sans params » tué (journal RED).
+- ✨ `blog-detail.spec.ts` « changement de slug » — proches recalculés et une seule lecture de la liste : épingle « zéro appel ajouté ».
+- ⚠️ `project-detail.spec.ts:497` et `:542` — sélection par id (`h2#project-articles-title`, `#project-articles-title`) ; l'id est ici un contrat d'accessibilité (`aria-labelledby`), précédent dans 40 specs de `master`. Non bloquant.
+
+**Altitude composant** (advisory, non bloquant) :
+- ⚠️ `blog-detail.ts` — 337 → 365 LOC, gabarit 161 lignes, déjà au-dessus avant le diff ; dérivation (dont `related`, `linked`) mêlée à l'`IntersectionObserver`. Candidat découpe : bloc « Autres articles » en composant, dérivations dans un presenter.
+- ⚠️ `project-detail.ts` — 5 → 6 `inject()` (seuil 6 franchi), accepté par le plan sans facade.
+
+**Duplication / dérivation** (advisory) :
+- ⚠️ `blog-further-reading.ts:31-40` et `project-articles.ts:20-29` — même `li > a[app-link-card]` daté (`(post.publishedAt | date: 'd MMM y') ?? ''`), 2 sites. Choix du journal accepté : `LinkCard` porte déjà le visuel, les deux sites diffèrent par `data-testid` et sortie ; extraire une carte d'article au 3ᵉ site.
+
+**Risque résiduel** (advisory, § 8) :
+- réversibilité : profil muet · monitoring : Sentry (profil)
+- la fiche `portfolio` n'existe pas en production (`GET https://api.nedellec-julien.fr/api/projects`, 2026-10-21 : 6 slugs, pas de `portfolio`) : `Portfolio` entre au catalogue et à l'admin, tout article tagué ainsi publiera un lien 404.
+- non couvert par les gates : lecture par un validateur de résultats enrichis (URL publique requise).
+
+**Points à corriger** :
+1. Bloquant — commentaires d'archéologie, surface systémique (4 fichiers du diff, même gabarit `/** … */` d'une ligne qui décrit le QUOI) : `src/app/features/blog/domain/linked-projects.ts:3`, `src/app/features/blog/domain/posts-about-project.ts:3`, `src/app/features/blog/domain/related-posts.ts:13`, `src/app/shared/ui/link-card.ts:3`. Supprimer ; garder au plus une ligne `//` de WHY réel (p. ex. l'égalité exacte des tags, si elle n'est pas lisible dans le code). Les hits `blog-tag.model.ts:66` et `:75` sont antérieurs au diff (informatif).
+2. Bloquant pour le merge (donnée, pas de code) — précondition du plan non remplie : créer la fiche « Portfolio » dans l'admin et vérifier le slug `portfolio` par `GET /api/projects` avant de merger ; s'il diffère, corriger `PROJECT_TAGS` (`project-tag.model.ts:6`).
+3. Non bloquant — `ProjectBlogTag` (`project-tag.model.ts:9`) exporté sans consommateur hors du fichier ; prescrit par le plan, mais le type reste inféré via `projectTagOf` : retirer `export`.
+4. Non bloquant — ADR-0029 encore au statut « proposé » alors que la PR l'applique (le travers relevé au Constat 1 pour 0016 et 0018) : passer à « accepté » dans cette PR.
+5. Non bloquant — la date en sur-titre de `LinkCard` est un texte nu, alors que les autres lignes d'article utilisent `<time datetime>` ; à reprendre si `LinkCard` gagne une entrée de date.

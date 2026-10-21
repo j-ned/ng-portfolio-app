@@ -11,7 +11,6 @@ function sharedCount<T>(a: ReadonlySet<T>, b: Iterable<T>): number {
   return [...new Set(b)].filter((item) => a.has(item)).length;
 }
 
-/** Articles publiés les plus proches : tags partagés + thèmes partagés, au plus trois. */
 export function relatedPosts(posts: readonly BlogPost[], slug: string): readonly BlogPost[] {
   const current = posts.find((p) => p.slug === slug);
   if (!current) return [];
