@@ -338,24 +338,41 @@ navigateur vers `https://api.nedellec-julien.fr` refusés par CORS depuis l'orig
 
 Verdict : **PASS**.
 
+Complément tranche 2bis (re-revue, même pile Docker reconstruite sur `2f0495c`) : `/rss.xml` sert
+`<title>Le blog de Julien Nédellec</title>` et la nouvelle description ; `/.well-known/security.txt`
+sert le domaine `nedellec-julien.fr` et le commentaire au tutoiement ; `/security.txt` répond 200.
+Verdict : **PASS**.
+
 ## Review code
 
-**Verdict** : REJECTED
-**Gates CI locaux** : tests ✅ (`pnpm test` exit 0, 223 fichiers / 4308 tests) / lint ✅ (`pnpm lint` exit 0) / build ✅ (`pnpm run build --configuration production` exit 0, 0 warning) ; `pnpm install --frozen-lockfile` 0, `pnpm a11y:typecheck` 0, `pnpm run format:check` 0, `pnpm icons:check` 0, `pnpm a11y` 0 (55 passed, zéro violation), spec-lint 0
-**Checks mécaniques** : 10 hit(s) — archeologie altitude ; archéologie : 8 hits tous pré-existants (titres de test « spec 029 » de fichiers touchés, aucune ligne ajoutée par le diff), altitude advisory ; profil non transmis pour immutabilité (défaut universel). Checker non vendoré dans `.claude/checks/` : lancé depuis le plugin.
+Re-revue du 2026-10-21 sur `2f0495c` (`git diff 18bd0d8..HEAD` : tranche 2bis et corrections de revue).
+
+**Verdict** : APPROVED
+**Gates CI locaux** : tests ✅ (`pnpm test` exit 0, 223 fichiers / 4346 tests) / lint ✅ (`pnpm lint` exit 0) / build ✅ (`pnpm run build --configuration production` exit 0, 0 warning) ; `pnpm install --frozen-lockfile` 0, `pnpm a11y:typecheck` 0, `pnpm run format:check` 0, `pnpm icons:check` 0, `pnpm a11y` 0 au second passage (55 passed, zéro violation ; premier passage : 54 passed, 1 timeout de 30 s sur `/admin/profile`, sans violation, cf. risque résiduel), spec-lint 0
+**Checks mécaniques** : 10 hit(s) — archeologie altitude au premier passage, inchangés : 8 hits d'archéologie pré-existants (titres « spec 029 »), aucune ligne ajoutée par le diff ; altitude advisory ; profil non transmis pour immutabilité (défaut universel). Checker lancé depuis le plugin (non vendoré dans `.claude/checks/`).
 **Warnings de gate** : aucun
 **Rendu compilé** : N/A
-**Preuve de verify runtime** : ✅ (section `## Verify`, exécutée par la revue)
+**Preuve de verify runtime** : ✅ (section `## Verify`, complétée pour la tranche 2bis)
 **Score de mutation** : N/A (profil sans outil)
 **Conventions Angular 20+** : ✅
 **Cross-platform** : ✅
 **Tests** : ✅
 **Sécurité** : ✅
-**Alignement spec** : ❌
+**Alignement spec** : ✅
+
+Points du premier passage :
+
+1. Bloquant, soldé : `error-toast.ts:45` et `:48` au tutoiement, épinglés par `error-toast.spec.ts` (429, 500, 503) ; `core/` dans `PUBLIC_ROOT`, `veuillez` dans `FORMAL_ADDRESS` avec un cas `flags` ; justification du Plan de test corrigée.
+2. Soldé : `rss.ts` aligné sur la description du blog, titre du canal sans em-dash ; `src/server/feeds/` lu par le verrou.
+3. Soldé : les deux `security.txt` au tutoiement et lus par le verrou. `public/.well-known/security.txt` repointé de l'ancien domaine `julien-nedellec.fr` vers `nedellec-julien.fr` (vérifié servi par l'image : 200, mêmes champs que `/security.txt` sauf `Canonical`).
+4. Soldé : six impératifs ajoutés, triangulés par un cas `flags` sur une même ligne.
+5. Soldé : ` ` et ` ` en échappement dans `app.routes.legal.spec.ts` et `page-not-found.spec.ts` ; adaptation mécanique vérifiée contre le diff, aucune valeur attendue modifiée.
+
+Grep indépendant (src entier hors admin, auth et specs, plus `public/`) : aucune occurrence de `vous|votre|vos|vôtre|veuillez` ni d'impératif en *-ez* hors « chez », « assez », « nez ».
 
 **Tests notables** :
-- ✨ `src/app/editorial-identity.spec.ts:272-293` — discriminance du motif triangulée (flags / does not flag), garde-fous de portée (`reads the template of`, `leaves %s out`) : un verrou vide ou trop large échoue.
-- ⚠️ `src/app/app.routes.legal.spec.ts:102`, `src/app/pages/page-not-found.spec.ts:903` — espaces insécables écrits en caractères bruts, invisibles à la relecture, alors que le reste des specs écrit ` ` / ` `.
+- ✨ `src/app/editorial-identity.spec.ts` — garde de portée (`reads %s`, `leaves %s out`) étendue à `core/`, `src/server/feeds/` et aux deux `security.txt` : un fichier sorti du périmètre fait échouer le verrou.
+- ✨ `src/app/core/interceptors/error-toast.spec.ts` — `it.each` 429/500/503 sur le message reçu par `ToastStore.add`, assertion exacte.
 
 **Altitude composant** (advisory, non bloquant) :
 - ⚠️ `src/app/features/contact/application/contact-form.ts` — 263 LOC (déjà au-dessus de 250 avant, +3) — candidat découpe : sortir le bloc de mention et d'envoi en sous-composant.
@@ -363,14 +380,9 @@ Verdict : **PASS**.
 **Risque résiduel** (advisory, § 8) :
 - réversibilité : profil absent · monitoring : Sentry (profil)
 - ⚠️ `src/app/layout/components/header/header.ts:145`, `footer.ts:118` — le libellé mesuré par `trackCtaClick` passe de « Me contacter » à « M'écrire » : l'historique d'audience du même CTA se scinde en deux lignes.
-- non couvert par les gates : textes hors `src/app` (`src/server/feeds/rss.ts`, `public/security.txt`) hors portée du verrou.
-
-**Points à corriger** :
-1. **Bloquant** — `src/app/core/interceptors/error-toast.ts:45` et `:48` : « Trop de requêtes, veuillez patienter », « Erreur serveur, veuillez réessayer » sont affichés aux visiteurs. La justification d'exclusion de `core/` (Plan de test, tranche 2 : « n'est atteint que par les requêtes de l'admin, les gateways publics passant `silentErrors` ») est fausse : `HttpContactGateway.submitContactForm` (`http-contact.gateway.ts:77`), `HttpBlogGateway.getPublishedPosts` / `getPostBySlug` / `likePost` (`http-blog.gateway.ts:42`, `:56`, `:109`) et `HttpProjectsGateway` (`http-projects.gateway.ts:42`, `:73`) n'utilisent pas `silentErrors()`, et l'intercepteur est global (`app.config.ts:126`) avec `<app-toast>` dans le shell (`app.ts:38`). Un 429 sur le formulaire de contact affiche donc « veuillez patienter » à côté du message au tutoiement. Correction attendue : formuler ces deux messages sans adresse (ils servent aussi l'admin, par exemple « Trop de requêtes, nouvel essai dans un instant »), ou passer les appels publics en `silentErrors()` ; puis inclure `core/` dans `PUBLIC_ROOT` (`editorial-identity.spec.ts:214`), ajouter `veuillez` à `FORMAL_ADDRESS` (`:204`) avec un cas `flags`, et corriger la phrase de justification dans le Plan de test.
-2. Non bloquant — `src/server/feeds/rss.ts:61` : la description du canal RSS garde l'ancien ton (« Retours d'expérience Angular, NestJS, PostgreSQL et self-hosting. ») alors que la description du blog a changé ; hors table, à aligner ou à acter hors périmètre. Le verrou ne lit pas `src/server/`.
-3. Non bloquant — `public/security.txt:8`, `public/.well-known/security.txt:8` : « Si vous découvrez […] merci de nous en informer » (vouvoiement et « nous », anti-référence « ton corporate ») ; fichier technique servi publiquement, à statuer.
-4. Non bloquant — `src/app/editorial-identity.spec.ts:204` : la liste fermée d'impératifs laisse passer `découvrez`, `consultez`, `cliquez`, `hésitez`, `lisez`, `téléchargez` (aucune occurrence aujourd'hui) ; les élargir coûte peu et ne crée pas de faux positif.
-5. Non bloquant — `src/app/app.routes.legal.spec.ts:102`, `src/app/pages/page-not-found.spec.ts:903` : écrire ` ` et ` ` en échappement, comme les autres specs.
+- ⚠️ audit a11y : `/admin/profile` (thème sombre) a dépassé le timeout de 30 s une fois sur deux passages, machine chargée ; page hors diff, aucune violation remontée. À surveiller sur le job `a11y` de la CI de la PR : s'il s'y reproduit, il bloque le merge.
+- ⚠️ un 429 ou un 5xx du formulaire de contact affiche toujours deux messages (toast global et message du gateway), désormais tous deux au tutoiement ; comportement antérieur à la PR.
+- non couvert par les gates : la mise à jour de `/.well-known/security.txt` n'est observable qu'en production après déploiement.
 
 ## Corrections de revue (2026-10-21)
 
