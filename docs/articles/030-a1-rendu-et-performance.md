@@ -2,8 +2,8 @@
 id: 030-a1
 titre: "Du HTML frais à chaque requête, sans rebuild : le rendu de ce site avec Angular 22"
 extrait: "Une modification faite dans l'admin devait être visible au rechargement suivant, sans relancer de build. Comment ce site rend ses pages à la requête avec Angular 22, nginx et une seconde de cache, et pourquoi le corps d'un article n'est jamais hydraté."
-tags: [SSR, Performance, Angular, Architecture, Docker]
-projet: aucun
+tags: [SSR, Performance, Angular, Architecture, Docker, Portfolio]
+projet: Portfolio
 adr:
   - docs/adr/0024-rendu-a-la-requete-des-pages-de-contenu.md
   - docs/adr/0001-hydratation-incrementale-des-defer-de-route-publique.md
@@ -15,8 +15,9 @@ slug: ""
 
 <!--
 Relecture : le corps commence après ce commentaire. À coller dans l'éditeur de l'admin sans le
-front-matter ni ce commentaire. Les tags SSR et Performance arrivent avec la PR 3 de la spec 030 :
-publier après son déploiement, sinon ils restent neutres (hors thème).
+front-matter ni ce commentaire. Les tags SSR, Performance et Portfolio arrivent avec la PR 3 de la
+spec 030 : publier après son déploiement (et après la création de la fiche projet « Portfolio »),
+sinon ils restent neutres (hors thème) et l'article n'est rattaché à aucune fiche.
 -->
 
 Jusqu'au début du mois d'octobre, chaque page de ce site était prérendue au moment du build. C'est rapide à servir et simple à héberger, mais une correction faite dans l'admin n'apparaissait qu'après un nouveau build : plusieurs minutes pour un article, et aucune publication du tout pour un projet tant que je ne poussais pas de code. Je voulais l'inverse : enregistrer, recharger la page, voir le changement.
