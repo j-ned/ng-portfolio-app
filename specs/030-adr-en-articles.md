@@ -181,7 +181,7 @@ brouillon (fin de section). Décision structurante : **ADR-0029**.
 BlogDetail (page, smart)
   ├─ _publishedPosts (liste déjà chargée) ─┬─ adjacentPosts  → nav « Autres articles » (LinkCard)
   │                                        └─ relatedPosts   ─┐
-  ├─ post() ── linkedProjects(PROJECT_TAGS) ──────────────────┼→ BlogFurtherReading (dumb) ─(linkFollowed)→ trackCtaClick
+  ├─ post() ── linkedProjects(PROJECT_TAGS) ──────────────────┼→ BlogFurtherReading (dumb) ─(projectFollowed | postFollowed)→ trackCtaClick
   └─ _applySeo : BlogPosting + about                          ┘
 
 ProjectDetail (page, smart)
@@ -218,7 +218,7 @@ ProjectDetail (page, smart)
 | `src/app/features/blog/domain/linked-projects.ts` | `linkedProjects(post)` : entrées de `PROJECT_TAGS` portées par l'article, dans l'ordre de ses tags |
 | `src/app/features/blog/domain/posts-about-project.ts` | `postsAboutProject(posts, projectSlug)` : articles publiés portant le tag du projet, `publishedAt` ↓ |
 | `src/app/shared/ui/link-card.ts` | `a[app-link-card]`, entrées `overline`, `heading`, `align: 'start' \| 'end'` |
-| `src/app/features/blog/application/components/blog-further-reading.ts` | Section « Pour aller plus loin » (dumb) : `projects`, `posts`, sortie `linkFollowed: output<FurtherReadingTarget>()` |
+| `src/app/features/blog/application/components/blog-further-reading.ts` | Section « Pour aller plus loin » (dumb) : `projects`, `posts`, sorties `projectFollowed` et `postFollowed` (`output()`, livrées en tranches 2 et 3) |
 | `src/app/features/blog/application/further-reading-copy.ts` | `FURTHER_READING_COPY` : titre de section, sur-titre « Fiche du projet », libellés de mesure |
 | `src/app/features/projects/application/components/project-articles.ts` | Section « Articles sur ce projet » (dumb, `SplitSection`) : `posts`, sortie `articleFollowed: output<void>()` |
 | `src/app/features/projects/application/project-articles-copy.ts` | `PROJECT_ARTICLES_COPY` : titre, résumé, libellé de mesure |
@@ -231,7 +231,7 @@ de `blog-detail`, `project-detail`, `blog-tag.model`.
 | Fichier | Changement |
 |---|---|
 | `src/app/features/blog/domain/models/blog-tag.model.ts` | Tags D8 ; catégorie `projects` = `[...PROJECT_TAGS.map((p) => p.tag), 'Auto-hébergement', 'CI/CD', 'GreenTech']` |
-| `src/app/features/blog/pages/blog-detail/blog-detail.ts` | `related`, `linkedProjects` en `computed` ; `<app-blog-further-reading>` ; cartes précédent/suivant en `a[app-link-card]` ; `about` dans le JSON-LD ; `trackCtaClick` sur `linkFollowed` |
+| `src/app/features/blog/pages/blog-detail/blog-detail.ts` | `related`, `linked` (`linkedProjects`) en `computed` ; `<app-blog-further-reading>` ; cartes précédent/suivant en `a[app-link-card]` ; `about` dans le JSON-LD ; `trackCtaClick` sur `projectFollowed` / `postFollowed` |
 | `src/app/features/projects/pages/project-detail/project-detail.ts` | `inject(BlogGateway)`, `_postsResource` (D4), `articles` en `computed` ; `<app-project-articles>` ; `subjectOf` dans le JSON-LD ; `trackCtaClick` sur `articleFollowed` |
 | `src/app/testing/editorial-sources.ts` | Enregistre `FURTHER_READING_COPY` et `PROJECT_ARTICLES_COPY` (verrou éditorial) |
 | `ci/api-stub/fixtures/projects.json` | Projet `dashflow` minimal (slug réel de `PROJECT_TAGS`) |
@@ -253,9 +253,6 @@ export const PROJECT_TAGS = [
 
 export type ProjectBlogTag = (typeof PROJECT_TAGS)[number]['tag'];
 export function projectTagOf(projectSlug: string): ProjectBlogTag | null;
-
-// features/blog/application/components/blog-further-reading.ts
-export type FurtherReadingTarget = 'post' | 'project';
 ```
 
 - Tout est `readonly` ; les fonctions rendent de nouveaux tableaux (`filter` avant `sort`, comme
@@ -270,7 +267,7 @@ export type FurtherReadingTarget = 'post' | 'project';
 ### Réactivité et chargement (SSR)
 
 - `BlogDetail` : `protected readonly related = computed(() => relatedPosts(this._publishedPosts(), this.slug()))`,
-  `protected readonly projects = computed(() => linkedProjects(this.post()))` (liste vide sans
+  `protected readonly linked = computed(() => linkedProjects(this.post()))` (liste vide sans
   article). Aucune nouvelle source asynchrone.
 - `ProjectDetail` : `_postsResource = rxResource({ params: () => projectTagOf(this.slug()) ?? undefined, stream: () => this._blogGateway.getPublishedPosts() })` ;
   `articles = computed(() => this._postsResource.hasValue() ? postsAboutProject(this._postsResource.value(), this.slug()) : [])`.
@@ -502,14 +499,103 @@ dans `blog-detail.ts`. Signalement : `@angular-eslint/template/elements-content`
 choix à faire au GREEN entre la directive de désactivation en ligne (précédent :
 `admin-tags-selector.ts`) et l'option `allowList` de la règle dans `eslint.config.js`.
 
+### Tranche 3 — un article renvoie vers la fiche de son projet
+
+Contrat posé par les tests, non nommé au plan : `data-testid="project-link"` sur chaque
+`a[app-link-card]` de projet, dans la `section` `further-reading` ; clé
+`FURTHER_READING_COPY.projectLinkCtaLabel` (libellé de mesure, chaîne non vide, valeur laissée au
+GREEN) ; `linkedProjects` accepte `undefined` (page sans article). Le sur-titre « Fiche du projet »
+est asserté en littéral (texte validé, arbitrage 5) : sa clé de copie est libre. La sortie de
+`BlogFurtherReading` n'est pas fixée : les tests passent par `BlogDetail` (clic → `trackCtaClick`) ;
+une sortie `projectFollowed = output()` à côté de `postFollowed` suffit (même forme que la
+tranche 2), `FurtherReadingTarget` n'a plus d'usage. Verrou éditorial : `FURTHER_READING_COPY` est
+déjà enregistré, `editorialTexts` parcourt toutes ses valeurs, donc les nouvelles clés y passent sans
+test ajouté.
+
+`src/app/features/blog/domain/models/project-tag.model.spec.ts` (11 tests, sans TestBed) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| table | constante | `PROJECT_TAGS` `toEqual` les 3 entrées `DashFlow → dashflow`, `CandiDash → candidash`, `Portfolio → portfolio` |
+| thème (`it.each` × 3, sur `PROJECT_TAGS`) | chaque tag de la table | `blogTagCategory(tag)` `toBe('projects')` |
+| slug connu (`it.each` × 3) | `dashflow`, `candidash`, `portfolio` | `projectTagOf` `toBe` le tag |
+| slug inconnu (`it.each` × 4) | `le-vieux-comptoir`, `DashFlow`, `Portfolio` (tag au lieu du slug), `''` | `toBeNull()` |
+
+`src/app/features/blog/domain/linked-projects.spec.ts` (6 tests, `makeBlogPost`) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| sans article | `undefined` | `[]` |
+| un projet | tags `Angular`, `DashFlow`, `Chiffrement` | `[{ tag: 'DashFlow', projectSlug: 'dashflow' }]` |
+| ordre des tags | tags `Portfolio`, `SSR`, `DashFlow` (ordre inverse de la table) | `Portfolio` puis `DashFlow` |
+| aucun (`it.each` × 3) | `Candidash` (casse différente) ; aucun tag de projet ; aucun tag | `[]` |
+
+`src/app/features/blog/domain/models/blog-tag.model.spec.ts` : `Candidash` ajouté à la table des
+tags libres (`toBeNull()`) ; égalité exacte, le tag libre ne tombe pas dans `projects`.
+
+`src/app/features/blog/pages/blog-detail/blog-detail.spec.ts`, `describe('fiche du projet')` dans
+« pour aller plus loin » (5 tests ; même `setup`, aucune valeur attendue existante modifiée) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| lien projet (`it.each` × 2) | article tagué `DashFlow` / `Portfolio`, aucun article proche | section rendue, `h2` « Pour aller plus loin », un `project-link` dans la section, `href` `/projects/dashflow` / `/projects/portfolio`, sur-titre « Fiche du projet », titre = tag, aucun `related-post` |
+| casse différente | tags `Candidash`, `Angular`, un article proche | aucun `project-link`, `related-post` `/blog/proche` |
+| ordre | tags `DashFlow`, `Angular`, un article proche | liens de la section : `project-link` `/projects/dashflow` puis `related-post` `/blog/proche` |
+| clic mesuré | lien projet cliqué | `trackCtaClick('blog_project_link', FURTHER_READING_COPY.projectLinkCtaLabel)` × 1, libellé non vide, `navigateByUrl` vers `/projects/dashflow` |
+
+Sweep de la catégorie `projects` dérivée (contrat changé : `CandiDash` et `Portfolio` entrent au
+catalogue) : `grep` de `CandiDash`, `Candidash`, `Portfolio`, `PROJECT_TAGS`, `projectTagOf`,
+`linkedProjects`, `blog_project_link`, `BLOG_TAGS_BY_CATEGORY`, `AVAILABLE_BLOG_TAGS` et
+`blogTagCategory` sur `src/`, `e2e/` et `ci/`. Aucun test du blog n'encode ces tags comme libres ni
+ne fige le contenu ou la taille de `projects` : `blog-tag-palette.spec.ts` lit
+`BLOG_TAGS_BY_CATEGORY.projects[0]` (`DashFlow`, toujours premier) ; `related-posts.spec.ts`,
+`count-posts-by-category.spec.ts`, `filter-posts-by-category.spec.ts` et `is-post-in-category.spec.ts`
+n'emploient ni `CandiDash` ni `Portfolio`. Les autres occurrences sont des titres de projet
+(`admin-projects`, `home-projects`, `projects`, `overview-view`) ou des données d'audience
+(`analytics-builders.ts`, `admin-audience.spec.ts`), sans lien avec les tags du blog ;
+`PROJECT_TAGS_MAX_COUNT` / `AVAILABLE_PROJECT_TAGS` (admin projet) sont homonymes, sans rapport. Les
+tests des tranches 1 et 2 gardent leur contrat (l'article `courant` de la tranche 2 ne porte aucun
+tag de projet). Aucune constante recalibrée, aucun état seedé dont la sémantique change.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-21 19:33, 11 failed / 4035 total). Nature des échecs : sur l'arbre réel, `pnpm test`
+(après `ng cache clean` et purge de `node_modules/.vite`, code de sortie 1) s'arrête à la
+compilation, uniquement sur des symboles applicatifs dus au GREEN : `TS2307` `./project-tag.model`
+et `./linked-projects` ; `TS7031` / `TS2345` sur l'`it.each(PROJECT_TAGS.map(...))`, qui découlent
+du module absent ; `TS2339` `FURTHER_READING_COPY.projectLinkCtaLabel` (× 2). Aucune faute de type
+propre aux specs ; prettier et eslint verts sur les 4 fichiers touchés ; le motif d'archéologie du
+profil ne trouve rien. Mesure du rouge comportemental : squelette jetable posé le temps d'une
+exécution puis retiré (`PROJECT_TAGS` aux trois entrées, `projectTagOf` à `null`, `linkedProjects` à
+`[]`, `projectLinkCtaLabel: ''`, catalogue, `BlogFurtherReading` et `BlogDetail` inchangés) :
+11 failed / 4035 total, toutes en `AssertionError` (3 `projectTagOf`, 2 thème `CandiDash` /
+`Portfolio`, 2 `linkedProjects`, 4 `BlogDetail`). Verts par nature sous le squelette (12) : la table,
+le thème de `DashFlow`, les 4 slugs inconnus, les 4 cas « aucun » de `linkedProjects`, `Candidash`
+libre, et le cas « casse différente » de la page. Harnais vérifié : une implémentation jetable
+complète (`projectTagOf`, `linkedProjects`, catégorie `projects` dérivée de `PROJECT_TAGS`, volet
+projet de `BlogFurtherReading` avec `projectFollowed`, branchement et mesure dans `BlogDetail`,
+copie) donne 4035 passed / 4035, code de sortie 0 ; la même sans le branchement dans `BlogDetail`,
+4 failed / 4035 (les 4 tests de page). Tout a été retiré (`git checkout` des fichiers applicatifs,
+fichiers créés supprimés ; `git status` ne montre que les specs). Non-régression : 4035 = 4012 + 23
+tests ajoutés (11 table et slug, 6 `linkedProjects`, 1 tag libre, 5 page) ; aucun test des tranches
+antérieures ne tombe.
+
+```
+ Test Files  3 failed | 216 passed (219)
+      Tests  11 failed | 4024 passed (4035)
+```
+
+Dû au GREEN : `src/app/features/blog/domain/models/project-tag.model.ts` (`ProjectTag`,
+`PROJECT_TAGS`, `ProjectBlogTag`, `projectTagOf`), `src/app/features/blog/domain/linked-projects.ts`
+(`linkedProjects(post: BlogPost | undefined)`), catégorie `projects` de `blog-tag.model.ts` dérivée
+de `PROJECT_TAGS`, `FURTHER_READING_COPY.projectLinkCtaLabel` (plus la clé du sur-titre),
+volet projet de `blog-further-reading.ts` (avant les articles), branchement de `BlogDetail` (section
+rendue dès qu'il y a un projet **ou** un article proche, `trackCtaClick('blog_project_link', …)`).
+
 ## Journal des tranches
 
-- **Tranche 1 — les tags manquants tombent dans leur thème** : GREEN 3959 passed / 3959 total ·
-  refactor : aucun (ajout de données au catalogue).
-- **Tranche 2 — la page article propose jusqu'à trois articles proches dans le HTML rendu** :
-  GREEN 4012 passed / 4012 total · refactor : cartes « article précédent / suivant » de `BlogDetail`
-  passées sur `a[app-link-card]` (tests existants inchangés) ; `relatedPosts` sans type
-  intermédiaire ni compteur mutable.
+- **Tranche 1 — les tags manquants tombent dans leur thème** : GREEN 3959 passed / 3959 total · refactor : aucun (ajout de données au catalogue).
+- **Tranche 2 — la page article propose jusqu'à trois articles proches dans le HTML rendu** : GREEN 4012 passed / 4012 total · refactor : cartes « article précédent / suivant » de `BlogDetail` passées sur `a[app-link-card]` (tests existants inchangés) ; `relatedPosts` sans type intermédiaire ni compteur mutable.
+- **Tranche 3 — un article renvoie vers la fiche de son projet** : GREEN 4035 passed / 4035 total · refactor : aucun (volet projet ajouté à la liste existante de `BlogFurtherReading`, même forme de sortie que `postFollowed`).
 
 ## Verify
 
@@ -551,3 +637,36 @@ l'article précédent). Le navigateur lit l'API publique (`api.nedellec-julien.f
 l'origine `127.0.0.1` (CORS) : la page retombe sur `/blog`, pour les deux types de carte, donc sans
 lien avec le diff. Le clic mesuré (`trackCtaClick('blog_related_post', …)`) et la navigation sont
 prouvés par `blog-detail.spec.ts`.
+
+### Tranche 3 (2026-10-21)
+
+Surface atteignable modifiée : la section « Pour aller plus loin » de la page article (volet projet
+ajouté, condition d'affichage élargie à « projet ou article proche »).
+
+Steps :
+
+1. `pnpm run build --configuration production` (code de sortie 0), puis `docker build` de l'image.
+2. Pile locale : image derrière la doublure `ci/api-stub` (`FIXTURES_DIR`), fixtures copiées hors du
+   dépôt : `article-temoin` tagué `Angular`, `DashFlow` ; `article-voisin` (`TypeScript`) ;
+   `article-sans-projet` (`Reconversion`, sans rapport). Fixtures du dépôt inchangées (tranche 4).
+3. `curl` de `/blog/article-temoin` et `/blog/article-sans-projet`, puis ouverture de
+   `/blog/article-temoin` dans un navigateur et clic sur la fiche du projet.
+
+Constats :
+
+- HTML servi, `/blog/article-temoin` (200) : dans `section[data-testid="further-reading"]`,
+  `a[data-testid="project-link"]` `href="/projects/dashflow"` (sur-titre « Fiche du projet », titre
+  « DashFlow ») **puis** `a[data-testid="related-post"]` `href="/blog/article-voisin"` ; la section
+  suit `</article>` et précède `nav[aria-label="Autres articles"]`. Aucune lecture de `/api/projects`
+  dans l'état de transfert (D3).
+- HTML servi, `/blog/article-sans-projet` (200) : ni section ni lien projet.
+- Navigateur : page hydratée (`ng-version`), capture : carte « Fiche du projet / DashFlow » puis
+  « 3 sept. 2026 / Article voisin » sous « Pour aller plus loin », « article précédent » dessous ; le
+  clic sur la fiche émet un `POST /api/analytics/track` et mène à `/projects/dashflow`.
+- Console : une seule erreur, `GET /api/config` 404 (route absente de la doublure, préexistante).
+
+Verdict : **PASS** pour le rendu serveur, l'hydratation et la navigation vers la fiche.
+
+Non prouvé dans cette pile : le contenu de la fiche `/projects/dashflow` (absente des fixtures, la
+page lit l'API publique, refusée en CORS) ; le corps exact du `cta_click` émis, prouvé par
+`blog-detail.spec.ts`.

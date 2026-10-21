@@ -717,5 +717,103 @@ describe('BlogDetail', () => {
         routed: ['/blog/deux-tags', '/blog/un-tag'],
       });
     });
+
+    describe('fiche du projet', () => {
+      const showTagged = async (
+        tags: readonly string[],
+        others: readonly BlogPost[] = [],
+      ): Promise<Setup> => {
+        const tagged = makeBlogPost({ ...current, tags });
+        const result = setup({
+          getPostBySlug: () => of(tagged),
+          getPublishedPosts: () => of([tagged, ...others]),
+        });
+        result.fixture.componentRef.setInput('slug', tagged.slug);
+        result.fixture.detectChanges();
+        await result.fixture.whenStable();
+        result.fixture.detectChanges();
+        return result;
+      };
+
+      const projectLinks = (fixture: ComponentFixture<BlogDetail>): HTMLAnchorElement[] => [
+        ...rootOf(fixture).querySelectorAll<HTMLAnchorElement>('[data-testid="project-link"]'),
+      ];
+
+      it.each([
+        { tag: 'DashFlow', href: '/projects/dashflow' },
+        { tag: 'Portfolio', href: '/projects/portfolio' },
+      ])(
+        'Given an article tagged $tag and no close post When the page renders Then the further reading links to the project page, overlined as such and titled by the tag',
+        async ({ tag, href }) => {
+          const { fixture } = await showTagged([tag]);
+          const section = rootOf(fixture).querySelector('[data-testid="further-reading"]');
+
+          expect({
+            heading: section?.querySelector('h2')?.textContent?.trim(),
+            projects: projectLinks(fixture).map((link) => ({
+              inSection: section?.contains(link) ?? false,
+              href: link.getAttribute('href'),
+              overline: link.firstElementChild?.textContent?.trim(),
+              heading: link.lastElementChild?.textContent?.trim(),
+            })),
+            related: relatedLinks(fixture).length,
+          }).toEqual({
+            heading: 'Pour aller plus loin',
+            projects: [{ inSection: true, href, overline: 'Fiche du projet', heading: tag }],
+            related: 0,
+          });
+        },
+      );
+
+      it('Given an article whose free tag only differs from CandiDash by its case When the page renders Then no project page is linked, while the close post still is', async () => {
+        const { fixture } = await showTagged(
+          ['Candidash', 'Angular'],
+          [candidate('proche', ['Angular'], '2026-09-01T12:00:00Z')],
+        );
+
+        expect({
+          projects: projectLinks(fixture).length,
+          related: relatedLinks(fixture).map((link) => link.getAttribute('href')),
+        }).toEqual({ projects: 0, related: ['/blog/proche'] });
+      });
+
+      it('Given an article on a project with a close post When the page renders Then the project page comes before the close posts', async () => {
+        const { fixture } = await showTagged(
+          ['DashFlow', 'Angular'],
+          [candidate('proche', ['Angular'], '2026-09-01T12:00:00Z')],
+        );
+        const section = rootOf(fixture).querySelector('[data-testid="further-reading"]');
+
+        expect(
+          [...(section?.querySelectorAll('a') ?? [])].map((link) => [
+            link.getAttribute('data-testid'),
+            link.getAttribute('href'),
+          ]),
+        ).toEqual([
+          ['project-link', '/projects/dashflow'],
+          ['related-post', '/blog/proche'],
+        ]);
+      });
+
+      it('Given an article on a project When the reader follows the project page Then the click is measured as a project link with a constant label, and the router goes to the project', async () => {
+        const { fixture, analyticsMock } = await showTagged(['DashFlow']);
+        const navigateByUrl = vi
+          .spyOn(TestBed.inject(Router), 'navigateByUrl')
+          .mockResolvedValue(true);
+
+        for (const link of projectLinks(fixture)) link.click();
+        await fixture.whenStable();
+
+        expect({
+          tracked: analyticsMock.trackCtaClick.mock.calls,
+          label: FURTHER_READING_COPY.projectLinkCtaLabel,
+          routed: navigateByUrl.mock.calls.map(([url]) => String(url)),
+        }).toEqual({
+          tracked: [['blog_project_link', FURTHER_READING_COPY.projectLinkCtaLabel]],
+          label: expect.stringMatching(/\S/u),
+          routed: ['/projects/dashflow'],
+        });
+      });
+    });
   });
 });

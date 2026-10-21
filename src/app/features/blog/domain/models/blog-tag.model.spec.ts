@@ -27,9 +27,12 @@ describe('blogTagCategory', () => {
     expect(blogTagCategory(tag)).toBe(expected);
   });
 
-  it.each(['Inconnu', 'angular', ''])('given the free tag "%s", returns null', (tag) => {
-    expect(blogTagCategory(tag)).toBeNull();
-  });
+  it.each(['Inconnu', 'angular', 'Candidash', ''])(
+    'given the free tag "%s", returns null',
+    (tag) => {
+      expect(blogTagCategory(tag)).toBeNull();
+    },
+  );
 });
 
 describe('BLOG_TAG_CATEGORIES', () => {

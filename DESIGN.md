@@ -295,7 +295,7 @@ Aucun composant ne porte de shadow autre que les valeurs ci-dessous. Si un compo
 
 ### Carte de lien (`shared/ui/link-card.ts`)
 
-Un lien de navigation interne présenté en carte : « article précédent / suivant » et « Pour aller plus loin » sur la page article.
+Un lien de navigation interne présenté en carte : « article précédent / suivant » et « Pour aller plus loin » (fiche du projet, articles proches) sur la page article.
 
 - **API:** composant à sélecteur d'attribut `a[app-link-card]`, posé sur le lien de l'appelant ; entrées `overline` et `heading` (requises), `align` (`'start'` par défaut, `'end'` aligne le texte à droite). `routerLink`, `data-testid` et le placement dans la grille (`sm:col-start-2`) restent sur l'`<a>`.
 - **Apparence:** carte « Cards / Containers » portée par l'hôte (`rounded-xl border border-foreground/8 bg-surface p-6`), sans élément enveloppant ; sur-titre mono `text-xs text-muted`, puis titre `text-[1.1875rem] font-semibold tracking-tight`.
@@ -403,11 +403,11 @@ Un article de la liste du blog, lu comme une étude de cas.
 
 ### Pour aller plus loin (`features/blog/application/components/blog-further-reading.ts`)
 
-Jusqu'à trois articles proches de l'article lu, calculés par `relatedPosts` sur la liste publiée déjà chargée par la page (ADR-0029).
+La fiche du projet dont parle l'article, puis jusqu'à trois articles proches de l'article lu, calculés par `relatedPosts` sur la liste publiée déjà chargée par la page (ADR-0029).
 
-- **Entrée:** `posts` (déjà triés et limités) ; sortie `postFollowed`, la page mesure le clic (`trackCtaClick('blog_related_post', …)`, libellé constant).
-- **Section:** `section` nommée par son `h2` « Pour aller plus loin », hors de l'`article`, sous la barre « J'aime / Flux RSS » et avant la navigation « Autres articles ». Aucun `nav` ajouté. Non rendue sans article proche (`@if` côté page). Jamais sous `@defer` : les liens sont dans le HTML servi.
-- **Liste:** `ul role="list"` en grille, une colonne en mobile, deux à partir de `sm` ; une carte de lien par article, sur-titre = date de publication (`d MMM y`, comme la ligne d'article), titre = titre de l'article.
+- **Entrées:** `projects` (projets déclarés par un tag de `PROJECT_TAGS`, `linkedProjects`, sans appel à l'API des projets) et `posts` (déjà triés et limités) ; sorties `projectFollowed` et `postFollowed`, la page mesure le clic (`trackCtaClick('blog_project_link', …)` ou `trackCtaClick('blog_related_post', …)`, libellés constants).
+- **Section:** `section` nommée par son `h2` « Pour aller plus loin », hors de l'`article`, sous la barre « J'aime / Flux RSS » et avant la navigation « Autres articles ». Aucun `nav` ajouté. Non rendue sans projet ni article proche (`@if` côté page). Jamais sous `@defer` : les liens sont dans le HTML servi.
+- **Liste:** `ul role="list"` en grille, une colonne en mobile, deux à partir de `sm` ; d'abord une carte de lien par projet (vers `/projects/<slug>`, sur-titre « Fiche du projet », titre = tag du projet), puis une par article (sur-titre = date de publication `d MMM y`, comme la ligne d'article, titre = titre de l'article).
 - **Doublons:** un article proche peut aussi être le voisin chronologique ; il apparaît alors dans les deux blocs.
 
 ### Corps d'article et blocs de code (`features/blog/application/components/blog-article-body.ts`, `infra/render-code-block.ts`)

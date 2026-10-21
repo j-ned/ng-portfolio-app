@@ -34,6 +34,7 @@ import { AppIcon } from '@shared/icons/app-icon';
 import { readingTimeMinutes } from '../../domain/reading-time';
 import { adjacentPosts } from '../../domain/adjacent-posts';
 import { relatedPosts } from '../../domain/related-posts';
+import { linkedProjects } from '../../domain/linked-projects';
 import type { BlogPost } from '../../domain/models/blog-post.model';
 
 // `updatedAt` peut précéder `publishedAt` (brouillon retouché puis publié) : `dateModified`
@@ -182,8 +183,14 @@ function laterOf(a: string, b: string): string {
         </div>
 
         @let further = related();
-        @if (further.length) {
-          <app-blog-further-reading [posts]="further" (postFollowed)="trackRelatedPost()" />
+        @let projects = linked();
+        @if (projects.length || further.length) {
+          <app-blog-further-reading
+            [projects]="projects"
+            [posts]="further"
+            (projectFollowed)="trackProjectLink()"
+            (postFollowed)="trackRelatedPost()"
+          />
         }
 
         @let around = neighbours();
@@ -266,6 +273,7 @@ export class BlogDetail {
     adjacentPosts(this._publishedPosts(), this.slug()),
   );
   protected readonly related = computed(() => relatedPosts(this._publishedPosts(), this.slug()));
+  protected readonly linked = computed(() => linkedProjects(this.post()));
 
   protected readonly coverImageAlt = computed(
     () => `Illustration de l’article ${this.post()?.title ?? ''}`,
@@ -343,5 +351,9 @@ export class BlogDetail {
 
   protected trackRelatedPost(): void {
     this.analytics.trackCtaClick('blog_related_post', FURTHER_READING_COPY.relatedPostCtaLabel);
+  }
+
+  protected trackProjectLink(): void {
+    this.analytics.trackCtaClick('blog_project_link', FURTHER_READING_COPY.projectLinkCtaLabel);
   }
 }
