@@ -38,8 +38,9 @@ plus l'option « garder l'actuel, adouci ». Julien a d'abord retenu A, puis a c
 3. **L'indigo n'est plus imposé.** L'accent devient l'orange copeau ; la One Indigo Rule devient une
    règle d'accent unique (« One Orange Rule »), les couleurs des autocollants étant une exception
    bornée (exigence 4).
-4. **Typographie non imposée** : les polices actuelles (Archivo, JN Sans, JN Mono) peuvent changer.
-   Proposition en exigence 7, choix final en question ouverte 1.
+4. **Typographie** : **Bricolage Grotesque** pour les titres, à la place d'Archivo ; **JN Sans** et
+   **JN Mono** conservées pour le texte et les données (arbitrage complémentaire du 2026-10-21,
+   exigence 7).
 5. **Thème au premier chargement : suivre le système** (préférence `prefers-color-scheme`), comme
    aujourd'hui (script d'`index.html`, `ThemeStore`, ADR-0012). Les deux thèmes restent égaux
    (Two Registers Rule conservée).
@@ -109,7 +110,7 @@ Contrastes calculés (WCAG 2.x, OKLCH converti en sRGB, gamut borné, mélanges 
    sans nouvelle couleur en dur dans les composants. Un token `--color-on-primary` remplace les
    `text-white` posés sur `bg-primary-bg` (5 occurrences aujourd'hui, dont `blog-tag-palette.ts`) :
    sur l'orange, le texte est sombre.
-4. **Couleurs d'autocollant** (sauge, lavande, et au plus une troisième) : tokens dédiés, réservés aux
+3. **Couleurs d'autocollant** (sauge, lavande, et au plus une troisième) : tokens dédiés, réservés aux
    autocollants et pastilles de catégorie. Elles ne portent jamais seules une information (le texte
    de la pastille la porte) et ne servent ni aux liens, ni aux boutons, ni aux états.
 5. **Coloration syntaxique** des blocs de code re-dérivée de la nouvelle palette (six teintes,
@@ -118,10 +119,10 @@ Contrastes calculés (WCAG 2.x, OKLCH converti en sRGB, gamut borné, mélanges 
    « pas de gradient décoratif »), `<meta name="theme-color">` (`#000000` en dur, à décliner clair et
    sombre avec `media`), images Open Graph si elles portent l'ancienne palette, sprite d'icônes si
    des couleurs y sont figées.
-7. **Typographie** (choix final : question ouverte 1). Proposition : un grotesque arrondi et
-   expressif sous licence OFL pour les titres (Bricolage Grotesque variable, comme dans la maquette)
-   à la place d'Archivo ; JN Sans et JN Mono conservées pour le texte et les données. Toujours
-   **trois familles au plus**, **auto-hébergées** (`public/fonts/`, ADR-0006) : sous-ensemble latin,
+7. **Typographie** : Bricolage Grotesque (variable, licence OFL) pour les titres à la place
+   d'Archivo ; JN Sans et JN Mono conservées sans changement pour le texte et les données. Les axes
+   de Bricolage (`opsz`, `wdth`, `wght`) sont réduits aux valeurs employées, la largeur et l'œil
+   optique fixés au plan technique. Toujours **trois familles au plus**, **auto-hébergées** (`public/fonts/`, ADR-0006) : sous-ensemble latin,
    axes réduits aux valeurs employées, nom de fichier versionné (cache `immutable`), face de repli
    métriquement ajustée pour ne pas décaler la mise en page, seule la police du `<h1>` (élément LCP)
    préchargée, CSP `font-src 'self'` inchangée. Une police modifiée ne garde pas un nom réservé de sa
@@ -177,10 +178,10 @@ deux touchent les mêmes gabarits publics, et la PR 1 de la spec 031 réécrit `
 | # | Dépôt | Périmètre | Dépend de |
 |---|---|---|---|
 | 1 | front | cette spec | — |
-| 2 | front | plan technique (`architect`) : tokens, polices, fichiers touchés, ADR (accent unique orange et couleurs d'autocollant, choix de la police de titres) | 1, question ouverte 1 tranchée |
+| 2 | front | plan technique (`architect`) : tokens, sous-ensemble de Bricolage Grotesque, fichiers touchés, ADR (accent unique orange et couleurs d'autocollant, police de titres) | 1 |
 | 3 | front | `DESIGN.md` et `PRODUCT.md` (principe 3) réécrits | 2, spec 031 PR 1 mergée |
 | 4 | front | tokens des deux thèmes, `on-primary`, couleurs d'autocollant, coloration syntaxique, `favicon.svg`, `theme-color` | 3, spec 031 PR 2 mergée |
-| 5 | front | police de titres auto-hébergée (fichiers, `@font-face`, repli ajusté, preload) | 4 |
+| 5 | front | Bricolage Grotesque auto-hébergée (fichier, `@font-face`, repli ajusté, preload), Archivo retirée | 4 |
 | 6 | front | formes et composants signature (boutons pilule, cartes, autocollant, cartouche, cote) et ajustements de gabarits publics | 5 |
 
 Chaque PR passe les gates du Dockerfile, le job `a11y` et une mesure Lighthouse avant/après
@@ -193,14 +194,15 @@ Chaque PR passe les gates du Dockerfile, le job `a11y` et une mesure Lighthouse 
 - Toute police servie par un CDN, toute image décorative, toute animation d'intro.
 - Les directions A (atelier chaleureux) et B (carnet de bord), écartées le 2026-10-21.
 
+### Arbitrages complémentaires (2026-10-21)
+
+1. **Typographie** : Bricolage Grotesque pour les titres ; JN Sans et JN Mono gardées.
+
 ### Questions ouvertes
 
-1. **Police des titres** : Bricolage Grotesque comme dans la maquette, une autre police arrondie
-   (OFL, auto-hébergeable), ou garder Archivo ? Et JN Sans / JN Mono restent-elles pour le texte et
-   les données (recommandé : oui, pour limiter le risque de CLS) ? (à trancher avant la PR 2)
-2. **Dose de fantaisie** : la réponse « retenu » (un autocollant décoratif par écran) a été donnée
+1. **Dose de fantaisie** : la réponse « retenu » (un autocollant décoratif par écran) a été donnée
    pour la direction A. Elle tient pour C, ou tu veux plus d'autocollants ?
-3. **Nom court dans l'en-tête** : la maquette affichait « julien. » en minuscules. On garde
+2. **Nom court dans l'en-tête** : la maquette affichait « julien. » en minuscules. On garde
    « Julien Nédellec » (marque déclarée dans `PRODUCT.md`) ou on passe à une forme courte ?
-4. **Couleurs d'autocollant** : sauge et lavande suffisent-elles, ou une troisième (jaune, rose) ?
-5. **Image Open Graph** : à redessiner dans la nouvelle palette, ou à garder telle quelle ?
+3. **Couleurs d'autocollant** : sauge et lavande suffisent-elles, ou une troisième (jaune, rose) ?
+4. **Image Open Graph** : à redessiner dans la nouvelle palette, ou à garder telle quelle ?
