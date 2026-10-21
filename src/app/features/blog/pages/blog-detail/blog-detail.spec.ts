@@ -814,6 +814,48 @@ describe('BlogDetail', () => {
           routed: ['/projects/dashflow'],
         });
       });
+
+      it.each([
+        {
+          tags: ['DashFlow'],
+          about: [
+            {
+              '@type': 'CreativeWork',
+              name: 'DashFlow',
+              url: 'https://nedellec-julien.fr/projects/dashflow',
+            },
+          ],
+        },
+        {
+          tags: ['Portfolio', 'Angular', 'DashFlow'],
+          about: [
+            {
+              '@type': 'CreativeWork',
+              name: 'Portfolio',
+              url: 'https://nedellec-julien.fr/projects/portfolio',
+            },
+            {
+              '@type': 'CreativeWork',
+              name: 'DashFlow',
+              url: 'https://nedellec-julien.fr/projects/dashflow',
+            },
+          ],
+        },
+        { tags: ['Angular'], about: undefined },
+        { tags: ['Candidash'], about: undefined },
+      ])(
+        'Given an article tagged $tags When its structured data is applied Then the BlogPosting is about each linked project, in tag order, and carries no about key without one',
+        async ({ tags, about }) => {
+          const { seoMock } = await showTagged(tags);
+          const structuredData = seoMock.applySeoData.mock.calls.at(-1)?.[0]?.structuredData;
+
+          expect({
+            type: structuredData?.['@type'],
+            hasAbout: 'about' in (structuredData ?? {}),
+            about: structuredData?.about,
+          }).toEqual({ type: 'BlogPosting', hasAbout: about !== undefined, about });
+        },
+      );
     });
   });
 });

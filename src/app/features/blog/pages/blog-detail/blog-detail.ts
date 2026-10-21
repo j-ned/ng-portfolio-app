@@ -293,6 +293,11 @@ export class BlogDetail {
     const url = `${SITE_IDENTITY.siteUrl}/blog/${p.slug}`;
     const shareImage = toShareImageUrl(p.coverImage);
     const author = { '@type': 'Person', name: 'Julien Nédellec', url: SITE_IDENTITY.siteUrl };
+    const about = this.linked().map(({ tag, projectSlug }) => ({
+      '@type': 'CreativeWork',
+      name: tag,
+      url: `${SITE_IDENTITY.siteUrl}/projects/${projectSlug}`,
+    }));
     this.seo.applySeoData({
       title: `${p.title} | Julien Nédellec`,
       description: truncateAtWord(p.excerpt, 155),
@@ -312,6 +317,7 @@ export class BlogDetail {
         keywords: p.tags.join(', '),
         author,
         publisher: author,
+        ...(about.length > 0 ? { about } : {}),
         ...(shareImage ? { image: shareImage } : {}),
         ...(p.publishedAt
           ? { datePublished: p.publishedAt, dateModified: laterOf(p.updatedAt, p.publishedAt) }

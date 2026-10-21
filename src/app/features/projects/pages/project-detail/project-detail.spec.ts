@@ -15,6 +15,7 @@ import type { BlogPost } from '@features/blog/domain/models/blog-post.model';
 import { makeBlogPost } from '@features/blog/testing/blog-post-builders';
 import { stubBlogGateway } from '@features/blog/testing/stub-blog-gateway';
 import { PROJECT_ARTICLES_COPY } from '@features/projects/application/project-articles-copy';
+import { Seo } from '@core/seo/seo';
 import { Component, PLATFORM_ID, RESPONSE_INIT, type Provider } from '@angular/core';
 
 function project(overrides: Partial<Project> = {}): Project {
@@ -660,6 +661,7 @@ describe('ProjectDetail: suite éditoriale de la fiche', () => {
 
 describe('ProjectDetail: articles sur ce projet', () => {
   const trackCtaClick = vi.fn<AnalyticsGateway['trackCtaClick']>();
+  const applySeoData = vi.fn<Seo['applySeoData']>();
 
   const DASHFLOW = project({ id: 'dashflow', slug: 'dashflow', title: 'DashFlow' });
   const CANDIDASH = project({ id: 'candidash', slug: 'candidash', title: 'CandiDash' });
@@ -673,6 +675,7 @@ describe('ProjectDetail: articles sur ce projet', () => {
     getPublishedPosts: BlogGateway['getPublishedPosts'],
   ): Promise<ComponentFixture<ProjectDetail>> => {
     trackCtaClick.mockClear();
+    applySeoData.mockClear();
     TestBed.configureTestingModule({
       providers: [
         provideRouter([{ path: '**', component: BlankPage }]),
@@ -684,6 +687,7 @@ describe('ProjectDetail: articles sur ce projet', () => {
         },
         { provide: BlogGateway, useValue: stubBlogGateway({ getPublishedPosts }) },
         { provide: AnalyticsGateway, useValue: stubAnalyticsGateway({ trackCtaClick }) },
+        { provide: Seo, useValue: { applySeoData } },
       ],
     });
     const fixture = TestBed.createComponent(ProjectDetail);
@@ -840,6 +844,124 @@ describe('ProjectDetail: articles sur ce projet', () => {
       ],
       label: expect.stringMatching(/\S/u),
       routed: ['/blog/recent', '/blog/ancien'],
+    });
+  });
+
+  describe('données structurées', () => {
+    const lastStructuredData = (): Record<string, unknown> | undefined =>
+      applySeoData.mock.calls.at(-1)?.[0].structuredData;
+
+    it('Given DashFlow and published posts about it When its structured data is applied Then the CreativeWork keeps its fields and is the subject of each post, newest first', async () => {
+      await renderProject('dashflow', () =>
+        of([
+          article('ancien', ['Angular', 'DashFlow'], '2026-07-21T12:00:00Z'),
+          article('sans-rapport', ['Angular'], '2026-09-20T12:00:00Z'),
+          article('recent', ['DashFlow'], '2026-09-14T12:00:00Z'),
+        ]),
+      );
+
+      expect(lastStructuredData()).toEqual({
+        '@context': 'https://schema.org',
+        '@type': 'CreativeWork',
+        name: 'DashFlow',
+        description: 'desc',
+        creator: {
+          '@type': 'Person',
+          name: 'Julien Nédellec',
+          url: 'https://nedellec-julien.fr',
+        },
+        keywords: '',
+        subjectOf: [
+          {
+            '@type': 'BlogPosting',
+            headline: 'Titre recent',
+            url: 'https://nedellec-julien.fr/blog/recent',
+          },
+          {
+            '@type': 'BlogPosting',
+            headline: 'Titre ancien',
+            url: 'https://nedellec-julien.fr/blog/ancien',
+          },
+        ],
+      });
+    });
+
+    it.each<{
+      readonly scenario: string;
+      readonly slug: string;
+      readonly posts$: ReturnType<BlogGateway['getPublishedPosts']>;
+      readonly subjectOf: readonly unknown[] | undefined;
+    }>([
+      {
+        scenario: 'DashFlow with one post about it',
+        slug: 'dashflow',
+        posts$: of([article('recent', ['DashFlow'], '2026-09-14T12:00:00Z')]),
+        subjectOf: [
+          {
+            '@type': 'BlogPosting',
+            headline: 'Titre recent',
+            url: 'https://nedellec-julien.fr/blog/recent',
+          },
+        ],
+      },
+      {
+        scenario: 'DashFlow and no post about it',
+        slug: 'dashflow',
+        posts$: of([article('sans-rapport', ['Angular'], '2026-09-20T12:00:00Z')]),
+        subjectOf: undefined,
+      },
+      {
+        scenario: 'a project that no blog tag designates',
+        slug: 'mon-site',
+        posts$: of([article('sur-dashflow', ['DashFlow'], '2026-09-14T12:00:00Z')]),
+        subjectOf: undefined,
+      },
+      {
+        scenario: 'DashFlow and an unreadable blog',
+        slug: 'dashflow',
+        posts$: throwError(() => new Error('down')),
+        subjectOf: undefined,
+      },
+    ])(
+      'Given $scenario When its structured data is applied Then the CreativeWork carries subjectOf only when posts are about the project',
+      async ({ slug, posts$, subjectOf }) => {
+        await renderProject(slug, () => posts$);
+        const structuredData = lastStructuredData();
+
+        expect({
+          type: structuredData?.['@type'],
+          hasSubjectOf: 'subjectOf' in (structuredData ?? {}),
+          subjectOf: structuredData?.['subjectOf'],
+        }).toEqual({ type: 'CreativeWork', hasSubjectOf: subjectOf !== undefined, subjectOf });
+      },
+    );
+
+    it('Given the same page moves from DashFlow to CandiDash When its structured data is applied again Then subjectOf follows the new project', async () => {
+      const fixture = await renderProject('dashflow', () =>
+        of([
+          article('sur-dashflow', ['DashFlow'], '2026-09-14T12:00:00Z'),
+          article('sur-candidash', ['CandiDash'], '2026-08-14T12:00:00Z'),
+        ]),
+      );
+
+      fixture.componentRef.setInput('slug', 'candidash');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect({
+        name: lastStructuredData()?.['name'],
+        subjectOf: lastStructuredData()?.['subjectOf'],
+      }).toEqual({
+        name: 'CandiDash',
+        subjectOf: [
+          {
+            '@type': 'BlogPosting',
+            headline: 'Titre sur-candidash',
+            url: 'https://nedellec-julien.fr/blog/sur-candidash',
+          },
+        ],
+      });
     });
   });
 });

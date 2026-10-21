@@ -182,6 +182,11 @@ export class ProjectDetail {
     const p = this.project();
     if (!p) return;
 
+    const subjectOf = this.articles().map((post) => ({
+      '@type': 'BlogPosting',
+      headline: post.title,
+      url: `${SITE_IDENTITY.siteUrl}/blog/${post.slug}`,
+    }));
     this._seo.applySeoData({
       title: `${p.title} | Julien Nédellec`,
       description: truncateAtWord(p.description, 155),
@@ -198,6 +203,7 @@ export class ProjectDetail {
         keywords: p.tags.join(', '),
         ...(p.liveUrl ? { url: p.liveUrl } : {}),
         ...(p.repoUrl ? { codeRepository: p.repoUrl } : {}),
+        ...(subjectOf.length > 0 ? { subjectOf } : {}),
       },
     });
   });

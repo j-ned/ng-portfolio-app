@@ -688,12 +688,72 @@ D4, `articles`, `trackCtaClick('project_article', …)`), fiche DESIGN.md « Art
 Note pour la Verify : le build de production (et donc l'image Docker) échoue tant que
 `project-articles-copy.ts` n'existe pas, `editorial-sources.ts` étant compilé avec l'application.
 
+### Tranche 5 — les liens figurent dans les données structurées
+
+Contrat lu dans D5 et D3 : `about[].name` est le **tag** de `PROJECT_TAGS` (la page article ne charge
+pas les projets, D3), `about` suit l'ordre des tags de l'article (celui de `linkedProjects`) ;
+`subjectOf` suit l'ordre de `articles()` (`publishedAt` décroissant) ; URL absolues
+`https://nedellec-julien.fr/projects/<slug>` et `…/blog/<slug>`. `isBasedOn` et les articles proches
+dans le JSON-LD sont écartés par D5, non testés. Les tests lisent le **dernier** appel de
+`Seo.applySeoData` (l'`effect` se rejoue quand la liste arrive).
+
+`src/app/features/blog/pages/blog-detail/blog-detail.spec.ts`, `describe('fiche du projet')`
+(1 `it.each` × 4, `showTagged`, `makeBlogPost`) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| `about` présent | tags `['DashFlow']` | `about` = `[{ '@type': 'CreativeWork', name: 'DashFlow', url: …/projects/dashflow }]` |
+| `about` à deux projets | tags `['Portfolio', 'Angular', 'DashFlow']` | `about` = Portfolio puis DashFlow, ordre des tags |
+| clé absente | tags `['Angular']` | `'about' in structuredData === false`, `@type` toujours `BlogPosting` |
+| clé absente, casse | tags `['Candidash']` | idem |
+
+`src/app/features/projects/pages/project-detail/project-detail.spec.ts`,
+`describe('ProjectDetail: articles sur ce projet') > describe('données structurées')` (6 tests) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| objet complet | `dashflow`, 2 articles DashFlow + 1 sans rapport | `toEqual` du `CreativeWork` entier : champs existants (`@context`, `name`, `description`, `creator`, `keywords`) inchangés, `subjectOf` = `Titre recent` puis `Titre ancien`, `BlogPosting` + URL `/blog/<slug>` |
+| présence / absence (`it.each` × 4) | 1 article DashFlow ; DashFlow sans article ; `mon-site` (sans tag) ; blog illisible (`throwError`) | `subjectOf` exact dans le 1er cas, **clé absente** dans les 3 autres |
+| changement de slug | instance réutilisée `dashflow` → `candidash` | dernier appel : `name` CandiDash, `subjectOf` = `sur-candidash` seul |
+
+Adaptation mécanique : `project-detail.spec.ts` — `renderProject` de « articles sur ce projet »
+reçoit `{ provide: Seo, useValue: { applySeoData } }` (`vi.fn<Seo['applySeoData']>()`, remis à zéro
+comme `trackCtaClick`) ; 1 site, aucune valeur attendue modifiée, les 7 tests de la tranche 4
+restent verts. `ProjectDetail` n'avait aucun test SEO : le test « objet complet » épingle les champs
+existants du `CreativeWork` ; ceux du `BlogPosting` restent couverts par les tests existants
+(`objectContaining`, `image`/`datePublished` omis), inchangés et verts.
+
+Sweep : seuls `blog-detail.spec.ts` et `project-detail.spec.ts` lisent le JSON-LD de ces pages
+(`harden-csp.spec.ts` ne traite que le script `ld+json` générique) ; aucune fixture ni constante
+touchée, aucun état seedé dont la sémantique change.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-21 20:07, 5 failed / 4085 total). Nature des échecs : `pnpm test` sur l'arbre réel (après
+`ng cache clean` et purge de `node_modules/.vite`, code de sortie 1), compilation et typecheck verts
+(aucun symbole nouveau, pas de squelette nécessaire), 5 échecs tous en `AssertionError` : les deux
+lignes de présence de `about`, l'objet complet, la ligne de présence de `subjectOf` et le changement
+de slug. Verts par nature (5) : les 2 lignes d'absence de `about`, les 3 d'absence de `subjectOf`.
+Harnais vérifié : implémentation jetable (`about` depuis `linked()`, `subjectOf` depuis `articles()`,
+clé posée seulement si la liste est non vide) : 4085 passed / 4085, code de sortie 0 ; mutant « clé
+toujours posée » : exactement les 5 tests d'absence tombent (5 failed / 4085). Implémentation retirée
+(`git checkout` des deux pages ; `git status` ne montre que les deux specs). Prettier et eslint verts
+sur les specs ; motif d'archéologie du profil sans résultat. Non-régression : 4085 = 4075 + 10.
+
+```
+ Test Files  2 failed | 218 passed (220)
+      Tests  5 failed | 4080 passed (4085)
+```
+
+Dû au GREEN : `about` dans `_applySeo` de `BlogDetail`, `subjectOf` dans `_applyProjectSeo` de
+`ProjectDetail` (lecture de `articles()` dans l'`effect`, pour qu'il se rejoue à l'arrivée de la liste).
+
 ## Journal des tranches
 
 - **Tranche 1 — les tags manquants tombent dans leur thème** : GREEN 3959 passed / 3959 total · refactor : aucun (ajout de données au catalogue).
 - **Tranche 2 — la page article propose jusqu'à trois articles proches dans le HTML rendu** : GREEN 4012 passed / 4012 total · refactor : cartes « article précédent / suivant » de `BlogDetail` passées sur `a[app-link-card]` (tests existants inchangés) ; `relatedPosts` sans type intermédiaire ni compteur mutable.
 - **Tranche 3 — un article renvoie vers la fiche de son projet** : GREEN 4035 passed / 4035 total · refactor : aucun (volet projet ajouté à la liste existante de `BlogFurtherReading`, même forme de sortie que `postFollowed`).
 - **Tranche 4 — la fiche projet liste les articles qui la concernent** : GREEN 4075 passed / 4075 total · refactor : aucun (`ProjectArticles` compose `SplitSection` et `LinkCard` existants ; la ligne de carte datée reste dupliquée avec `BlogFurtherReading`, deux sites aux sorties différentes).
+- **Tranche 5 — les liens figurent dans les données structurées** : GREEN 4085 passed / 4085 total · refactor : aucun (deux champs conditionnels ajoutés aux objets JSON-LD existants, même forme `...(cond ? {...} : {})` que `image` et `datePublished`).
 
 ## Verify
 
@@ -809,3 +869,38 @@ Non prouvé dans cette pile : l'affichage de l'article atteint par le clic. Le n
 publique (`api.nedellec-julien.fr`), qui refuse l'origine `127.0.0.1` (CORS, même limite qu'aux
 tranches 2 et 3) : la page article retombe sur `/blog`, sans lien avec le diff. Le corps exact du
 `cta_click` (`project_article`, libellé constant) est prouvé par `project-detail.spec.ts`.
+
+### Tranche 5 (2026-10-21)
+
+Surface atteignable modifiée : le JSON-LD servi par la page article (`about`) et par la fiche projet
+(`subjectOf`), émis par le rendu à la requête.
+
+Steps :
+
+1. `pnpm run build --configuration production` (code de sortie 0 ; `apply-csp-hashes` : 3 pages,
+   3 hachages de script), puis `docker build` de l'image (même Dockerfile que la production).
+2. `ci/a11y-stack.sh up <image>` : image devant la doublure `ci/api-stub`, fixtures du dépôt
+   inchangées.
+3. `curl` de `/blog/article-temoin` et `/projects/dashflow`, extraction du
+   `<script type="application/ld+json">` et de la CSP `<meta http-equiv>` ; ouverture de
+   `/projects/dashflow` dans un navigateur.
+
+Constats :
+
+- `/blog/article-temoin` (200) : `BlogPosting`, `about` =
+  `[{"@type":"CreativeWork","name":"DashFlow","url":"https://nedellec-julien.fr/projects/dashflow"}]`.
+- `/projects/dashflow` (200) : `CreativeWork` `DashFlow`, `subjectOf` =
+  `[{"@type":"BlogPosting","headline":"Article témoin A","url":"https://nedellec-julien.fr/blog/article-temoin"}]`.
+- CSP durcie, sur les deux pages : une seule `<meta http-equiv="Content-Security-Policy">`, sans
+  `'unsafe-inline'` ; chaque script inline exécutable (3 sans type, `ng-event-dispatch-contract`)
+  a son hachage dans `script-src` ; les deux blocs de données (`ld+json`, `ng-state`) restent servis
+  et n'entrent pas dans `script-src` (comportement épinglé par `harden-csp.spec.ts`).
+- Navigateur, `/projects/dashflow` : page hydratée (`ng-version` présent), le `ld+json` du DOM porte
+  le même `subjectOf` ; capture : fiche DashFlow, section « Articles sur ce projet » sous l'en-tête.
+- Console : aucun message « Content Security Policy ». Bruit d'environnement préexistant :
+  `GET /api/config` 404 (route absente de la doublure) et appels CORS refusés vers l'API publique.
+
+Verdict : **PASS** pour le JSON-LD servi et sa compatibilité avec la CSP hachée.
+
+Non prouvé : la lecture par un validateur de résultats enrichis (Rich Results Test, Search Console),
+qui exige une URL publique ; à faire après déploiement.
