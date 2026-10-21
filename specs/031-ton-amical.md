@@ -109,13 +109,13 @@ l'extension du verrou (§ Verrou). Une PR, deux tranches TDD.
 
 | Où | Avant | Après |
 |---|---|---|
-| `SITE_IDENTITY.journey` | Chaudronnier puis tourneur CN de haute précision dans l'aéronautique, mon métier aujourd'hui, je suis aussi développeur web full-stack depuis 2025. | Chaudronnier, puis tourneur CN de haute précision dans l'aéronautique (c'est toujours mon métier), je suis aussi développeur web full-stack, par passion, depuis 2025. |
+| `SITE_IDENTITY.journey` | Chaudronnier puis tourneur CN de haute précision dans l'aéronautique, mon métier aujourd'hui, je suis aussi développeur web full-stack depuis 2025. | Chaudronnier, puis tourneur CN dans l'aéronautique (toujours mon métier), je code aussi en full-stack, par passion, depuis 2025. |
 | `STATIC_HERO.lead` (après `journey`) | J'écris ici sur ce que je construis avec Angular, NestJS et PostgreSQL, et sur l'auto-hébergement : le code, les choix et leurs compromis. | Ici, je raconte ce que je construis avec Angular, NestJS et PostgreSQL, et comment je l'héberge chez moi : le code, les choix, et les erreurs en chemin. |
 | `FOOTER_COPY.tagline` | Tourneur CN le jour, développeur web le reste du temps. Angular, NestJS et auto-hébergement. | Tourneur CN le jour, développeur web le reste du temps. Angular, NestJS et auto-hébergement, pour le plaisir. |
-| `FOOTER_COPY.contactCta`, lien « Me contacter » de `about-motivation.ts` | Me contacter | M'écrire |
-| Description de `''` (route et `index.html`) | Tourneur CN dans l'aéronautique et développeur web full-stack Angular / NestJS. Articles techniques, projets en production et code auto-hébergé. | Tourneur CN dans l'aéronautique et développeur web par passion. Des articles sur Angular, NestJS et l'auto-hébergement, des projets qui tournent vraiment, et le code qui va avec. |
+| `FOOTER_COPY.contactCta`, lien « Me contacter » de `about-motivation.ts`, `ctaLabel` de `header.ts` | Me contacter | M'écrire |
+| Description de `''` (route et `index.html`) | Tourneur CN dans l'aéronautique et développeur web full-stack Angular / NestJS. Articles techniques, projets en production et code auto-hébergé. | Tourneur CN dans l'aéronautique et développeur web par passion : Angular, NestJS, auto-hébergement, et des projets qui tournent vraiment. |
 | `ABOUT_TITLE` | Développeur full-stack Angular / NestJS, parcours et CV \| Julien Nédellec | Parcours : de l'atelier au code \| Julien Nédellec |
-| Description de `about` | `${journey}` Stack et CV. | `${journey}` Ma stack, mon parcours et mon CV. |
+| Description de `about` | `${journey}` Stack et CV. | `${journey}` Ma stack et mon CV. |
 | `PROJECTS_TITLE` | Réalisations Angular et NestJS en production \| Julien Nédellec | Mes projets Angular et NestJS \| Julien Nédellec |
 | Description de `projects` | Applications Angular et NestJS en production, sites de démonstration et scripts : le besoin réglé et les choix techniques de chaque projet. | Les applications Angular et NestJS que j'utilise vraiment, des démos et quelques scripts : pour chacun, le problème de départ et les choix techniques. |
 | Description de `blog` | Retours d'expérience réels sur Angular, NestJS, PostgreSQL et le déploiement self-hosted. | Ce que j'apprends en construisant mes projets : Angular, NestJS, PostgreSQL et l'auto-hébergement, erreurs comprises. |
@@ -133,9 +133,15 @@ l'extension du verrou (§ Verrou). Une PR, deux tranches TDD.
 | Contact, 429 | Trop de tentatives en peu de temps. Patientez une minute avant de réessayer. | Trop d'essais en peu de temps. Attends une minute avant de réessayer. |
 | Contact, 5xx | Le serveur rencontre un souci temporaire. Réessayez dans quelques minutes. | Le serveur a un souci passager. Réessaie dans quelques minutes. |
 | Contact, autre erreur | Une erreur inattendue est survenue lors de l'envoi. Réessayez ou contactez-moi par email. | Quelque chose a coincé pendant l'envoi. Réessaie, ou écris-moi par e-mail. |
+| Contact, exception à l'envoi (toast de `contact-form.ts`) | Une erreur inattendue est survenue. Réessayez ou contactez-moi par email. | Quelque chose a coincé pendant l'envoi. Réessaie, ou écris-moi par e-mail. |
 | Contact, succès | Votre message a bien été envoyé. Je reviens vers vous rapidement. | Message bien reçu, merci ! Je te réponds dès que je peux. |
 | `PROJECT_ARTICLES_COPY.summary` | Les articles du blog qui en racontent la conception. | Les articles où je raconte comment je l'ai construit. |
 | Politique de confidentialité, mentions légales | vouvoiement | tutoiement, fond juridique inchangé (bases légales, durées, droits, CNIL) |
+
+Arbitrage du 2026-10-21 (remonté par `qa`) : la borne de 160 caractères des descriptions de route
+est conservée (règle SEO, extrait de recherche tronqué au-delà) ; `journey` et la description de
+l'accueil sont raccourcis en conséquence (about : 148, accueil : 137). Espaces insécables : U+202F
+avant `?` et `!`, U+00A0 avant `:` (`editorial-typography.spec.ts`).
 
 Textes inchangés car neutres : libellés de navigation et de filtres, natures de projet, « Lire le
 blog », « Voir les réalisations », « Pour aller plus loin », « Articles sur ce projet », fiche
@@ -163,3 +169,43 @@ technique de l'accueil, `HOME_TITLE`, `BLOG_TITLE`.
 
 Gates : `pnpm test` (lire `$?`), `pnpm lint`, build de production, audit a11y (noms accessibles
 toujours distincts).
+
+## Plan de test
+
+### Tranche 1 — les textes publics passent au tutoiement
+
+Tests alignés sur la table (adapter avant d'ajouter) :
+
+- `shared/identity/site-identity.static-data.spec.ts` : `SITE_IDENTITY.journey` égale la nouvelle phrase (128 caractères).
+- `features/home/infra/data/home.static-data.spec.ts` : `STATIC_HERO.lead` = `${journey} Ici, je raconte … chez moi\u00a0: le code, les choix, et les erreurs en chemin.`
+- `layout/components/footer/footer.spec.ts` : `tagline` (« …, pour le plaisir. »), `contactCta` « M'écrire », `trackCtaClick` reçoit `['footer_contact', "M'écrire"]`.
+- `layout/components/header/header.spec.ts` : le bouton d'appel s'intitule « M'écrire » et le clic est mesuré sous `('header_contact', "M'écrire")` ; `describe('public recruteur')` renommé `describe('lien CV')`, assertions inchangées.
+- `features/profile/pages/about/about.spec.ts` : ajout, la sortie `about-cta-contact` s'intitule « M'écrire ».
+- `app.routes.home.spec.ts` : description de `''` = `Tourneur CN dans l'aéronautique et développeur web par passion\u00a0: Angular, NestJS, auto-hébergement, et des projets qui tournent vraiment.` (137) ; ajout, `meta[name=description]` et `meta[property=og:description]` de `src/index.html` égalent ce texte.
+- `app.routes.about.spec.ts` : `ABOUT_TITLE` = `Parcours\u00a0: de l'atelier au code | Julien Nédellec` ; description = `${journey} Ma stack et mon CV.` (148).
+- `app.routes.projects.spec.ts` : `PROJECTS_TITLE` = `Mes projets Angular et NestJS | Julien Nédellec` ; nouvelle description (`\u00a0:`).
+- `app.routes.blog.spec.ts` : nouvelle description (`\u00a0:`).
+- `app.routes.legal.spec.ts` (neuf) : description de `confidentialite` finit par « et tes droits. »
+- `features/blog/pages/blog-list/blog-list.spec.ts` : introduction (`blog-intro`) et message d'erreur au nouveau texte.
+- `features/projects/pages/projects/projects.spec.ts`, `…/project-detail/project-detail.spec.ts` : le test d'erreur asserte aussi le message (`… Vérifie ta connexion, puis réessaie.`).
+- `pages/page-not-found.spec.ts` (neuf) : `[data-testid="not-found-message"]` = `Oups\u202f! La page que tu cherches … sections du site.`
+- `features/contact/infra/gateways/http-contact.gateway.spec.ts` : succès (`merci\u202f!`), `it.each` 400/429/5xx/418 et statut 0 au nouveau texte.
+- `features/contact/application/contact-form.spec.ts` : describe *Wording* (neuf) : section nommée « Écris-moi. » ; légende « Tes coordonnées » ; libellés distincts `['Ton nom (requis)', 'Email (requis)', 'Sujet (requis)', 'Message (requis)']` ; placeholders `['Ton nom', 'toi@exemple.fr', 'De quoi veux-tu parler\u202f?', 'Ta question, ta remarque, ou juste un bonjour…']` ; mention `contact-privacy-note`. Le test d'exception du gateway asserte le détail du toast : « Quelque chose a coincé pendant l'envoi. Réessaie, ou écris-moi par e-mail. »
+- `features/projects/application/project-articles-copy.spec.ts` (neuf) : golden `toEqual` de `PROJECT_ARTICLES_COPY`.
+- `shared/ui/load-error.spec.ts` : entrée de test au tutoiement, reste verte.
+
+Dû au GREEN, hors textes : `data-testid="not-found-message"` (404) et `data-testid="contact-privacy-note"` (mention du formulaire) ; U+202F avant `?` et `!`, U+00A0 avant `:`.
+
+Bornes de longueur tenues une fois la table appliquée : description de `''` 137 ≤ 160, de `about` 148 ≤ 160 et > `journey` (128).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le 2026-10-21 21:45, 36 failed / 4095 total), tous en `AssertionError` sur l'ancien texte, aucune erreur de harnais ; 17 fichiers en échec, tous touchés par cette tranche ; lint et format verts sur les fichiers modifiés.
+
+```
+Test Files  17 failed | 206 passed (223)
+     Tests  36 failed | 4059 passed (4095)
+EXIT=1
+```
+
+## Journal des tranches
+
+- **Tranche 1 — les textes publics passent au tutoiement** : GREEN 4095 passed / 4095 total · refactor : aucun
