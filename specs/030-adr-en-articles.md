@@ -404,3 +404,150 @@ tests restent verts (213 fichiers sur 215).
  Test Files  2 failed | 213 passed (215)
       Tests  7 failed | 3952 passed (3959)
 ```
+
+### Tranche 2 — la page article propose jusqu'à trois articles proches dans le HTML rendu
+
+Profil sans champ `Property-based` et `fast-check` absent des dépendances : pas de test par
+propriétés (doctrine `qa` : profil muet ⇒ n'en introduis pas) ; les invariants (exclusions, tri,
+limite, entrée non mutée) sont épinglés par l'exemple. `BlogFurtherReading` n'a pas de spec isolé :
+composant présentationnel couvert par `BlogDetail` (règle de frontière `qa`) ; `FURTHER_READING_COPY`
+est couvert par le `h2`, la mesure du clic et le verrou éditorial.
+
+Contrat posé par les tests, non nommé au plan : `data-testid="further-reading"` sur la `section`,
+`data-testid="related-post"` sur chaque `a[app-link-card]` d'article proche, clé
+`FURTHER_READING_COPY.heading` (« Pour aller plus loin ») et `FURTHER_READING_COPY.relatedPostCtaLabel`
+(libellé de mesure, chaîne non vide, valeur laissée au GREEN). Le contenu de `LinkCard` se lit par
+ses deux enfants dans l'ordre (sur-titre puis titre), sans `data-testid` interne.
+
+`src/app/features/blog/domain/related-posts.spec.ts` (18 tests, sans TestBed, `makeBlogPost`) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| limite | constante | `RELATED_POSTS_LIMIT` `toBe(3)` |
+| proposé (`it.each` × 3) | tag du catalogue partagé ; tag libre partagé ; thème seul partagé | `['candidat']` |
+| écarté (`it.each` × 5) | ni tag ni thème ; tags libres différents ; casse différente ; candidat sans tag ; courant sans tag | `[]` |
+| pas de soi-même | courant et voisin de mêmes tags | `['voisin']` |
+| brouillon | brouillon de mêmes tags, publié de thème commun | `['publie']` |
+| slug absent | slug inconnu | `[]` |
+| score d'abord | scores 4, 2, 1 aux dates inverses | ordre par score |
+| thème compté une fois | 3 tags Stack contre 1 tag Sécurité, plus récent | `['un-tag-securite', 'plusieurs-tags-stack']` |
+| poids égal tag / thème | tag libre seul contre thème seul, plus récent | `['theme', 'tag-libre']` |
+| départage par slug | même score, même date | `['a', 'b', 'c']` |
+| limite à 3 | 5 candidats | `['fort-2', 'fort-1', 'moyen']` (score puis date) |
+| entrée intacte | liste gelée (`Object.freeze`) | résultat trié, entrée inchangée, aucun `TypeError` |
+
+`src/app/shared/ui/link-card.spec.ts` (4 tests, hôtes de test, `provideRouter([])`) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| contenu | `routerLink` `/projects/dashflow`, sur-titre, titre | `<a>`, `href` conservé, enfants `['Fiche du projet', 'DashFlow']` |
+| aspect par défaut | sans `align` | classes de carte DESIGN.md sur l'hôte, pas de `text-right` |
+| `align="end"` | aligné à droite | classes de carte + `text-right` |
+| réactivité | entrées liées à des signaux, modifiées | nouveaux textes, `text-right` retiré |
+
+`src/app/features/blog/pages/blog-detail/blog-detail.spec.ts`, `describe('pour aller plus loin')`
+(7 tests ; le `setup` reçoit `trackCtaClick: vi.fn()` dans la doublure d'analytics, aucune valeur
+attendue existante modifiée) :
+
+| Test | Scénario | Assertion clé |
+|---|---|---|
+| absente | seul autre article sans rapport (aussi voisin chronologique) | `further-reading` `null`, `older-post` présent |
+| structure | un article proche | `SECTION`, `h2` « Pour aller plus loin », `aria-labelledby` = id du `h2`, hors `article`, après l'article et avant la `nav` « Autres articles » |
+| liens | 4 proches | 3 `href` `/blog/<slug>` par score puis date, titres, sur-titre portant jour et année de publication |
+| doublon permis | voisin précédent = proche | `older-post` et `related-post` vers `/blog/voisin` |
+| un seul appel | page chargée | `getPublishedPosts` appelé 1 fois |
+| changement de slug | instance réutilisée `courant` → `parcours` | proches recalculés, `getPublishedPosts` toujours 1 fois |
+| clic mesuré | 2 proches cliqués | `trackCtaClick('blog_related_post', FURTHER_READING_COPY.relatedPostCtaLabel)` × 2, libellé non vide, `navigateByUrl` vers `/blog/deux-tags` puis `/blog/un-tag` |
+
+Verrou éditorial : `src/app/testing/editorial-sources.ts` enregistre `FURTHER_READING_COPY`
+(lignes ajoutées aux tables de `editorial-identity.spec.ts` et `editorial-typography.spec.ts`).
+Les hôtes de `link-card.spec.ts` portent `eslint-disable-next-line
+@angular-eslint/template/elements-content` : la règle ne voit pas le texte rendu par le gabarit de
+`LinkCard` (voir le signalement au GREEN ci-dessous).
+
+Sweep : aucun test existant n'encode `relatedPosts`, `LinkCard`, `further-reading`, `related-post`
+ou `blog_related_post` ; le seul effet sur l'existant est la doublure d'analytics de `blog-detail.spec.ts`
+(méthode ajoutée). Aucun état seedé dont la sémantique change ; aucune constante recalibrée.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil
+le 2026-10-21 19:16, 22 failed / 4012 total). Nature des échecs : sur l'arbre réel, `pnpm test`
+(après `ng cache clean` et purge de `node_modules/.vite`) s'arrête à la compilation, uniquement sur
+des symboles applicatifs dus au GREEN : `TS2307` `./related-posts`, `./link-card`,
+`../../application/further-reading-copy` et `@features/blog/application/further-reading-copy` ;
+`NG1010` sur les deux hôtes de `link-card.spec.ts`, qui découle de `./link-card` absent. Aucune
+faute de type propre aux specs ; prettier et eslint verts sur les 4 fichiers touchés ; le motif
+d'archéologie ne trouve rien. Mesure du rouge comportemental : squelette jetable posé le temps d'une
+exécution puis retiré (`RELATED_POSTS_LIMIT = 0`, `relatedPosts` à `[]`, copies vides, `LinkCard`
+aux bonnes entrées et au gabarit vide, `BlogDetail` inchangé) : 22 failed / 4012 total, toutes en
+`AssertionError` (12 domaine, 4 `LinkCard`, 6 `BlogDetail`). Verts par nature sous le squelette
+(7) : les 5 cas « écarté », le slug absent, la section absente. Harnais vérifié : une implémentation
+jetable complète (domaine, carte, copie, section branchée dans `BlogDetail`) donne 4012 passed /
+4012, code de sortie 0 ; avec la même implémentation mais `BlogDetail` inchangé, 6 failed / 4012
+(les 6 tests de page). Tout a été retiré (`git checkout` de `blog-detail.ts`, fichiers créés
+supprimés ; `git status` ne montre que les specs). Non-régression : 4012 = 3959 + 53 tests ajoutés
+(18 domaine, 4 carte, 7 page, 24 lignes de verrou éditorial) ; aucun test des tranches antérieures
+ne tombe.
+
+```
+ Test Files  3 failed | 214 passed (217)
+      Tests  22 failed | 3990 passed (4012)
+```
+
+Dû au GREEN : `src/app/features/blog/domain/related-posts.ts` (`relatedPosts`,
+`RELATED_POSTS_LIMIT`), `src/app/shared/ui/link-card.ts` (`LinkCard`, `a[app-link-card]`, entrées
+`overline`, `heading`, `align`), `src/app/features/blog/application/further-reading-copy.ts`
+(`FURTHER_READING_COPY.heading`, `.relatedPostCtaLabel`), `blog-further-reading.ts`, branchement
+dans `blog-detail.ts`. Signalement : `@angular-eslint/template/elements-content` signalera chaque
+`<a app-link-card …></a>` des gabarits applicatifs (y compris le refactor précédent / suivant) ;
+choix à faire au GREEN entre la directive de désactivation en ligne (précédent :
+`admin-tags-selector.ts`) et l'option `allowList` de la règle dans `eslint.config.js`.
+
+## Journal des tranches
+
+- **Tranche 1 — les tags manquants tombent dans leur thème** : GREEN 3959 passed / 3959 total ·
+  refactor : aucun (ajout de données au catalogue).
+- **Tranche 2 — la page article propose jusqu'à trois articles proches dans le HTML rendu** :
+  GREEN 4012 passed / 4012 total · refactor : cartes « article précédent / suivant » de `BlogDetail`
+  passées sur `a[app-link-card]` (tests existants inchangés) ; `relatedPosts` sans type
+  intermédiaire ni compteur mutable.
+
+## Verify
+
+### Tranche 2 (2026-10-21)
+
+Surface atteignable restructurée : la navigation « article précédent / suivant » de la page article
+(passée sur `LinkCard`), plus la section « Pour aller plus loin ».
+
+Steps :
+
+1. `pnpm run build --configuration production` (code de sortie 0), puis `docker build` de l'image
+   (même Dockerfile que la production).
+2. Pile locale : image derrière la doublure `ci/api-stub`, fixtures copiées hors du dépôt avec un
+   second article publié `article-voisin` (tag `TypeScript`, même thème Stack que `article-temoin`,
+   tag `Angular`) ; fixtures du dépôt inchangées (leur évolution est prévue en tranche 4).
+3. `curl` de `/blog/article-temoin` et `/blog/article-voisin` (HTML servi par le rendu à la
+   requête), puis ouverture de `/blog/article-temoin` dans un navigateur.
+
+Constats :
+
+- HTML servi, `/blog/article-temoin` (200) : `section[data-testid="further-reading"]`
+  `aria-labelledby="further-reading-title"`, `h2#further-reading-title` « Pour aller plus loin »,
+  un `a[data-testid="related-post"]` `href="/blog/article-voisin"`, sur-titre « 3 sept. 2026 »,
+  titre « Article voisin » ; la section suit `</article>` et précède
+  `nav[aria-label="Autres articles"]`, dont `older-post` (`/blog/article-voisin`) porte les mêmes
+  classes de carte qu'avant le refactor. `article-brouillon` (brouillon) n'est pas proposé.
+- HTML servi, `/blog/article-voisin` : `newer-post` porte `sm:col-start-2 text-right` (identique à
+  l'avant-refactor), article proche `/blog/article-temoin`.
+- Navigateur : page hydratée (`ng-version` présent), rendu conforme (capture : carte « 3 sept. 2026 /
+  Article voisin » sous « Pour aller plus loin », carte « article précédent » dessous). Aucune requête
+  `/api/blog/**` émise par le navigateur au chargement : la liste vient de l'état de transfert.
+- Console : aucune erreur due au diff. Bruit d'environnement préexistant : `GET /api/config` 404
+  (route absente de la doublure) et avertissements giscus.
+
+Verdict : **PASS** pour le rendu serveur et l'hydratation de la page article.
+
+Non prouvé dans cette pile : la navigation interne au clic (vers un article proche comme vers
+l'article précédent). Le navigateur lit l'API publique (`api.nedellec-julien.fr`), qui refuse
+l'origine `127.0.0.1` (CORS) : la page retombe sur `/blog`, pour les deux types de carte, donc sans
+lien avec le diff. Le clic mesuré (`trackCtaClick('blog_related_post', …)`) et la navigation sont
+prouvés par `blog-detail.spec.ts`.

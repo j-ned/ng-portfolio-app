@@ -293,6 +293,17 @@ Aucun composant ne porte de shadow autre que les valeurs ci-dessous. Si un compo
 - **Shadow:** aucune au repos. Hover = changement de surface, pas d'ajout de shadow.
 - **Internal padding:** `p-6` (24px) standard, `p-8` (32px) pour cards principales du hero.
 
+### Carte de lien (`shared/ui/link-card.ts`)
+
+Un lien de navigation interne présenté en carte : « article précédent / suivant » et « Pour aller plus loin » sur la page article.
+
+- **API:** composant à sélecteur d'attribut `a[app-link-card]`, posé sur le lien de l'appelant ; entrées `overline` et `heading` (requises), `align` (`'start'` par défaut, `'end'` aligne le texte à droite). `routerLink`, `data-testid` et le placement dans la grille (`sm:col-start-2`) restent sur l'`<a>`.
+- **Apparence:** carte « Cards / Containers » portée par l'hôte (`rounded-xl border border-foreground/8 bg-surface p-6`), sans élément enveloppant ; sur-titre mono `text-xs text-muted`, puis titre `text-[1.1875rem] font-semibold tracking-tight`.
+- **Survol:** la bordure passe en `primary/35` et le titre en `primary` (`group-hover`) ; pas d'ombre.
+- **Focus:** anneau global `:focus-visible` de `styles.css` (2 px `primary`).
+- **Cible:** une seule par carte, toute la carte ; le nom du lien est le sur-titre suivi du titre.
+- **Don't:** pas de second interactif dans la carte ; pas de lien externe (la carte n'annonce pas de nouvel onglet).
+
 ### Cartouche (`shared/ui/cartouche.ts`)
 
 Le bloc-titre d'un plan technique, repris comme cadre de données.
@@ -389,6 +400,15 @@ Un article de la liste du blog, lu comme une étude de cas.
 - **Couverture:** `figure` à ratio `aspect-[1200/630]`, `rounded-md`, trait `line-strong`, `bg-surface`, image `NgOptimizedImage` en `fill` + `object-cover`, `alt=""` (décorative : le titre et le lien nomment l'article), qui laisse passer le clic (`pointer-events-none`). Pas de zoom au survol.
 - **Cible:** un seul interactif, le lien « Lire l'article » `text-primary` `min-h-11`, titre de l'article en `sr-only` pour un nom distinct par ligne, étiré sur toute la ligne (`after:absolute after:inset-0`). Pas de pastille ni de lien par tag.
 - **Survol:** le titre passe en `primary` (`group-hover`).
+
+### Pour aller plus loin (`features/blog/application/components/blog-further-reading.ts`)
+
+Jusqu'à trois articles proches de l'article lu, calculés par `relatedPosts` sur la liste publiée déjà chargée par la page (ADR-0029).
+
+- **Entrée:** `posts` (déjà triés et limités) ; sortie `postFollowed`, la page mesure le clic (`trackCtaClick('blog_related_post', …)`, libellé constant).
+- **Section:** `section` nommée par son `h2` « Pour aller plus loin », hors de l'`article`, sous la barre « J'aime / Flux RSS » et avant la navigation « Autres articles ». Aucun `nav` ajouté. Non rendue sans article proche (`@if` côté page). Jamais sous `@defer` : les liens sont dans le HTML servi.
+- **Liste:** `ul role="list"` en grille, une colonne en mobile, deux à partir de `sm` ; une carte de lien par article, sur-titre = date de publication (`d MMM y`, comme la ligne d'article), titre = titre de l'article.
+- **Doublons:** un article proche peut aussi être le voisin chronologique ; il apparaît alors dans les deux blocs.
 
 ### Corps d'article et blocs de code (`features/blog/application/components/blog-article-body.ts`, `infra/render-code-block.ts`)
 

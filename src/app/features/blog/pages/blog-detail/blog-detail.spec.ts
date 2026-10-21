@@ -17,6 +17,7 @@ import { AnalyticsGateway } from '@features/analytics/domain/gateways/analytics.
 import { Seo } from '@core/seo/seo';
 import type { BlogPost } from '../../domain/models/blog-post.model';
 import { makeBlogPost } from '../../testing/blog-post-builders';
+import { FURTHER_READING_COPY } from '../../application/further-reading-copy';
 
 class MockIntersectionObserver {
   static instances: MockIntersectionObserver[] = [];
@@ -67,7 +68,11 @@ function post(overrides: Partial<BlogPost> = {}): BlogPost {
 type Setup = {
   readonly fixture: ComponentFixture<BlogDetail>;
   readonly seoMock: { readonly applySeoData: Mock };
-  readonly analyticsMock: { readonly trackArticleView: Mock; readonly trackArticleRead: Mock };
+  readonly analyticsMock: {
+    readonly trackArticleView: Mock;
+    readonly trackArticleRead: Mock;
+    readonly trackCtaClick: Mock;
+  };
 };
 
 function setup(
@@ -79,7 +84,11 @@ function setup(
   extraProviders: Provider[] = [],
 ): Setup {
   const seoMock = { applySeoData: vi.fn() };
-  const analyticsMock = { trackArticleView: vi.fn(), trackArticleRead: vi.fn() };
+  const analyticsMock = {
+    trackArticleView: vi.fn(),
+    trackArticleRead: vi.fn(),
+    trackCtaClick: vi.fn(),
+  };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
@@ -518,6 +527,195 @@ describe('BlogDetail', () => {
         recreated: second !== null && second !== first,
         headings: [...(second?.querySelectorAll('h2') ?? [])].map((h) => h.textContent),
       }).toEqual({ firstShown: true, recreated: true, headings: ['Corps de B'] });
+    });
+  });
+
+  describe('pour aller plus loin', () => {
+    const current = makeBlogPost({
+      id: 'courant',
+      slug: 'courant',
+      title: 'Article courant',
+      tags: ['Angular', 'CSP'],
+      publishedAt: '2026-09-20T12:00:00Z',
+    });
+
+    const candidate = (slug: string, tags: readonly string[], publishedAt: string): BlogPost =>
+      makeBlogPost({ id: slug, slug, title: `Titre ${slug}`, tags, publishedAt });
+
+    const show = async (published: readonly BlogPost[]): Promise<Setup> => {
+      const result = setup({
+        getPostBySlug: () => of(current),
+        getPublishedPosts: () => of(published),
+      });
+      result.fixture.componentRef.setInput('slug', current.slug);
+      result.fixture.detectChanges();
+      await result.fixture.whenStable();
+      result.fixture.detectChanges();
+      return result;
+    };
+
+    const rootOf = (fixture: ComponentFixture<BlogDetail>): HTMLElement =>
+      fixture.nativeElement as HTMLElement;
+
+    const relatedLinks = (fixture: ComponentFixture<BlogDetail>): HTMLAnchorElement[] => [
+      ...rootOf(fixture).querySelectorAll<HTMLAnchorElement>('[data-testid="related-post"]'),
+    ];
+
+    it('Given no published post close to the article When the page renders Then no further reading section is rendered, while the chronological navigation stays', async () => {
+      const unrelated = candidate('sans-rapport', ['Reconversion'], '2026-09-01T12:00:00Z');
+      const { fixture } = await show([current, unrelated]);
+
+      expect({
+        section: rootOf(fixture).querySelector('[data-testid="further-reading"]'),
+        older: rootOf(fixture).querySelector('[data-testid="older-post"]')?.getAttribute('href'),
+      }).toEqual({ section: null, older: '/blog/sans-rapport' });
+    });
+
+    it('Given a close post When the page renders Then a section titled by a level-two heading sits after the article and before the chronological navigation', async () => {
+      const { fixture } = await show([
+        current,
+        candidate('proche', ['Angular'], '2026-09-01T12:00:00Z'),
+      ]);
+      const root = rootOf(fixture);
+      const section = root.querySelector<HTMLElement>('[data-testid="further-reading"]');
+      const heading = section?.querySelector('h2');
+      const article = root.querySelector('article');
+      const nav = root.querySelector('nav[aria-label="Autres articles"]');
+
+      expect({
+        tag: section?.tagName,
+        heading: heading?.textContent?.trim(),
+        labelledBy: section?.getAttribute('aria-labelledby'),
+        insideArticle: section?.closest('article') !== null,
+        afterArticle:
+          article && section
+            ? article.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
+            : 0,
+        beforeNav:
+          section && nav
+            ? section.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING
+            : 0,
+      }).toEqual({
+        tag: 'SECTION',
+        heading: 'Pour aller plus loin',
+        labelledBy: heading?.id || 'missing id',
+        insideArticle: false,
+        afterArticle: Node.DOCUMENT_POSITION_FOLLOWING,
+        beforeNav: Node.DOCUMENT_POSITION_FOLLOWING,
+      });
+    });
+
+    it('Given four close posts When the page renders Then the three closest link to their article, best first, titled and dated', async () => {
+      const { fixture } = await show([
+        current,
+        candidate('theme-seul', ['TypeScript'], '2026-09-14T12:00:00Z'),
+        candidate('deux-tags', ['Angular', 'CSP'], '2026-08-03T12:00:00Z'),
+        candidate('un-tag', ['Angular'], '2026-07-21T12:00:00Z'),
+        candidate('autre-theme-seul', ['XSS'], '2026-06-05T12:00:00Z'),
+      ]);
+      const links = relatedLinks(fixture);
+
+      expect({
+        hrefs: links.map((link) => link.getAttribute('href')),
+        headings: links.map((link) => link.lastElementChild?.textContent?.trim()),
+        overlines: links.map((link) => link.firstElementChild?.textContent ?? ''),
+      }).toEqual({
+        hrefs: ['/blog/deux-tags', '/blog/un-tag', '/blog/theme-seul'],
+        headings: ['Titre deux-tags', 'Titre un-tag', 'Titre theme-seul'],
+        overlines: [
+          expect.stringMatching(/\b3\b.*2026/su),
+          expect.stringMatching(/\b21\b.*2026/su),
+          expect.stringMatching(/\b14\b.*2026/su),
+        ],
+      });
+    });
+
+    it('Given the older neighbour is also the closest post When the page renders Then it is offered both by the chronological navigation and by the further reading', async () => {
+      const { fixture } = await show([
+        current,
+        candidate('voisin', ['Angular'], '2026-09-01T12:00:00Z'),
+      ]);
+
+      expect({
+        older: rootOf(fixture).querySelector('[data-testid="older-post"]')?.getAttribute('href'),
+        related: relatedLinks(fixture).map((link) => link.getAttribute('href')),
+      }).toEqual({ older: '/blog/voisin', related: ['/blog/voisin'] });
+    });
+
+    it('Given the further reading is rendered When the page has loaded Then the published list was read once, with no extra API call', async () => {
+      const published = [current, candidate('proche', ['Angular'], '2026-09-01T12:00:00Z')];
+      const getPublishedPosts = vi.fn(() => of(published));
+      const { fixture } = setup({ getPostBySlug: () => of(current), getPublishedPosts });
+      fixture.componentRef.setInput('slug', current.slug);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect({
+        related: relatedLinks(fixture).length,
+        calls: getPublishedPosts.mock.calls.length,
+      }).toEqual({ related: 1, calls: 1 });
+    });
+
+    it('Given the same page moves to another article When it renders again Then the further reading follows the new article without reloading the list', async () => {
+      const angular = candidate('angular', ['Angular'], '2026-09-01T12:00:00Z');
+      const parcours = candidate('parcours', ['Reconversion', 'Carrière'], '2026-08-01T12:00:00Z');
+      const reconversion = candidate('reconversion', ['Reconversion'], '2026-07-01T12:00:00Z');
+      const published = [current, angular, parcours, reconversion];
+      const articles = new Map(published.map((p) => [p.slug, p]));
+      const getPublishedPosts = vi.fn(() => of(published));
+      const { fixture } = setup({
+        getPostBySlug: (slug) => of(articles.get(slug) ?? current),
+        getPublishedPosts,
+      });
+
+      fixture.componentRef.setInput('slug', 'courant');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const before = relatedLinks(fixture).map((link) => link.getAttribute('href'));
+
+      fixture.componentRef.setInput('slug', 'parcours');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect({
+        before,
+        after: relatedLinks(fixture).map((link) => link.getAttribute('href')),
+        calls: getPublishedPosts.mock.calls.length,
+      }).toEqual({
+        before: ['/blog/angular'],
+        after: ['/blog/reconversion'],
+        calls: 1,
+      });
+    });
+
+    it('Given two close posts When the reader follows each of them Then each click is measured as a related post with the same constant label, and the router goes to the post', async () => {
+      const { fixture, analyticsMock } = await show([
+        current,
+        candidate('deux-tags', ['Angular', 'CSP'], '2026-09-01T12:00:00Z'),
+        candidate('un-tag', ['Angular'], '2026-08-01T12:00:00Z'),
+      ]);
+      const navigateByUrl = vi
+        .spyOn(TestBed.inject(Router), 'navigateByUrl')
+        .mockResolvedValue(true);
+
+      for (const link of relatedLinks(fixture)) link.click();
+      await fixture.whenStable();
+
+      expect({
+        tracked: analyticsMock.trackCtaClick.mock.calls,
+        label: FURTHER_READING_COPY.relatedPostCtaLabel,
+        routed: navigateByUrl.mock.calls.map(([url]) => String(url)),
+      }).toEqual({
+        tracked: [
+          ['blog_related_post', FURTHER_READING_COPY.relatedPostCtaLabel],
+          ['blog_related_post', FURTHER_READING_COPY.relatedPostCtaLabel],
+        ],
+        label: expect.stringMatching(/\S/u),
+        routed: ['/blog/deux-tags', '/blog/un-tag'],
+      });
     });
   });
 });
