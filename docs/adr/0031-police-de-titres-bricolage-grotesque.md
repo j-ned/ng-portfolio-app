@@ -2,7 +2,7 @@
 
 - **Statut** : proposé (2026-10-21, plan technique de la spec 033) ; accepté au merge de la PR 5 de la spec
 - **Date** : 2026-10-21
-- **Contexte spec** : `specs/033-nouveau-visuel.md` (arbitrage 4, exigences 7 et 11)
+- **Contexte spec** : `specs/033-nouveau-visuel.md` (arbitrage 4, exigences 8 et 12)
 - **Amende** : ADR-0006 (Archivo remplacée par Bricolage Grotesque ; JN Sans et JN Mono, la procédure,
   l'auto-hébergement, le nom versionné et le préchargement de la seule police du `h1` restent en vigueur)
 
@@ -10,9 +10,9 @@
 
 La direction C « Copeaux vifs » remplace Archivo (titres élargis, voix « plan d'atelier ») par
 **Bricolage Grotesque**, une grotesque à œil optique, plus ronde et plus ludique. JN Sans et JN Mono
-restent. L'exigence 7 impose : trois familles au plus, auto-hébergées, sous-ensemble latin, axes réduits
+restent. L'exigence 8 impose : trois familles au plus, auto-hébergées, sous-ensemble latin, axes réduits
 aux valeurs employées (largeur et œil optique fixés), nom versionné, repli métriquement ajusté, seule la
-police du `h1` préchargée, CSP inchangée. L'exigence 11 : poids préchargé égal ou inférieur à
+police du `h1` préchargée, CSP inchangée. L'exigence 12 : poids préchargé égal ou inférieur à
 aujourd'hui (Archivo : **39 512 octets**).
 
 Faits vérifiés le 2026-10-21 :
@@ -95,7 +95,7 @@ Faits vérifiés le 2026-10-21 :
 ## Alternatives considered
 
 - **Plage d'œil optique 24–96 avec `font-optical-sizing: auto`** : le dessin suivrait chaque taille,
-  mais 65 936 octets (+ 67 % sur Archivo) violent le budget de l'exigence 11. Écarté.
+  mais 65 936 octets (+ 67 % sur Archivo) violent le budget de l'exigence 12. Écarté.
 - **`opsz` 96** (défaut de la police, dessin le plus expressif) : même poids ; espacement 6 % plus
   serré, fragile pour les titres de 20 px et les autocollants. Écarté au profit de 48 (question de goût
   laissée au propriétaire dans la spec).

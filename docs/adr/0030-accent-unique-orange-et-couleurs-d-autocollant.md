@@ -2,7 +2,7 @@
 
 - **Statut** : proposé (2026-10-21, plan technique de la spec 033) ; accepté au merge de la PR 4 de la spec
 - **Date** : 2026-10-21
-- **Contexte spec** : `specs/033-nouveau-visuel.md` (direction C « Copeaux vifs », exigences 3, 4, 5, 9)
+- **Contexte spec** : `specs/033-nouveau-visuel.md` (direction C « Copeaux vifs », exigences 3, 4, 5, 10)
 - **Remplace** : la « One Indigo Rule » et la « Indigo Accent Rule » de `DESIGN.md` (règles nommées, pas un ADR)
 - **Préserve** : ADR-0003 (`@utility`), ADR-0012 (source de vérité du thème), ADR-0017 (bouton en directive), ADR-0025 (audit axe)
 

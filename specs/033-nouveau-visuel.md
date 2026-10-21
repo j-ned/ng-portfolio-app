@@ -40,7 +40,7 @@ plus l'option « garder l'actuel, adouci ». Julien a d'abord retenu A, puis a c
    bornée (exigence 4).
 4. **Typographie** : **Bricolage Grotesque** pour les titres, à la place d'Archivo ; **JN Sans** et
    **JN Mono** conservées pour le texte et les données (arbitrage complémentaire du 2026-10-21,
-   exigence 7).
+   exigence 8).
 5. **Thème au premier chargement : suivre le système** (préférence `prefers-color-scheme`), comme
    aujourd'hui (script d'`index.html`, `ThemeStore`, ADR-0012). Les deux thèmes restent égaux
    (Two Registers Rule conservée).
@@ -109,43 +109,47 @@ Contrastes calculés (WCAG 2.x, OKLCH converti en sRGB, gamut borné, mélanges 
    sans nouvelle couleur en dur dans les composants. Un token `--color-on-primary` remplace les
    `text-white` posés sur `bg-primary-bg` (5 occurrences aujourd'hui, dont `blog-tag-palette.ts`) :
    sur l'orange, le texte est sombre.
-4. **Couleurs d'autocollant** (sauge, lavande, et au plus une troisième) : tokens dédiés, réservés aux
+4. **Couleurs d'autocollant** : **deux seulement**, sauge et lavande ; tokens dédiés, réservés aux
    autocollants et pastilles de catégorie. Elles ne portent jamais seules une information (le texte
    de la pastille la porte) et ne servent ni aux liens, ni aux boutons, ni aux états.
 5. **Coloration syntaxique** des blocs de code re-dérivée de la nouvelle palette (six teintes,
    exception bornée maintenue), chaque teinte ≥ 4,5:1 sur le fond de bloc dans les deux thèmes.
 6. **Identité hors CSS** : `favicon.svg` (aujourd'hui un dégradé bleu/violet, contraire à la règle
    « pas de gradient décoratif »), `<meta name="theme-color">` (`#000000` en dur, à décliner clair et
-   sombre avec `media`), images Open Graph si elles portent l'ancienne palette, sprite d'icônes si
-   des couleurs y sont figées.
-7. **Typographie** : Bricolage Grotesque (variable, licence OFL) pour les titres à la place
-   d'Archivo ; JN Sans et JN Mono conservées sans changement pour le texte et les données. Les axes
-   de Bricolage (`opsz`, `wdth`, `wght`) sont réduits aux valeurs employées, la largeur et l'œil
-   optique fixés au plan technique. Toujours **trois familles au plus**, **auto-hébergées** (`public/fonts/`, ADR-0006) : sous-ensemble latin,
-   axes réduits aux valeurs employées, nom de fichier versionné (cache `immutable`), face de repli
+   sombre avec `media`), sprite d'icônes si des couleurs y sont figées.
+7. **Image Open Graph redessinée** : aujourd'hui `og:image` (défaut d'`index.html`, et `core/seo/seo.ts`
+   quand une page n'en fournit pas) pointe sur `avatar.png`, la photo de profil. Une carte de partage
+   1200 × 630 dans la nouvelle direction la remplace par défaut (nom, accroche, palette Sable ou
+   Nuit, un autocollant au plus), image statique versionnée (ADR-0007) avec son `og:image:alt`.
+   Les pages qui fournissent leur propre visuel (articles, fiches projet) le gardent.
+8. **Typographie** : Bricolage Grotesque (variable, licence OFL) pour les titres à la place
+   d'Archivo ; JN Sans et JN Mono conservées sans changement pour le texte et les données. La
+   largeur et l'œil optique de Bricolage sont fixés au plan technique. Toujours **trois familles au
+   plus**, **auto-hébergées** (`public/fonts/`, ADR-0006) : sous-ensemble latin, axes (`opsz`,
+   `wdth`, `wght`) réduits aux valeurs employées, nom de fichier versionné (cache `immutable`), face de repli
    métriquement ajustée pour ne pas décaler la mise en page, seule la police du `<h1>` (élément LCP)
    préchargée, CSP `font-src 'self'` inchangée. Une police modifiée ne garde pas un nom réservé de sa
    licence (cas de « Plex », ADR-0006).
-8. **Tailwind v4 CSS-first** : tokens dans `@theme`, `@utility` seulement selon ADR-0003, boutons par
+9. **Tailwind v4 CSS-first** : tokens dans `@theme`, `@utility` seulement selon ADR-0003, boutons par
    la directive `appButton` (ADR-0017, variante pilule), autocollant en composant `shared/ui/`
    (structure réutilisée), aucune classe CSS ad hoc ni `@apply` hors `@utility`, aucun fichier de
    style de composant.
-9. **Accessibilité** : WCAG 2.2 AA strict dans **les deux thèmes**, contrastes calculés et inscrits
+10. **Accessibilité** : WCAG 2.2 AA strict dans **les deux thèmes**, contrastes calculés et inscrits
    dans `DESIGN.md` ; job CI `a11y` (axe, ADR-0025) à **zéro violation** ; focus visible ≥ 3:1 sur
    fond et surface, qui suit le rayon de l'élément ; aucune information portée par la seule
    couleur ; rendu correct en `forced-colors` (un autocollant garde un contour) ; cibles tactiles
    ≥ 44 × 44 px malgré les pilules.
-10. **Mouvement** : aucune animation nouvelle obligatoire ; toute animation décorative ≤ 400 ms,
+11. **Mouvement** : aucune animation nouvelle obligatoire ; toute animation décorative ≤ 400 ms,
     désactivée sous `prefers-reduced-motion: reduce`. L'inclinaison d'un autocollant est statique.
-11. **Performance** : pas de régression Lighthouse (> 95 partout, mesuré avant/après sur l'accueil,
+12. **Performance** : pas de régression Lighthouse (> 95 partout, mesuré avant/après sur l'accueil,
     la liste du blog, un article, les réalisations, une fiche et le parcours), **CLS inchangé**
     (0 sur les pages mesurées), poids des polices préchargées égal ou inférieur à aujourd'hui, aucune
     image décorative ajoutée.
-12. **Anti-références de `PRODUCT.md`** tenues : la direction ludique ne doit pas glisser vers le
+13. **Anti-références de `PRODUCT.md`** tenues : la direction ludique ne doit pas glisser vers le
     template portfolio générique (hero centré « Hi, I'm », barres de compétences, nuage de logos de
     technologies en autocollants), ni vers l'over-design (curseur custom, scroll-jacking, intro
     animée, autocollants partout) ; glassmorphism toujours exclu.
-13. **Admin** : suit les tokens (il les partage), sans refonte de ses gabarits ; il doit rester
+14. **Admin** : suit les tokens (il les partage), sans refonte de ses gabarits ; il doit rester
     lisible et conforme AA dans les deux thèmes.
 
 ### Constat (2026-10-21, `master` `5af4b88`)
@@ -179,7 +183,7 @@ deux touchent les mêmes gabarits publics, et la PR 1 de la spec 031 réécrit `
 | 1 | front | cette spec | — |
 | 2 | front | plan technique (`architect`) : tokens, sous-ensemble de Bricolage Grotesque, fichiers touchés, ADR (accent unique orange et couleurs d'autocollant, police de titres) | 1 |
 | 3 | front | `DESIGN.md` et `PRODUCT.md` (principe 3) réécrits | 2, spec 031 PR 1 mergée |
-| 4 | front | tokens des deux thèmes, `on-primary`, couleurs d'autocollant, coloration syntaxique, `favicon.svg`, `theme-color` | 3, spec 031 PR 2 mergée |
+| 4 | front | tokens des deux thèmes, `on-primary`, couleurs d'autocollant, coloration syntaxique, `favicon.svg`, `theme-color`, image Open Graph par défaut | 3, spec 031 PR 2 mergée |
 | 5 | front | Bricolage Grotesque auto-hébergée (fichier, `@font-face`, repli ajusté, preload), Archivo retirée | 4 |
 | 6 | front | formes et composants signature (boutons pilule, cartes, autocollant, cartouche, cote) et ajustements de gabarits publics | 5 |
 
@@ -199,11 +203,13 @@ Chaque PR passe les gates du Dockerfile, le job `a11y` et une mesure Lighthouse 
 2. **Fantaisie** : un autocollant décoratif par écran, confirmé pour la direction C.
 3. **Nom dans l'en-tête** : « Julien Nédellec » reste (marque de `PRODUCT.md`) ; la forme courte
    « julien. » de la maquette est écartée.
+4. **Autocollants** : deux couleurs, sauge et lavande, pas de troisième.
+5. **Image Open Graph** : redessinée dans la nouvelle direction (exigence 7).
 
 ### Questions ouvertes
 
-1. **Couleurs d'autocollant** : sauge et lavande suffisent-elles, ou une troisième (jaune, rose) ?
-2. **Image Open Graph** : à redessiner dans la nouvelle palette, ou à garder telle quelle ?
+Aucune : toutes tranchées le 2026-10-21. Les choix de goût issus du plan technique sont listés à la
+fin de celui-ci (« Décisions à arbitrer par le propriétaire »).
 
 ## Plan technique
 
@@ -377,7 +383,7 @@ export type StickerTilt = 'none' | 'left' | 'right';
 - **Accessibilité** : ni rôle, ni `tabindex`, ni `aria-*` : le texte est lu tel quel. Jamais un lien, un
   bouton, un titre, ni un parent d'interactif (règle `DESIGN.md`). En `forced-colors`, le fond est
   neutralisé par le navigateur ; le bord transparent devient `CanvasText` : la pastille garde son contour
-  (exigence 9).
+  (exigence 10).
 - Usage : au plus **un autocollant décoratif par écran**, 4 mots au plus. Placement initial unique, la
   page d'accueil (PR 6b) ; son libellé est une constante `HOME_HERO_STICKER_LABEL` de
   `features/home/domain/home-hero.static-data.ts` (précédent : `HOME_HERO_CTA_LABELS`), ton et
@@ -396,7 +402,7 @@ export type StickerTilt = 'none' | 'left' | 'right';
 (`dashed`), apparence `rounded-part border-2 border-foreground bg-surface px-2.5 py-1 text-xs
 font-semibold text-foreground` : forme d'autocollant (aplat, trait épais), rayon de pièce technique
 (8 px), plus de mono majuscule. **Neutre** : sur la grille des réalisations il y en a un par carte, une
-couleur d'autocollant y ferait « des autocollants partout » (exigence 12). Contraste 16,47 / 13,43.
+couleur d'autocollant y ferait « des autocollants partout » (exigence 13). Contraste 16,47 / 13,43.
 
 **Cartouche** `shared/ui/cartouche.ts` : cadre et barre de titre `border-2 border-foreground`, rayon
 `rounded-part` (`overflow-hidden` pour que les séparateurs suivent le coin), séparateurs internes
