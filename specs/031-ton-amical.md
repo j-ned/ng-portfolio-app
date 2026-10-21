@@ -206,6 +206,52 @@ Test Files  17 failed | 206 passed (223)
 EXIT=1
 ```
 
+### Tranche 2 — le vouvoiement ne revient plus
+
+Mécanisme : lecture disque dans le test (`readdirSync('src/app', { recursive: true })` +
+`readFileSync`), comme `src/index.html` déjà lu par ce spec ; le builder `@angular/build:unit-test`
+bundle par esbuild, sans `import.meta.glob`. Portée par motif, donc ouverte aux futurs fichiers :
+`pages/`, `layout/`, `shared/`, `features/*` sauf `admin` et `auth`, fichiers `.ts` et `.html`,
+hors `*.spec.ts` et dossiers `testing/` (174 fichiers lus). `core/` hors portée : son seul texte
+vouvoyé (`error-toast.ts`, « veuillez ») n'est atteint que par les requêtes de l'admin, les
+gateways publics passant `silentErrors`.
+
+Motif : `vous`, `votre`, `vos`, `vôtre(s)` et les impératifs `réessayez`, `vérifiez`,
+`patientez`, `retournez`, `écrivez`, `contactez`, `explorez`, plus `sélectionnez` (trouvé dans
+`code-copy.ts`), insensible à la casse, bornes de mot Unicode, `rendez-vous` exclu.
+
+Tests (`src/app/editorial-identity.spec.ts`, describe *the public site never says « vous »*) :
+
+- `in %s` × `EDITORIAL_SOURCES` + `src/index.html` : liste `<chemin> line N: « mot »` égale `[]`.
+- `in %s` × gabarits publics (174) : liste `line N: « mot »` égale `[]`, le fichier dans le nom du test.
+- `reads the template of %s` (10) : pages légales, 404, formulaire et gateway de contact, liste du
+  blog, réalisations, fiche projet, pied de page, `load-error` figurent dans la liste lue.
+- `leaves %s out` (4) : aucun chemin admin, auth, `.spec.ts` ni `testing/` lu.
+- `flags %s` (4) / `does not flag %s` (4) : discriminance du motif (majuscule initiale, `Écrivez`,
+  plusieurs mots et numéro de ligne ; `chez`, `assez`, `Vosges`, `voûte`, `rendez-vous`, tutoiement).
+
+Occurrences trouvées (dû au GREEN) :
+
+- `src/app/pages/privacy-policy.ts` : lignes 27 votre, 28 vous, 63 vous ×2, 64 votre, 86 votre ×2,
+  87 vous, 93 Vos, 95 Vous, 96 vous et écrivez, 98 Vous.
+- `src/app/features/blog/application/components/code-copy.ts` : ligne 5 sélectionnez
+  (« Copie impossible : sélectionnez le code. »).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le 2026-10-21 21:49, 2 failed / 4308 total), tous deux en `AssertionError` du nouveau verrou, aucune erreur de harnais ; les 4095 tests de la tranche 1 et antérieurs restent verts ; typecheck, lint et format verts.
+
+```
+FAIL  editorial-identity.spec.ts > the public site never says « vous » > in src/app/features/blog/application/components/code-copy.ts
+AssertionError: expected [ 'line 5: « sélectionnez »' ] to deeply equal []
+FAIL  editorial-identity.spec.ts > the public site never says « vous » > in src/app/pages/privacy-policy.ts
+AssertionError: expected [ 'line 27: « votre »', …(12) ] to deeply equal []
+ Test Files  1 failed | 222 passed (223)
+      Tests  2 failed | 4306 passed (4308)
+EXIT=1
+```
+
+Valeurs attendues alignées sur le tutoiement (`code-copy.spec.ts` : « sélectionne le code », `legal-pages.spec.ts` : `h2` « Tes droits ») : RED d'assertion confirmé via la commande test du profil le 2026-10-21 21:53, 6 failed / 4308 total (verrou 2, `code-copy.spec.ts` 3, `legal-pages.spec.ts` 1), tous en `AssertionError`.
+
 ## Journal des tranches
 
 - **Tranche 1 — les textes publics passent au tutoiement** : GREEN 4095 passed / 4095 total · refactor : aucun
+- **Tranche 2 — le vouvoiement ne revient plus** : GREEN 4308 passed / 4308 total · refactor : aucun

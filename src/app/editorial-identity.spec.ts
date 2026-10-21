@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { HOME_WORK_FRAME } from '@features/home/domain/home-hero.static-data';
 import { STATIC_HERO } from '@features/home/infra/data/home.static-data';
 import { FORBIDDEN_WORDINGS } from '@shared/identity/forbidden-wordings';
@@ -52,6 +52,30 @@ const FORBIDDEN_IDENTITIES: readonly (readonly [string, RegExp])[] = [
 
 const EVENING_AND_WEEKEND = /le soir et le week-end/iu;
 
+const FORMAL_ADDRESS =
+  /(?<![\p{L}\p{N}_])(?<!rendez-)(?:vous|votre|vos|vôtres?|réessayez|vérifiez|patientez|retournez|écrivez|contactez|explorez|sélectionnez)(?![\p{L}\p{N}_])/giu;
+
+const formalAddressIn = (text: string): readonly string[] =>
+  text
+    .split('\n')
+    .flatMap((line, index) =>
+      [...line.matchAll(FORMAL_ADDRESS)].map(([word]) => `line ${index + 1}: « ${word} »`),
+    );
+
+// Admin and auth address their only user, the owner, who keeps the formal "vous".
+const PUBLIC_ROOT = /^(?:pages|layout|shared|features\/(?!admin\/|auth\/)[^/]+)\//u;
+const TEMPLATE_FILE = /(?<!\.spec)\.(?:ts|html)$/u;
+const TEST_DATA = /(?:^|\/)testing\//u;
+
+const PUBLIC_TEMPLATES: readonly (readonly [string, string])[] = readdirSync('src/app', {
+  recursive: true,
+  encoding: 'utf8',
+})
+  .map((path) => path.replaceAll('\\', '/'))
+  .filter((path) => PUBLIC_ROOT.test(path) && TEMPLATE_FILE.test(path) && !TEST_DATA.test(path))
+  .sort()
+  .map((path) => [`src/app/${path}`, readFileSync(`src/app/${path}`, 'utf8')] as const);
+
 describe('one identity across the site', () => {
   it.each([
     ['the home lead', (): string => STATIC_HERO.lead],
@@ -98,5 +122,65 @@ describe('one identity across the site', () => {
     ['the footer tagline', (): string => FOOTER_COPY.tagline],
   ])('%s no longer sells an evening and weekend availability', (_place, textOf) => {
     expect(textOf()).not.toMatch(EVENING_AND_WEEKEND);
+  });
+});
+
+describe('the public site never says « vous »', () => {
+  it.each(IDENTITY_SOURCES)('in %s', (name, source) => {
+    expect(
+      editorialTexts(source, name).flatMap(({ path, text }) =>
+        formalAddressIn(text).map((found) => `${path} ${found}`),
+      ),
+    ).toEqual([]);
+  });
+
+  it.each(PUBLIC_TEMPLATES)('in %s', (_file, text) => {
+    expect(formalAddressIn(text)).toEqual([]);
+  });
+
+  it.each([
+    'src/app/pages/legal-notice.ts',
+    'src/app/pages/privacy-policy.ts',
+    'src/app/pages/page-not-found.ts',
+    'src/app/features/contact/application/contact-form.ts',
+    'src/app/features/contact/infra/gateways/http-contact.gateway.ts',
+    'src/app/features/blog/pages/blog-list/blog-list.ts',
+    'src/app/features/projects/pages/projects/projects.ts',
+    'src/app/features/projects/pages/project-detail/project-detail.ts',
+    'src/app/layout/components/footer/footer.ts',
+    'src/app/shared/ui/load-error.ts',
+  ])('reads the template of %s', (file) => {
+    expect(PUBLIC_TEMPLATES.map(([path]) => path)).toContain(file);
+  });
+
+  it.each([
+    ['the admin', 'src/app/features/admin/'],
+    ['the authentication', 'src/app/features/auth/'],
+    ['the tests', '.spec.ts'],
+    ['the test data', '/testing/'],
+  ])('leaves %s out', (_label, part) => {
+    expect(PUBLIC_TEMPLATES.filter(([path]) => path.includes(part))).toEqual([]);
+  });
+
+  it.each([
+    ['a pronoun', 'La page que vous cherchez', ['line 1: « vous »']],
+    ['a possessive at the start of a sentence', 'Vos droits', ['line 1: « Vos »']],
+    ['a capitalised imperative', 'Écrivez-moi.', ['line 1: « Écrivez »']],
+    [
+      'several words on the second line',
+      'Erreur.\nVérifiez votre connexion, puis réessayez.',
+      ['line 2: « Vérifiez »', 'line 2: « votre »', 'line 2: « réessayez »'],
+    ],
+  ])('flags %s', (_label, text, found) => {
+    expect(formalAddressIn(text)).toEqual(found);
+  });
+
+  it.each([
+    ['« chez » and « assez »', 'Hébergé chez moi, assez simple.'],
+    ['a word that only starts with the letters', 'Les Vosges, une voûte, un vote.'],
+    ['an appointment', 'Prendre rendez-vous.'],
+    ['the informal address', 'Vérifie ta connexion, puis réessaie.'],
+  ])('does not flag %s', (_label, text) => {
+    expect(formalAddressIn(text)).toEqual([]);
   });
 });
