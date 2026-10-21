@@ -363,3 +363,44 @@ Le rattachement à un projet passe **uniquement** par le tag (ADR-0029) : `proje
   tout ; le score ne départage qu'avec des tags spécifiques, d'où l'exigence 5. La formule (poids
   égal tag / thème) parie que les articles portent au moins un tag spécifique : à revoir sur pièce
   après A2 si les propositions sont mauvaises.
+
+## Plan de test
+
+### Tranche 1 — les tags manquants tombent dans leur thème
+
+Tags D8 hors projets (`CandiDash` et `Portfolio` arrivent en tranche 3 avec `PROJECT_TAGS`). Tests
+ajoutés aux tables `it.each` existantes, domaine pur sans TestBed.
+
+`src/app/features/blog/domain/models/blog-tag.model.spec.ts`, `blogTagCategory` (6 lignes ajoutées) :
+
+| Tag | Assertion |
+|---|---|
+| `Performance` | `toBe('engineering')` |
+| `Accessibilité` | `toBe('engineering')` |
+| `Design system` | `toBe('engineering')` |
+| `CSP` | `toBe('security')` |
+| `SSR` | `toBe('stack')` |
+| `Tailwind CSS` | `toBe('stack')` |
+
+`AVAILABLE_BLOG_TAGS` sans doublon : couvert par le test existant « flattens every category without
+duplicates » (taille de la liste = taille du `Set` = somme des catégories), vert avant et après ; il
+attrape un tag D8 ajouté deux fois. Pas de doublon de test.
+
+`src/app/features/blog/domain/count-posts-by-category.spec.ts`, ligne ajoutée à la table :
+« a post tagged Accessibilité » → `toEqual({ ...ZERO, engineering: 1 })`.
+
+Sweep : aucun test existant n'encode `Performance`, `Accessibilité`, `Design system`, `CSP`, `SSR`
+ou `Tailwind CSS` comme tag libre (seul `SSR` apparaît, dans `admin-project-form-data.ts`, stack de
+projet sans lien avec le catalogue) ; aucun comptage figé du catalogue (`blog-tag-palette.spec.ts`
+itère sur `BLOG_TAGS_BY_CATEGORY`).
+
+RED confirmé via la commande test du profil (`pnpm test`, après `ng cache clean` et purge de
+`node_modules/.vite`) le 2026-10-21 19:05, 7 failed / 3959 total ; code de sortie 1. Les 7 échecs
+sont des assertions comportementales (`expected null to be 'engineering' | 'security' | 'stack'`,
+`engineering: 0` au lieu de 1) ; aucune erreur de type, de format ni de harnais ; les 3952 autres
+tests restent verts (213 fichiers sur 215).
+
+```
+ Test Files  2 failed | 213 passed (215)
+      Tests  7 failed | 3952 passed (3959)
+```

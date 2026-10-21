@@ -22,6 +22,8 @@ export const BLOG_TAGS_BY_CATEGORY: Record<BlogTagCategory, readonly string[]> =
     'Zod',
     'RxJS',
     'Full-Stack',
+    'SSR',
+    'Tailwind CSS',
   ],
   security: [
     'Sécurité',
@@ -41,8 +43,18 @@ export const BLOG_TAGS_BY_CATEGORY: Record<BlogTagCategory, readonly string[]> =
     'Données de santé',
     'RGPD',
     'Privacy by design',
+    'CSP',
   ],
-  engineering: ['Architecture', 'Tests', 'SEO', 'Audit de sécurité', "Retour d'expérience"],
+  engineering: [
+    'Architecture',
+    'Tests',
+    'SEO',
+    'Audit de sécurité',
+    "Retour d'expérience",
+    'Performance',
+    'Accessibilité',
+    'Design system',
+  ],
   journey: ['Parcours', 'Reconversion', 'Carrière', 'Industrie', 'Métallurgie', 'Autodidacte'],
   projects: ['DashFlow', 'Auto-hébergement', 'CI/CD', 'GreenTech'],
 };

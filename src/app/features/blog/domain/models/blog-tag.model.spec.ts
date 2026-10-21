@@ -17,6 +17,12 @@ describe('blogTagCategory', () => {
     ['Reconversion', 'journey'],
     ['Full-Stack', 'stack'],
     ['DashFlow', 'projects'],
+    ['Performance', 'engineering'],
+    ['Accessibilité', 'engineering'],
+    ['Design system', 'engineering'],
+    ['CSP', 'security'],
+    ['SSR', 'stack'],
+    ['Tailwind CSS', 'stack'],
   ])('given the catalogue tag "%s", returns "%s"', (tag, expected) => {
     expect(blogTagCategory(tag)).toBe(expected);
   });
