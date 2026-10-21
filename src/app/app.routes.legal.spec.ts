@@ -7,7 +7,7 @@ const privacyRoute = (): Route | undefined =>
 describe('privacy policy route', () => {
   it('describes what the site collects and ends on the reader’s rights, addressed with tu', () => {
     expect(privacyRoute()?.data?.['seo']?.description).toBe(
-      "Ce que le site collecte et pourquoi : formulaire de contact, mesure d'audience sans cookie, commentaires, suivi des erreurs, et tes droits.",
+      "Ce que le site collecte et pourquoi\u00a0: formulaire de contact, mesure d'audience sans cookie, commentaires, suivi des erreurs, et tes droits.",
     );
   });
 });

@@ -212,9 +212,9 @@ Mécanisme : lecture disque dans le test (`readdirSync('src/app', { recursive: t
 `readFileSync`), comme `src/index.html` déjà lu par ce spec ; le builder `@angular/build:unit-test`
 bundle par esbuild, sans `import.meta.glob`. Portée par motif, donc ouverte aux futurs fichiers :
 `pages/`, `layout/`, `shared/`, `features/*` sauf `admin` et `auth`, fichiers `.ts` et `.html`,
-hors `*.spec.ts` et dossiers `testing/` (174 fichiers lus). `core/` hors portée : son seul texte
-vouvoyé (`error-toast.ts`, « veuillez ») n'est atteint que par les requêtes de l'admin, les
-gateways publics passant `silentErrors`.
+hors `*.spec.ts` et dossiers `testing/` (174 fichiers lus). `core/` entre dans la portée (cf.
+tranche 2bis) : l'intercepteur `error-toast.ts` est global et les gateways publics (contact, blog,
+projets) n'utilisent pas `silentErrors()`, ses messages atteignent donc les visiteurs.
 
 Motif : `vous`, `votre`, `vos`, `vôtre(s)` et les impératifs `réessayez`, `vérifiez`,
 `patientez`, `retournez`, `écrivez`, `contactez`, `explorez`, plus `sélectionnez` (trouvé dans
@@ -251,7 +251,148 @@ EXIT=1
 
 Valeurs attendues alignées sur le tutoiement (`code-copy.spec.ts` : « sélectionne le code », `legal-pages.spec.ts` : `h2` « Tes droits ») : RED d'assertion confirmé via la commande test du profil le 2026-10-21 21:53, 6 failed / 4308 total (verrou 2, `code-copy.spec.ts` 3, `legal-pages.spec.ts` 1), tous en `AssertionError`.
 
+### Tranche 2bis — corrective : revue code
+
+Origine : `## Review code` (REJECTED, point bloquant 1, non bloquants 2 à 5) et `## Corrections de revue`.
+
+Verrou (`src/app/editorial-identity.spec.ts`) :
+
+- Portée élargie : `core/` ajouté à `PUBLIC_ROOT` ; `src/server/feeds/**` (`.ts` hors `*.spec.ts`)
+  et `public/security.txt`, `public/.well-known/security.txt` lus aussi (`PUBLIC_FILES`).
+- Motif : `veuillez`, `découvrez`, `consultez`, `cliquez`, `hésitez`, `lisez`, `téléchargez`
+  ajoutés à la liste fermée. Pas de règle « nous » (faux positifs).
+- `reads %s` : `core/interceptors/error-toast.ts`, `src/server/feeds/rss.ts` et les deux
+  `security.txt` figurent dans la liste lue.
+- `flags %s` : « veuillez patienter » → `line 1: « veuillez »` ; une phrase avec les six nouveaux
+  impératifs (dont `n'hésitez`) → les six mots, dans l'ordre de la ligne.
+- *the security policy speaks to the reader*, `in %s` × les deux `security.txt` : lignes `#`
+  jointes = `Tu as trouvé une faille de sécurité ? Écris-moi à l'adresse ci-dessus, sans la
+  rendre publique avant ma réponse. Je réponds dès que je peux.`
+
+Textes épinglés :
+
+- `core/interceptors/error-toast.spec.ts` : `tells the visitor what to do after a %i` (429, 500,
+  503) : `ToastStore.add` reçu une fois avec `{ severity: 'error', detail }`, 429 → `Trop de
+  requêtes en peu de temps, réessaie dans une minute`, 5xx → `Le serveur a un souci passager,
+  réessaie dans un instant`.
+- `src/server/feeds/rss.spec.ts` (adapté) : `<title>Le blog de Julien Nédellec</title>` et
+  `<description>Ce que j'apprends en construisant mes projets : Angular, NestJS, PostgreSQL et
+  l'auto-hébergement, erreurs comprises.</description>` (U+00A0 avant `:`, U+202F avant `?`, règle
+  typographique du dépôt).
+
+Adaptation mécanique : `app.routes.legal.spec.ts`, `pages/page-not-found.spec.ts` — 2 espaces
+insécables brutes réécrites en ` ` / ` `, aucune valeur attendue modifiée.
+
+Dû au GREEN : `error-toast.ts` lignes 45 et 48, `rss.ts` lignes 58 et 61, commentaire des deux
+`security.txt` (lignes 8-10).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le 2026-10-21 22:12, 9 failed / 4346 total), tous en `AssertionError`, aucune erreur de harnais ; les 4337 autres tests restent verts ; prettier et eslint verts sur les fichiers modifiés.
+
+```
+FAIL editorial-identity.spec.ts > the public site never says « vous » > in src/app/core/interceptors/error-toast.ts
+AssertionError: expected [ 'line 45: « veuillez »', …(1) ] to deeply equal []
+FAIL editorial-identity.spec.ts > the public site never says « vous » > in public/security.txt
+FAIL editorial-identity.spec.ts > the public site never says « vous » > in public/.well-known/security.txt
+AssertionError: expected [ 'line 8: « vous »', …(1) ] to deeply equal []
+FAIL editorial-identity.spec.ts > the security policy speaks to the reader > in public/security.txt
+FAIL editorial-identity.spec.ts > the security policy speaks to the reader > in public/.well-known/security.txt
+AssertionError: expected 'Si vous découvrez une vulnérabilité d…' to be 'Tu as trouvé une faille de sécurité\u…'
+FAIL rss.spec.ts > buildRss > Given a build time When the feed is built Then the channel names the blog, …
+FAIL error-toast.spec.ts > errorToastInterceptor > tells the visitor what to do after a 429 | 500 | 503
+ Test Files  3 failed | 220 passed (223)
+      Tests  9 failed | 4337 passed (4346)
+EXIT=1
+```
+
 ## Journal des tranches
 
 - **Tranche 1 — les textes publics passent au tutoiement** : GREEN 4095 passed / 4095 total · refactor : aucun
 - **Tranche 2 — le vouvoiement ne revient plus** : GREEN 4308 passed / 4308 total · refactor : aucun
+- **Tranche 2bis — corrective, revue code** : GREEN 4346 passed / 4346 total · refactor : aucun
+
+## Verify
+
+Exécuté par `code-reviewer` le 2026-10-21 (preuve absente de la spec, re-jouée inline) sur l'image
+Docker de la branche (`ng-portfolio-app:a11y`, `ci/a11y-stack.sh up`, site servi sur
+`http://127.0.0.1:3000` devant la doublure `ci/api-stub`).
+
+Steps :
+
+1. `/` : en-tête « M'écrire » visible ; clic, la page défile jusqu'à `#contact` (haut de section à 80 px).
+   Titre « Écris-moi. », légende « Tes coordonnées », libellés `Ton nom (requis)`, `Email (requis)`,
+   `Sujet (requis)`, `Message (requis)`, placeholders et mention au tutoiement (lus dans le DOM).
+2. Hydratation : saisie `pas-un-email` dans l'e-mail puis focus sur le sujet : `aria-invalid="true"`,
+   message « Format d'email invalide » affiché.
+3. `/confidentialite` : `h2` « Tes droits », aucun `vous|votre|vos` dans `main`.
+4. `/does-not-exist` : « Oups ! La page que tu cherches […] sections du site. »
+5. `/about` : titre « Parcours : de l'atelier au code | Julien Nédellec », description `journey` +
+   « Ma stack et mon CV. », trois boutons « M'écrire » (en-tête, conclusion, pied de page), tous
+   vers `scrollTo('contact')`.
+
+Captures : accueil (hero au nouveau texte), section contact avant et après saisie invalide, `/about`
+(navigateur de la session de revue).
+
+Console : erreurs réseau uniquement, toutes environnementales et sans lien avec le diff (appels
+navigateur vers `https://api.nedellec-julien.fr` refusés par CORS depuis l'origine `127.0.0.1`,
+404 de ressources de la doublure) ; aucune erreur JS applicative, aucune erreur d'hydratation.
+
+Verdict : **PASS**.
+
+## Review code
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test` exit 0, 223 fichiers / 4308 tests) / lint ✅ (`pnpm lint` exit 0) / build ✅ (`pnpm run build --configuration production` exit 0, 0 warning) ; `pnpm install --frozen-lockfile` 0, `pnpm a11y:typecheck` 0, `pnpm run format:check` 0, `pnpm icons:check` 0, `pnpm a11y` 0 (55 passed, zéro violation), spec-lint 0
+**Checks mécaniques** : 10 hit(s) — archeologie altitude ; archéologie : 8 hits tous pré-existants (titres de test « spec 029 » de fichiers touchés, aucune ligne ajoutée par le diff), altitude advisory ; profil non transmis pour immutabilité (défaut universel). Checker non vendoré dans `.claude/checks/` : lancé depuis le plugin.
+**Warnings de gate** : aucun
+**Rendu compilé** : N/A
+**Preuve de verify runtime** : ✅ (section `## Verify`, exécutée par la revue)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌
+
+**Tests notables** :
+- ✨ `src/app/editorial-identity.spec.ts:272-293` — discriminance du motif triangulée (flags / does not flag), garde-fous de portée (`reads the template of`, `leaves %s out`) : un verrou vide ou trop large échoue.
+- ⚠️ `src/app/app.routes.legal.spec.ts:102`, `src/app/pages/page-not-found.spec.ts:903` — espaces insécables écrits en caractères bruts, invisibles à la relecture, alors que le reste des specs écrit ` ` / ` `.
+
+**Altitude composant** (advisory, non bloquant) :
+- ⚠️ `src/app/features/contact/application/contact-form.ts` — 263 LOC (déjà au-dessus de 250 avant, +3) — candidat découpe : sortir le bloc de mention et d'envoi en sous-composant.
+
+**Risque résiduel** (advisory, § 8) :
+- réversibilité : profil absent · monitoring : Sentry (profil)
+- ⚠️ `src/app/layout/components/header/header.ts:145`, `footer.ts:118` — le libellé mesuré par `trackCtaClick` passe de « Me contacter » à « M'écrire » : l'historique d'audience du même CTA se scinde en deux lignes.
+- non couvert par les gates : textes hors `src/app` (`src/server/feeds/rss.ts`, `public/security.txt`) hors portée du verrou.
+
+**Points à corriger** :
+1. **Bloquant** — `src/app/core/interceptors/error-toast.ts:45` et `:48` : « Trop de requêtes, veuillez patienter », « Erreur serveur, veuillez réessayer » sont affichés aux visiteurs. La justification d'exclusion de `core/` (Plan de test, tranche 2 : « n'est atteint que par les requêtes de l'admin, les gateways publics passant `silentErrors` ») est fausse : `HttpContactGateway.submitContactForm` (`http-contact.gateway.ts:77`), `HttpBlogGateway.getPublishedPosts` / `getPostBySlug` / `likePost` (`http-blog.gateway.ts:42`, `:56`, `:109`) et `HttpProjectsGateway` (`http-projects.gateway.ts:42`, `:73`) n'utilisent pas `silentErrors()`, et l'intercepteur est global (`app.config.ts:126`) avec `<app-toast>` dans le shell (`app.ts:38`). Un 429 sur le formulaire de contact affiche donc « veuillez patienter » à côté du message au tutoiement. Correction attendue : formuler ces deux messages sans adresse (ils servent aussi l'admin, par exemple « Trop de requêtes, nouvel essai dans un instant »), ou passer les appels publics en `silentErrors()` ; puis inclure `core/` dans `PUBLIC_ROOT` (`editorial-identity.spec.ts:214`), ajouter `veuillez` à `FORMAL_ADDRESS` (`:204`) avec un cas `flags`, et corriger la phrase de justification dans le Plan de test.
+2. Non bloquant — `src/server/feeds/rss.ts:61` : la description du canal RSS garde l'ancien ton (« Retours d'expérience Angular, NestJS, PostgreSQL et self-hosting. ») alors que la description du blog a changé ; hors table, à aligner ou à acter hors périmètre. Le verrou ne lit pas `src/server/`.
+3. Non bloquant — `public/security.txt:8`, `public/.well-known/security.txt:8` : « Si vous découvrez […] merci de nous en informer » (vouvoiement et « nous », anti-référence « ton corporate ») ; fichier technique servi publiquement, à statuer.
+4. Non bloquant — `src/app/editorial-identity.spec.ts:204` : la liste fermée d'impératifs laisse passer `découvrez`, `consultez`, `cliquez`, `hésitez`, `lisez`, `téléchargez` (aucune occurrence aujourd'hui) ; les élargir coûte peu et ne crée pas de faux positif.
+5. Non bloquant — `src/app/app.routes.legal.spec.ts:102`, `src/app/pages/page-not-found.spec.ts:903` : écrire ` ` et ` ` en échappement, comme les autres specs.
+
+## Corrections de revue (2026-10-21)
+
+Suite du REJECTED de `## Review code` : le toast global (`core/interceptors/error-toast.ts`) est
+atteint par les appels publics (contact, blog, projets n'utilisent pas `silentErrors()`), donc
+`core/` entre dans le périmètre du verrou. La justification inverse du Plan de test était fausse.
+
+| Où | Avant | Après |
+|---|---|---|
+| `error-toast.ts`, 429 | Trop de requêtes, veuillez patienter | Trop de requêtes en peu de temps, réessaie dans une minute |
+| `error-toast.ts`, 5xx | Erreur serveur, veuillez réessayer | Le serveur a un souci passager, réessaie dans un instant |
+| `src/server/feeds/rss.ts`, `<title>` du canal | `${AUTHOR} — Blog` (em-dash) | `Le blog de ${AUTHOR}` |
+| `src/server/feeds/rss.ts`, `<description>` du canal | Retours d'expérience Angular, NestJS, PostgreSQL et self-hosting. | Ce que j'apprends en construisant mes projets : Angular, NestJS, PostgreSQL et l'auto-hébergement, erreurs comprises. |
+| `public/security.txt` et `public/.well-known/security.txt`, commentaire | Si vous découvrez une vulnérabilité de sécurité, merci de nous en informer de manière responsable en utilisant les coordonnées ci-dessus. Nous nous engageons à répondre rapidement aux rapports de sécurité. | Tu as trouvé une faille de sécurité ? Écris-moi à l'adresse ci-dessus, sans la rendre publique avant ma réponse. Je réponds dès que je peux. |
+
+Verrou : `core/` dans la portée ; `veuillez` et les impératifs `découvrez`, `consultez`, `cliquez`,
+`hésitez`, `lisez`, `téléchargez` ajoutés à la liste fermée ; `src/server/feeds/` et
+`public/*.txt` (dont `.well-known/`) lus aussi. Les espaces insécables des specs s'écrivent en
+échappements (` `, ` `), comme dans le reste du dépôt.
+
+Défaut trouvé par `qa` pendant le RED (hors périmètre du ton, corrigé dans la même PR) :
+`public/.well-known/security.txt`, servi en production, annonce l'ancien domaine `julien-nedellec.fr`
+(e-mail, page de contact, `Canonical`, `Acknowledgments`), qui ne répond plus (vérifié le
+2026-10-21). Il reprend les champs de `public/security.txt`, avec
+`Canonical: https://nedellec-julien.fr/.well-known/security.txt`.

@@ -12,7 +12,7 @@ describe('PageNotFound', () => {
     );
 
     expect(message?.textContent?.replace(/[ \t\r\n]+/g, ' ').trim()).toBe(
-      "Oups ! La page que tu cherches n'existe pas ou a été déplacée. Retourne à l'accueil ou fais un tour dans les autres sections du site.",
+      "Oups\u202f! La page que tu cherches n'existe pas ou a été déplacée. Retourne à l'accueil ou fais un tour dans les autres sections du site.",
     );
   });
 });
