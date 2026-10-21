@@ -44,8 +44,7 @@ plus l'option « garder l'actuel, adouci ». Julien a d'abord retenu A, puis a c
 5. **Thème au premier chargement : suivre le système** (préférence `prefers-color-scheme`), comme
    aujourd'hui (script d'`index.html`, `ThemeStore`, ADR-0012). Les deux thèmes restent égaux
    (Two Registers Rule conservée).
-6. **Fantaisie retenue** (réponse donnée pendant le choix de A, maintenue jusqu'à nouvel ordre :
-   question ouverte 2) : au plus **un autocollant décoratif par écran**, le texte et le code restent
+6. **Fantaisie retenue** (confirmée pour C) : au plus **un autocollant décoratif par écran**, le texte et le code restent
    prioritaires. **Pas de police manuscrite.**
 
 ### Direction C en détail
@@ -197,12 +196,11 @@ Chaque PR passe les gates du Dockerfile, le job `a11y` et une mesure Lighthouse 
 ### Arbitrages complémentaires (2026-10-21)
 
 1. **Typographie** : Bricolage Grotesque pour les titres ; JN Sans et JN Mono gardées.
+2. **Fantaisie** : un autocollant décoratif par écran, confirmé pour la direction C.
+3. **Nom dans l'en-tête** : « Julien Nédellec » reste (marque de `PRODUCT.md`) ; la forme courte
+   « julien. » de la maquette est écartée.
 
 ### Questions ouvertes
 
-1. **Dose de fantaisie** : la réponse « retenu » (un autocollant décoratif par écran) a été donnée
-   pour la direction A. Elle tient pour C, ou tu veux plus d'autocollants ?
-2. **Nom court dans l'en-tête** : la maquette affichait « julien. » en minuscules. On garde
-   « Julien Nédellec » (marque déclarée dans `PRODUCT.md`) ou on passe à une forme courte ?
-3. **Couleurs d'autocollant** : sauge et lavande suffisent-elles, ou une troisième (jaune, rose) ?
-4. **Image Open Graph** : à redessiner dans la nouvelle palette, ou à garder telle quelle ?
+1. **Couleurs d'autocollant** : sauge et lavande suffisent-elles, ou une troisième (jaune, rose) ?
+2. **Image Open Graph** : à redessiner dans la nouvelle palette, ou à garder telle quelle ?
