@@ -861,6 +861,10 @@ la coquille `/login` en 200 `image/png`), `header.ts` (`[rounded]` retiré), `DE
 - **Tranche 4.2 — le code se lit dans les deux thèmes** : GREEN 4368 passed / 4368 total · refactor : aucun
 - **Tranche 4.3 — l'identité hors CSS** : GREEN 4368 passed / 4368 total · refactor : aucun
 - **Tranche unique PR 5 — les titres en Bricolage Grotesque** : GREEN 4374 passed / 4374 total · refactor : aucun
+- **Tranche 6a.1 — les boutons sont des pilules** : GREEN 4396 passed / 4396 total · refactor : aucun
+- **Tranche 6a.2 — l'autocollant existe** : GREEN 4396 passed / 4396 total · refactor : aucun
+- **Tranche 6a.3 — tampon, cartouche, cote, carte de lien, toast restylés** : GREEN 4396 passed / 4396 total · refactor : `iconClass` et `close` du toast fusionnés en un seul champ `colour` (devenus identiques une fois le survol teinté retiré)
+- **Tranche 6a.4 — la carte de partage par défaut** : GREEN 4396 passed / 4396 total · refactor : aucun
 
 ## Verify
 
@@ -945,6 +949,47 @@ d'avertissement de préchargement non utilisé.
 Gates : `pnpm test` (après `ng cache clean` et purge de `node_modules/.vite`) 226 fichiers, 4374/4374,
 code 0 ; `pnpm lint` 0 ; `pnpm run format:check` 0 ; `pnpm run build --configuration production` 0, sans
 avertissement.
+
+Verdict : **PASS**.
+
+### PR 6a (composants signature, carte de partage)
+
+Exécuté par `angular-expert` le 2026-10-22 sur la branche `feat/033-composants` : `pnpm start` (port 4200,
+SSR de dev) devant la doublure `ci/api-stub` (`PORT=3000 STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs`),
+navigateur intégré, `prefers-color-scheme` émulé.
+
+Carte de partage : `docs/og/og-default.html` rendu par `pnpm exec playwright screenshot --viewport-size
+"1200, 630" --wait-for-timeout 500 file://$PWD/docs/og/og-default.html
+public/og/julien-nedellec-20261022.png` : PNG 1200 × 630, **35 246 octets** (≤ 150 Ko), vérifié à l'œil
+(fond sable, carte blanche à bord 2 px rayon 22 px, nom en Bricolage 800, accroche en JN Sans 600 sur
+deux lignes équilibrées, autocollant sauge « Fait main » incliné, cote orange, adresse du site).
+
+Steps :
+
+1. Clair, `/projects` : boutons de l'en-tête en pilule (`border-radius` 3,36e7 px), bascule de thème
+   `outlined` à 2 px `oklch(0.24 0.03 265)` ; tampons et cartouche de légende : rayon 8 px, bord 2 px
+   `foreground`, fond `surface` blanc.
+2. Sombre, `/blog/article-temoin` : trois cartes de lien, rayon 16 px, bord 2 px `oklch(0.96 0.01 70)`,
+   fond `oklch(0.27 0.035 265)` ; bouton « J'ai trouvé ça utile » en pilule ; `og:image` =
+   `…/og/julien-nedellec-20261022.png`, `twitter:card` `summary_large_image`.
+3. Sombre, même page, deux toasts déclenchés par `ToastStore.add` (succès, erreur) : fond opaque
+   `oklch(0.27 0.035 265)`, `backdrop-filter: none`, barre gauche 4 px de la couleur de sévérité.
+4. Clair, `/` : cartouche et cote, traits de la cote à 2 px, pointes 5 / 10 px, couleur
+   `oklch(0.532 0.178 37)`.
+5. HTML SSR de `/` (`curl`) : `og:image`, `og:image:alt`, `og:image:width` 1200, `og:image:height` 630,
+   `og:image:type` `image/png` ; `GET /og/julien-nedellec-20261022.png` : `200 image/png`.
+6. Build de production : garde `ci.yml` (job `verify`) rejouée sur `dist/…/mentions-legales/index.html` et
+   `index.csr.html` : l'`og:image` annoncée existe dans `dist/…/browser/`. La garde du job `docker`
+   (coquille `/login`, 200 `image/png` par nginx) n'est pas rejouée en local (image Docker non construite) :
+   le fichier est servi par la `location` des images de l'nginx du `Dockerfile`.
+
+Captures : `/projects` clair, `/blog/article-temoin` sombre, `/` clair (navigateur intégré de la session).
+
+Console : aucune erreur JS ni d'hydratation (« Angular hydrated 29 component(s) ») ; seules erreurs,
+réseau et environnementales : `GET /api/config` 404 (route absente de la doublure).
+
+Gates : `pnpm test` 227 fichiers, 4396/4396, code 0 ; `pnpm lint` 0 ; `pnpm run format:check` 0 ;
+`pnpm run build --configuration production` 0.
 
 Verdict : **PASS**.
 
