@@ -630,8 +630,8 @@ Les PR se suivent (mêmes fichiers) ; chaque tranche est verte sans les suivante
 3. **Carte de partage** : texte seul, sans portrait. Le sous-titre (« Tourneur CN et développeur web »
    proposé) est calé sur les textes de la spec 031 dans la PR 6a.
 4. **Boutons `outlined`** : contour 2 px `foreground`, assorti aux cartes.
-5. **Œil optique** : 48 retenu par défaut ; validé à l'œil par le propriétaire sur le rendu réel dans la
-   PR 5 (alternative : 96, même poids, dessin plus expressif).
+5. **Œil optique** : **48**, confirmé par le propriétaire le 2026-10-22 sur une comparaison visuelle 48 / 96
+   des titres de l'accueil (96 : même poids, dessin plus serré).
 
 ## Plan de test
 
@@ -909,3 +909,69 @@ Octets de police transférés sur `/` : 92 187 en base comme en branche.
   et le décalage du hero est un suivi à part (hors spec 033).
 - **Élément LCP** : identique sur 11 combinaisons ; sur `/` mobile, 2 passes retiennent le `h1` au lieu du `p`
   en fondu retardé (mêmes dimensions qu'en base) : variance liée à l'animation, pas un changement de rendu.
+
+## Review code (PR 5)
+
+PR 5 (`feat/033-police`, `a6b9519` RED + `2276f2a` GREEN), revue le 2026-10-22 contre `origin/master`.
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test` après `pnpm install --frozen-lockfile`, `pnpm exec ng cache clean` et purge de `node_modules/.vite` : 226 fichiers, 4374/4374, exit 0) / lint ✅ (`pnpm lint`, exit 0) / format ✅ (`pnpm run format:check`, exit 0) / build ✅ (`pnpm run build --configuration production` sur `dist/` vidé, exit 0, postbuild CSP sur 3 pages)
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main (`archivo` insensible à la casse sur `src`, `public`, `ci`, `.github`, `e2e`, `dist` : 0 hors docs historiques et ADR ; `font-stretch` sur `src`, `public`, `ci`, `.github`, `e2e` hors specs et CSS compilé : 0 ; archéologie des commentaires ajoutés : 0 ; `font-src` : ligne CSP d'`index.html` hors diff)
+**Warnings de gate** : aucun (test, lint, format, build)
+**Rendu compilé** : ✅ (CSS de prod : face `Bricolage Grotesque` et son repli avec les valeurs du plan, aucun `font-stretch` ; `index.csr.html` et `mentions-legales/index.html` préchargent le seul nouveau fichier ; `dist/…/browser/fonts/` = six fichiers, aucun Archivo)
+**Preuve de verify runtime** : ✅ (preuve `## Verify` › « PR 5 (police) » complète et cohérente avec le diff ; rejouée : `pnpm start` + doublure, `/` : `h1` en `"Bricolage Grotesque", "Bricolage Grotesque Fallback", system-ui, sans-serif`, 800, `font-stretch` 100 %, face `600 800` chargée, ressource lancée par le `link` de préchargement, `200 font/woff2 37460`, aucune ressource hors origine ; console : hydratation OK (12 composants), seuls des 404 `/api/*` de la doublure, sans rapport avec le diff)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌ (mesure Lighthouse de la PR 5 absente, `DESIGN.md` § 3 incohérent)
+
+Reproductibilité : commande de la preuve rejouée dans un dossier vide (`npm pack @fontsource-variable/bricolage-grotesque@5.3.0`, fontTools 4.67.0 + brotli 1.2.0, instancer `opsz=48 wdth=100 wght=600:800 --no-recalc-timestamp`) : SHA-256 `10dd73b15fe8917443b93d9ddf0aa1cf5d66c2e665920af37b5b9a50c192b5dd`, 37 460 octets, **identique** au fichier commité ; seul axe restant `wght` 600–800, `fontRevision` 1.001, 226 points de code, `OS/2` typo 930 / −270 / 0. Licence : `public/fonts/OFL-bricolage-grotesque.txt` identique octet pour octet au `LICENSE` du paquet (OFL 1.1, copyright sans *Reserved Font Name*). Retrait des largeurs : 12 lignes dans 11 gabarits, seul `font-stretch-*` / `[font-stretch:104%]` retiré (le reste est un reformatage Prettier d'`admin-layout.ts`). ADR-0006 (statut amendé) et ADR-0031 (accepté) à jour ; `DESIGN.json` déjà à Bricolage Grotesque depuis la PR 3. Rien des PR 6a/6b. Aucun test existant modifié.
+
+**Tests notables** :
+- ✨ `src/app/display-font.spec.ts:52-71` — golden `toEqual` sur les déclarations exactes des deux faces : un `font-stretch` réintroduit ou une métrique de repli dérivée casse la suite.
+- ✨ `src/app/display-font.spec.ts:143-151` — balayage `fichier:ligne` des gabarits : la régression se lit directement dans l'échec.
+
+**Risque résiduel** (advisory, § 8) :
+- réversibilité : profil absent · monitoring : Sentry (profil)
+- non couvert par les gates : le job `a11y` (contrastes, clair et sombre) ne tourne qu'en CI ; l'œil optique 48 reste à valider à l'œil par le propriétaire (décision de goût 5).
+
+**Points à corriger** :
+1. `DESIGN.md:258` — « 37 460 octets, 5,2 % de moins qu'Bricolage Grotesque » : remplacement mécanique qui compare la police à elle-même. Attendu : « 5,2 % de moins qu'Archivo » (ou « que l'ancienne police de titres, Archivo »).
+2. `specs/033-nouveau-visuel.md` (§ Vérifications, l. 602-608, et l. 749 « Laissé au GREEN … plus Lighthouse ») — la mesure Lighthouse avant / après de la PR 5 n'est pas faite : aucune section « Mesure Lighthouse (PR 5) ». Critères à rapporter comme pour la PR 4 : médianes non dégradées de plus de 2 points, CLS médian ≤ base, élément LCP identique, **octets de police transférés sur `/` ≤ base** (attendu : − 2 052).
+
+
+**Suites (2026-10-22)** : point 1 corrigé (`DESIGN.md` : « 5,2 % de moins qu'Archivo ») ; point 2, mesure
+ci-dessous.
+
+## Mesure Lighthouse (PR 5)
+
+2026-10-22. Base : image de la PR 4 (rendu de `master` `e094f84`), branche `2276f2a` ; même protocole que la
+PR 4 (doublure, Lighthouse 12.8.2, mobile et desktop, 5 passes alternées, tiers bloqués), 120 rapports.
+
+| Page | Profil | Perf (base → branche) | A11y / BP / SEO | LCP ms | CLS | Élément LCP |
+|---|---|---|---|---|---|---|
+| `/` | mobile | 88 → 91 | 100 / 96 / 100 | 3223 → 2703 | 0,0029 → 0,0028 | `p` / `h1` en fondu, même mélange |
+| `/` | desktop | 99 → 100 | 100 / 96 / 100 | 562 → 562 | **0,0718 → 0,0018** | `h1`, identique |
+| `/blog` | mobile | 94 → 94 | 100 / 96 / 100 | 2853 → 2852 | 0,0027 = | `p` de ligne 5/5 → 4/5 |
+| `/blog` | desktop | 100 → 100 | 100 / 96 / 100 | 657 → 733 | 0,0015 → 0,0013 | `h1` / `p` en fondu, même mélange |
+| `/blog/article-temoin` | mobile | 92 → 92 | 100 / 96 / 100 | 2853 → 2751 | 0,0013 → 0,0005 | identique |
+| `/blog/article-temoin` | desktop | 100 → 100 | 100 / 96 / 100 | 618 → 643 | 0,0009 → 0,0008 | identique |
+| `/projects` | mobile | 90 → 90 | 100 / 96 / 100 | 3427 → 3427 | 0,0053 → 0,0050 | identique |
+| `/projects` | desktop | 100 → 100 | 100 / 96 / 100 | 643 → 643 | 0,0095 → 0,0078 | identique |
+| `/projects/projet-temoin` | mobile | 92 → 92 | 100 / 96 / 100 | 2855 → 2855 | 0,0050 → 0,0048 | identique |
+| `/projects/projet-temoin` | desktop | 100 → 100 | 100 / 96 / 100 | 644 → 645 | 0,0052 → 0,0037 | identique |
+| `/about` | mobile | 92 → 91 | 100 / 96 / 100 | 3163 → 3158 | 0,0220 → 0,0222 | identique |
+| `/about` | desktop | 100 → 100 | 100 / 96 / 100 | 731 → 726 | 0,0006 = | identique |
+
+- **Non-dégradation > 2 points** : PASS (pire écart −1, Perf mobile `/about`).
+- **CLS ≤ base** : PASS sur 11 combinaisons ; `/about` mobile 0,0220 → 0,0222 (bruit, sans titre en jeu sur
+  l'élément qui bouge, une image). Le décalage du hero en desktop, relevé en PR 4, venait d'Archivo : il
+  disparaît (0,0718 → 0,0018).
+- **Élément LCP** : mêmes candidats ; sur `/`, `/blog`, `/projects`, alternance `h1` / `p` en fondu déjà
+  présente en base.
+- **Octets de police transférés sur `/`** : 92 187 → 90 135 (− 2 052, la différence Archivo / Bricolage de
+  l'ADR-0031), à chaque passe.
+- **Police de titres bloquée** (repli seul, `/`, 1 passe) : CLS 0,0082 en desktop, 0,0028 en mobile, sous la
+  base dans les deux cas.
