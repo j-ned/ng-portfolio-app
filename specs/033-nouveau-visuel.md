@@ -780,3 +780,38 @@ Contrastes recalculés indépendamment (OKLCH → sRGB, minimum flottant / 8 bit
 2. `src/app/shared/ui/toast.ts:20,23`, `src/app/features/auth/pages/login/login.ts:24`, `src/app/features/auth/pages/two-factor-verify/two-factor-verify.ts:24` restent à `bg-primary/10`. Acceptable : sous ces teintes, l'orange ne colore que des icônes (contenu non textuel : 4,50:1 ≥ 3:1) ; le texte du toast est `foreground`. Le toast est restylé en PR 6a.
 3. `docs/adr/0030-*.md:3` — statut « proposé », passe à « accepté » au merge de cette PR.
 4. `.claude/project-profile.md:109` cite encore `--color-accent` (supprimé) parmi les tokens-clés.
+
+**Suites (2026-10-22, commit `81d02ab`)** : point 1, `solid` supprimé avec ses tests (aucun état sélectionné
+de tag n'est affiché ; `DESIGN.md` le dit) ; point 2 laissé tel quel (icônes, PR 6a pour le toast) ; points 3
+et 4 appliqués.
+
+## Mesure Lighthouse (PR 4)
+
+2026-10-22. Base `origin/master` `4c54e0b`, branche `8f4de5e` ; images Docker servies tour à tour derrière la
+doublure, Lighthouse 12.8.2 (`chrome-headless-shell` de Playwright), mobile simulé et desktop, 5 passes
+alternées, requêtes tierces bloquées ; 120 rapports.
+
+| Page | Profil | Perf (base → branche) | A11y / BP / SEO | LCP ms | CLS | Élément LCP |
+|---|---|---|---|---|---|---|
+| `/` | mobile | 87 → 88 | 100 / 96 / 100 | 3251 → 3145 | 0,0029 = | `p` 5/5 → `p` 3/5, `h1` 2/5 |
+| `/` | desktop | 99 → 99 | 100 / 96 / 100 | 562 → 562 | 0,0718 = | `h1`, identique |
+| `/blog` | mobile | 91 → 92 | 100 / 96 / 100 | 3276 → 3271 | 0,0027 = | `p` majoritaire, identique |
+| `/blog` | desktop | 100 → 100 | 100 / 96 / 100 | 735 → 731 | 0,0015 = | identique |
+| `/blog/article-temoin` | mobile | 90 → 91 | 100 / 96 / 100 | 2757 → 2854 | 0,0013 = | identique |
+| `/blog/article-temoin` | desktop | 100 → 100 | 100 / 96 / 100 | 642 → 643 | 0,0009 = | identique |
+| `/projects` | mobile | 91 → 90 | 100 / 96 / 100 | 3282 → 3424 | 0,0053 = | identique |
+| `/projects` | desktop | 100 → 100 | 100 / 96 / 100 | 644 → 643 | 0,0095 = | identique |
+| `/projects/projet-temoin` | mobile | 92 → 92 | 100 / 96 / 100 | 2855 → 2854 | 0,0050 = | `h1` majoritaire, identique |
+| `/projects/projet-temoin` | desktop | 100 → 100 | 100 / 96 / 100 | 644 → 645 | 0,0052 = | identique |
+| `/about` | mobile | 91 → 92 | 100 / 96 / 100 | 3163 → 3164 | 0,0220 = | identique |
+| `/about` | desktop | 100 → 100 | 100 / 96 / 100 | 730 → 733 | 0,0006 = | identique |
+
+Octets de police transférés sur `/` : 92 187 en base comme en branche.
+
+- **Non-dégradation > 2 points** : PASS (pire écart −1, Perf mobile `/projects`).
+- **CLS** : identique à la base sur les 12 combinaisons, mais **jamais 0, base comprise** (max 0,0718 sur `/`
+  desktop, décalage de `app-home-hero-section > div.page-container`, présent sur `master`). Le critère « CLS
+  médian 0 » n'est donc pas tenable tel quel : pour les PR 4 à 6b, le critère appliqué est **CLS médian ≤ base**,
+  et le décalage du hero est un suivi à part (hors spec 033).
+- **Élément LCP** : identique sur 11 combinaisons ; sur `/` mobile, 2 passes retiennent le `h1` au lieu du `p`
+  en fondu retardé (mêmes dimensions qu'en base) : variance liée à l'animation, pas un changement de rendu.
