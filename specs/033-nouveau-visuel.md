@@ -746,3 +746,37 @@ réseau et environnementales : `GET /api/config` 404 (route absente de la doublu
 document `/does-not-exist` ; avertissement de dev sur le préchargement d'Archivo (inchangé, PR 5).
 
 Verdict : **PASS**.
+
+## Review code
+
+PR 4 (`feat/033-tokens`, `e37e6c1` RED + `8f4de5e` GREEN), revue le 2026-10-22 contre `origin/master`.
+
+**Verdict** : APPROVED
+**Gates CI locaux** : tests ✅ (`pnpm test` après `pnpm exec ng cache clean` + purge `node_modules/.vite` : 225 fichiers, 4368/4368, exit 0) / lint ✅ (`pnpm lint`, exit 0) / format ✅ (`pnpm run format:check`, exit 0) / build ✅ (`pnpm run build --configuration production`, exit 0, postbuild CSP sur 3 pages)
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main (archéologie, `text-white`, `accent-primary-bg`, `bg-primary/≥9`, couleurs Tailwind par défaut, `--color-accent`, balayage de recalibration sur `src`, `e2e`, `ci`, `.github`)
+**Warnings de gate** : aucun (test, lint, format, build)
+**Rendu compilé** : ✅ (CSS de prod : `text-on-primary`, `accent-primary`, `bg-primary/8` et les deux `--theme-on-primary` présents ; garde `ci.yml` rejouée sur `dist/` : code 0)
+**Preuve de verify runtime** : ✅ (preuve `## Verify` cohérente, rejouée : `pnpm start` + doublure, `/blog?tag=Angular` en clair, `/blog/article-temoin` en sombre, valeurs calculées conformes, console sans erreur JS ni d'hydratation)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+Contrastes recalculés indépendamment (OKLCH → sRGB, minimum flottant / 8 bits) : tous conformes au plan à ± 0,01 ; tous les `--theme-*` OKLCH dans le gamut sRGB.
+
+**Tests notables** :
+- ⚠️ `src/app/features/blog/application/blog-tag-palette.spec.ts:15` — `accentTints` local qui duplique la regex de `@shared/testing/accent-tints`. Suggestion : un seul helper.
+- ⚠️ `src/app/pages/page-not-found.spec.ts:27` et `src/app/features/auth/application/two-factor-enable-form.spec.ts:60` — même filtre de couleurs recopié à 2 sites.
+- ✨ `src/app/theme-tokens.spec.ts` — golden `toEqual` sur les tokens et carte exacte de `@theme` : la dérive d'un token ou un `--color-*` orphelin casse la suite.
+
+**Risque résiduel** (advisory, § 8) :
+- réversibilité : profil absent · monitoring : Sentry (profil)
+- non couvert par les gates : la règle « teinte ≤ 8 % sous texte orange » (survols) ne tient que par la revue ; les contrastes réels restent prouvés par le job `a11y` en CI.
+
+**Points non bloquants (à statuer par la session principale)** :
+1. `src/app/features/blog/application/blog-tag-palette.ts:9-19` — `solid` n'a aucun consommateur (seul `tint` est lu, par `blog-tag-link.ts:25` et `admin-tags-selector.ts:150`, et ce depuis #228). La PR y ajoute `SELECTED_TAG_CLASSES` et 6 cas de test, et `DESIGN.md:337` le décrit comme un état rendu. À remonter à `architect` : supprimer `solid` (et ses tests), ou dire dans `DESIGN.md` que l'état n'est rendu nulle part.
+2. `src/app/shared/ui/toast.ts:20,23`, `src/app/features/auth/pages/login/login.ts:24`, `src/app/features/auth/pages/two-factor-verify/two-factor-verify.ts:24` restent à `bg-primary/10`. Acceptable : sous ces teintes, l'orange ne colore que des icônes (contenu non textuel : 4,50:1 ≥ 3:1) ; le texte du toast est `foreground`. Le toast est restylé en PR 6a.
+3. `docs/adr/0030-*.md:3` — statut « proposé », passe à « accepté » au merge de cette PR.
+4. `.claude/project-profile.md:109` cite encore `--color-accent` (supprimé) parmi les tokens-clés.

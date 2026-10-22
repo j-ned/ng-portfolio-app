@@ -177,7 +177,7 @@ Deux registres (Sable / Nuit), un accent orange, deux couleurs d'autocollant, de
 ### Primary : l'orange copeau
 
 - **Orange texte Sable** (`#bc3700`, `oklch(53.2% 0.178 37)`) : `--theme-primary-text` en clair. Liens, anneau de focus, accent du `<h1>`, cotes, bordures actives. 5,21:1 sur le fond, 5,69:1 sur une carte.
-- **Orange aplat Sable** (`#ed6e12`, `oklch(68% 0.18 48)`) : `--theme-primary-bg` en clair. Fond du bouton primaire et du tag sélectionné, **toujours avec un texte sombre** (`on-primary` = `foreground`, 5,36:1). Jamais un texte orange sur cet aplat, jamais un texte blanc.
+- **Orange aplat Sable** (`#ed6e12`, `oklch(68% 0.18 48)`) : `--theme-primary-bg` en clair. Fond du bouton primaire, **toujours avec un texte sombre** (`on-primary` = `foreground`, 5,36:1). Jamais un texte orange sur cet aplat, jamais un texte blanc.
 - **Orange Nuit** (`#f99549`, `oklch(76% 0.15 55)`) : `--theme-primary-text` **et** `--theme-primary-bg` en sombre. 7,74:1 sur le fond, 6,74:1 sur une carte ; sur l'aplat, le texte prend la couleur du fond (`on-primary` = `background`, 7,74:1).
 
 ### Stickers : sauge et lavande
@@ -334,7 +334,7 @@ Aucune autre ombre, boutons compris.
 ### Tags / Badges
 
 - **Pas de composant de pastille générique** (`shared/ui/tag.ts` retiré avec la page Audience, son dernier consommateur). Un statut (« Publié », « Brouillon », « Mis en avant ») n'est pas une pastille colorée : c'est un tampon (`app-stamp`), `status-*` sur `status-*/15` frôlant 4,5:1 en Sable (4,52:1 pour le succès).
-- **Tags du blog** (`blog-tag-palette.ts`) : tout le catalogue en `bg-primary/5 text-primary border-primary/30`, survol `bg-primary/8`, quelle que soit la catégorie ; tags libres neutres (`bg-foreground/8 text-muted border-foreground/20`, survol `bg-foreground/15`) ; sélection en `bg-primary-bg text-on-primary border-foreground` : l'aplat Sable n'a que 2,81:1 contre le fond, le contour `foreground` porte l'état (Selected State Rule). Puce du filtre actif de la liste du blog (`tag-filter-clear`) : mêmes teintes, `bg-primary/5`, survol `bg-primary/8`. Pas de couleur par catégorie (One Orange Rule). Les pastilles de tags ne vivent que sur la page article (`BlogTagLink`, lien vers `/blog?tag=`) et dans le sélecteur de l'admin : la liste du blog n'en affiche plus, ses lignes disent leurs sujets en repère (« Ligne d'article », ci-dessous).
+- **Tags du blog** (`blog-tag-palette.ts`) : tout le catalogue en `bg-primary/5 text-primary border-primary/30`, survol `bg-primary/8`, quelle que soit la catégorie ; tags libres neutres (`bg-foreground/8 text-muted border-foreground/20`, survol `bg-foreground/15`) ; aucun état sélectionné affiché (le filtre actif se dit par la puce ci-après). Puce du filtre actif de la liste du blog (`tag-filter-clear`) : mêmes teintes, `bg-primary/5`, survol `bg-primary/8`. Pas de couleur par catégorie (One Orange Rule). Les pastilles de tags ne vivent que sur la page article (`BlogTagLink`, lien vers `/blog?tag=`) et dans le sélecteur de l'admin : la liste du blog n'en affiche plus, ses lignes disent leurs sujets en repère (« Ligne d'article », ci-dessous).
 
 ### Cards / Containers
 

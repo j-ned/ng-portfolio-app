@@ -8,8 +8,6 @@ const FIRST_TAG_OF_EACH_CATEGORY = (
   Object.entries(BLOG_TAGS_BY_CATEGORY) as [BlogTagCategory, readonly string[]][]
 ).map(([category, tags]) => [category, tags[0]] as const);
 
-const SELECTED = ['bg-primary-bg', 'border-foreground', 'text-on-primary'];
-
 const tokens = (classes: string): readonly string[] => classes.split(/\s+/).filter(Boolean).sort();
 
 const accentTints = (classes: string): readonly string[] =>
@@ -25,13 +23,6 @@ describe('blogTagPalette', () => {
         text: true,
         tints: ['bg-primary/5', 'hover:bg-primary/8'],
       });
-    },
-  );
-
-  it.each([...FIRST_TAG_OF_EACH_CATEGORY.map(([, tag]) => tag), 'Tag inconnu'])(
-    'Given le tag « %s » When on lit sa palette sélectionnée Then l’aplat d’accent porte le texte sur accent et un contour foreground',
-    (tag) => {
-      expect(tokens(blogTagPalette(tag).solid)).toEqual(SELECTED);
     },
   );
 
@@ -52,9 +43,9 @@ describe('blogTagPalette', () => {
   it.each([...FIRST_TAG_OF_EACH_CATEGORY.map(([, tag]) => tag), 'Tag inconnu'])(
     'Given le tag « %s » When on lit sa palette Then aucune couleur de la palette Tailwind par défaut ni de blanc en dur',
     (tag) => {
-      const { tint, solid } = blogTagPalette(tag);
-      expect(`${tint} ${solid}`).not.toMatch(DEFAULT_TAILWIND_COLOR);
-      expect(tokens(`${tint} ${solid}`).filter((token) => token.endsWith('-white'))).toEqual([]);
+      const { tint } = blogTagPalette(tag);
+      expect(tint).not.toMatch(DEFAULT_TAILWIND_COLOR);
+      expect(tokens(tint).filter((token) => token.endsWith('-white'))).toEqual([]);
     },
   );
 });
