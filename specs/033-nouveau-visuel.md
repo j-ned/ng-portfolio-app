@@ -632,3 +632,79 @@ Les PR se suivent (mêmes fichiers) ; chaque tranche est verte sans les suivante
 4. **Boutons `outlined`** : contour 2 px `foreground`, assorti aux cartes.
 5. **Œil optique** : 48 retenu par défaut ; validé à l'œil par le propriétaire sur le rendu réel dans la
    PR 5 (alternative : 96, même poids, dessin plus expressif).
+
+## Plan de test
+
+Commande : `pnpm test` (typecheck des specs + Vitest), précédée de `pnpm exec ng cache clean` et de la
+purge de `node_modules/.vite` ; code de sortie lu (`1`). `pnpm run format:check` et `eslint` sur les
+fichiers de test : verts. Tous les échecs sont des assertions (`AssertionError` sur `toEqual`), aucun
+échec de harnais ni de typage. Le reste de la suite est vert.
+
+Sweep de contrat (anciennes valeurs `text-white`, `accent-primary-bg`, `bg-primary/10` à `/20` sous texte
+d'accent, `--color-accent`, `--theme-accent`, « indigo », `oklch(… 277)`, `theme-color` `#000000`) sur
+`src/**/*.spec.ts`, `e2e/` et `ci/` : aucun autre test n'encode l'ancien contrat.
+`blog-tag-link.spec.ts` ne portait que le libellé « Signal Indigo » (renommé, reste vert).
+
+Helper partagé ajouté : `src/app/shared/testing/accent-tints.ts` (`accentTints(element)` : jetons
+`bg-primary/N`, préfixes de variante compris, triés ; `null` si l'élément manque).
+
+### Tranche 4.1 — le texte reste lisible sur l'accent
+
+- `shared/ui/button.spec.ts` (adapté) : `PRIMARY` = `bg-primary-bg text-on-primary hover:bg-primary-bg/90` ;
+  variante `text` = `text-primary hover:bg-primary/8`. Les 8 cas qui composent `PRIMARY` ou `text` tombent.
+- `features/blog/application/blog-tag-palette.spec.ts` (réécrit) : pastille catalogue avec `text-primary`
+  et teintes exactement `bg-primary/5`, `hover:bg-primary/8` (5 catégories) ; `solid` exactement
+  `bg-primary-bg border-foreground text-on-primary` (catalogue et tag libre, 6 cas) ; aucune couleur
+  Tailwind par défaut ni `*-white` (6 cas) ; parité des catégories et tag libre neutre (verts).
+- `admin-project-form.spec.ts` (adapté) : la case « Mettre en avant » porte `accent-primary` et `size-5`.
+- `admin-post-form.spec.ts` (ajout) : les deux radios de publication portent `accent-primary`, seule
+  classe `accent-*`.
+- `pages/page-not-found.spec.ts` (ajout) : le lien `not-found-home-link` mène à `/` ; ses couleurs
+  (`bg-*`/`text-*` hors tailles) sont exactement `bg-primary-bg`, `text-on-primary`.
+- `two-factor-enable-form.spec.ts` (ajout) : le bouton `twofa-submit` a pour couleurs exactement
+  `bg-status-success`, `text-on-status-success`.
+- `header.spec.ts` (ajout) : `header-monogram` a pour teintes `bg-primary/5`, `group-hover:bg-primary/8`.
+- `admin-layout.spec.ts` (ajout) : les deux `admin-monogram` (barre latérale, barre mobile) ont pour
+  teinte `bg-primary/5`.
+- `admin-tags-selector.spec.ts` (ajout) : l'option active (`aria-selected="true"`) a pour teinte
+  `aria-selected:bg-primary/8`.
+- `blog-list.spec.ts` (ajout) : la puce `tag-filter-clear` a pour teintes `bg-primary/5`,
+  `hover:bg-primary/8`.
+- `src/app/theme-tokens.spec.ts` (nouveau, lit `src/styles.css` comme `editorial-identity.spec.ts` lit les
+  sources) : valeurs des 21 tokens du tableau « Tokens des deux thèmes », clair et sombre (golden) ;
+  ensemble exact des `--theme-*` déclarés par thème (ajout de `on-primary`, `on-status-success`,
+  `sticker-*`, `on-sticker-*`, plus d'`accent`) ; carte complète des `--color-*` de `@theme`, chacun en
+  `var(--theme-…)` (`primary` → `primary-text`).
+- Renommages sans changement de comportement (verts, attendu) : `analytics-presenter.spec.ts`,
+  `admin-overview.spec.ts`, `chart-palette.spec.ts` (valeurs d'exemple orange et texte du nouveau thème),
+  `blog-tag-link.spec.ts`.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 20:58, 38 failed / 4368 total), par assertion : classes actuelles `text-white`,
+`accent-primary-bg`, `bg-primary/10`–`/20`, testids `not-found-home-link`, `twofa-submit`,
+`header-monogram`, `admin-monogram` absents, tokens absents ou à l'ancienne valeur.
+
+### Tranche 4.2 — le code se lit dans les deux thèmes
+
+- `src/app/theme-tokens.spec.ts`, `describe('syntax highlighting tokens')` : `it.each` clair / sombre, les
+  six `--theme-code-*` valent exactement les teintes du tableau « Coloration syntaxique » (le mot-clé
+  sombre = `primary-text`, le commentaire = `muted`).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 20:58, 2 failed / 4368 total), par assertion : teintes indigo / violet actuelles.
+
+### Tranche 4.3 — l'identité hors CSS
+
+- `src/app/browser-identity.spec.ts` (nouveau) : `src/index.html` déclare exactement deux
+  `meta[name="theme-color"]`, `(prefers-color-scheme: light)` `#fcf4eb` puis `(prefers-color-scheme: dark)`
+  `#141a29` ; `public/favicon.svg` n'a ni dégradé ni `<style>`, sa pastille `rect` a `rx="16"` et
+  `fill="#ed6e12"`, son texte « JN » `fill="#181f2e"`.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 20:58, 2 failed / 4368 total), par assertion : une seule `theme-color` sans `media`, favicon
+à dégradé.
+
+Laissé au GREEN, hors Vitest : `favicon.ico` 16/32/48 (régénéré hors repo), garde `ci.yml` « deux
+`theme-color` avec `media` dans le HTML prérendu », scénario axe `/blog?tag=Angular` dans
+`e2e/a11y/scenarios.ts`, et la règle « teinte ≤ 8 % » hors des gabarits ci-dessus (revue). Les contrastes
+eux-mêmes restent prouvés par le job `a11y` (happy-dom ne les calcule pas).
