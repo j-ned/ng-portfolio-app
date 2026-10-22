@@ -436,14 +436,15 @@ conservée, bouton de fermeture survol `bg-foreground/5`.
 - **Carte Open Graph par défaut** (PR 6a) : `public/og/julien-nedellec-AAAAMMJJ.png` (date de production,
   ADR-0007 décision 1 ; nouveau nom à chaque changement), 1200 × 630, PNG (aplats : poids visé
   ≤ 150 Ko, mesuré et noté). Thème clair : fond sable, carte `surface` à bord `foreground` 2 px et rayon
-  22 px, « Julien Nédellec » en Bricolage 800, « Tourneur CN et développeur web » en JN Sans 600, un
+  22 px, « Julien Nédellec » en Bricolage 800, l'accroche de l'accueil en JN Sans 600 (décision de goût 3), un
   autocollant sauge incliné, une cote orange, l'adresse du site. Aucune photo, aucun dégradé.
   Source : `docs/og/og-default.html` (hors sources Tailwind, `@source not '../docs'`), qui charge les
   woff2 de `public/fonts/` ; rendu par `pnpm exec playwright screenshot --viewport-size "1200, 630"
   file://$PWD/docs/og/og-default.html public/og/julien-nedellec-AAAAMMJJ.png` (Playwright est déjà une
   dépendance de dev, aucune nouvelle dépendance).
 - **Câblage** : `shared/seo/share-image.ts` gagne `DEFAULT_SHARE_IMAGE = { url, width: 1200, height: 630,
-  type: 'image/png', alt: 'Julien Nédellec, tourneur CN et développeur web' } as const`. `seo.ts`
+  type: 'image/png', alt: 'Julien Nédellec. Tourneur CN le jour, développeur web le reste du temps.' } as const`
+  (décision de goût 3). `seo.ts`
   remplace `AVATAR_IMAGE` / `AVATAR_ALT` par cette constante ; `twitter:card` vaut toujours
   `summary_large_image` (la carte par défaut est grande). `index.html` : `og:image`, `og:image:alt`, et
   ajout de `og:image:width`, `og:image:height`, `og:image:type` (parité avec `seo.ts`, pour les coquilles
@@ -627,8 +628,11 @@ Les PR se suivent (mêmes fichiers) ; chaque tranche est verte sans les suivante
 
 1. **Autocollant de l'accueil** : « Fait main », sauge, incliné à gauche.
 2. **Tampon** : neutre à contour, aucune couleur d'autocollant.
-3. **Carte de partage** : texte seul, sans portrait. Le sous-titre (« Tourneur CN et développeur web »
-   proposé) est calé sur les textes de la spec 031 dans la PR 6a.
+3. **Carte de partage** : texte seul, sans portrait. Sous le nom, l'**accroche de l'accueil**, « Tourneur
+   CN le jour, développeur web le reste du temps. » (`STATIC_HERO.headline` de
+   `features/home/infra/data/home.static-data.ts`), décision du propriétaire du 2026-10-22 ; elle remplace
+   le sous-titre « Tourneur CN et développeur web » proposé. Texte alternatif cohérent : « Julien Nédellec.
+   Tourneur CN le jour, développeur web le reste du temps. » (le nom, puis l'accroche telle quelle).
 4. **Boutons `outlined`** : contour 2 px `foreground`, assorti aux cartes.
 5. **Œil optique** : **48**, confirmé par le propriétaire le 2026-10-22 sur une comparaison visuelle 48 / 96
    des titres de l'accueil (96 : même poids, dessin plus serré).
@@ -747,6 +751,109 @@ licence absents (`null`), 12 lignes de largeur dans 11 gabarits. Les 4362 autres
 
 Laissé au GREEN, hors Vitest : `ci.yml` (job `docker`), statut d'ADR-0006, `DESIGN.md` § 3 et `DESIGN.json`,
 et la vérification « police bloquée puis débloquée, `h1` immobile » (DevTools, plus Lighthouse).
+
+### PR 6a — balayage et mesure communs
+
+Sweep de contrat (`[rounded]`, `rounded-md`, `rounded-sm`, `rounded-xl`, `rounded-lg`, `border-foreground/8`,
+`border-foreground/15`, `hover:border-primary/35`, `border-[1.5px]`, `tracking-[0.06em]`, `backdrop-blur`,
+`bg-*/10`, `avatar.png`, « Photo de profil », `og:image`, `twitter:card`) sur `src/**/*.spec.ts`, `e2e/` et
+`ci/` : seuls les specs ci-dessous figeaient l'ancien contrat (`admin-save-bar.spec.ts` ne lit
+`border-line-strong` que sur sa propre barre, hors périmètre). Hors tests, `header.ts` lie encore
+`[rounded]="true"` deux fois (à retirer au GREEN avec l'entrée).
+
+Mesure : les quatre tranches touchent des fichiers disjoints et chaque bloc ci-dessous ne tombe que sur
+son composant ; elles ont été mesurées ensemble (un seul `pnpm test`), sous un squelette jetable posé le
+temps de la mesure puis retiré (précédent : spec 011) : `sticker.ts` exportant `StickerTone`,
+`StickerTilt` et un composant `Sticker` aux deux entrées, sans classe, et un `DEFAULT_SHARE_IMAGE` aux
+valeurs de l'avatar actuel. Sur l'arbre commité, la compilation s'arrête sur `TS2307` `./sticker` et
+`TS2305` `DEFAULT_SHARE_IMAGE` (trois specs) : **symboles dus au GREEN** (`src/app/shared/ui/sticker.ts`,
+`src/app/shared/seo/share-image.ts`), aucune autre erreur de typage. `prettier --check` et `eslint` des
+11 specs : verts.
+
+Mesure commune : `pnpm test` le 2026-10-22 22:49, après `pnpm exec ng cache clean` et purge de
+`node_modules/.vite`, code de sortie `1`, 48 failed / 4396 total ; les 48 échecs sont des
+`AssertionError`, aucun échec de harnais ; les 4348 autres tests sont verts (tranches 4.1 à 5
+comprises).
+
+### Tranche 6a.1 — les boutons sont des pilules
+
+- `shared/ui/button.spec.ts` (adapté) : `rounded-full` entre dans la base, `rounded-md` disparaît de tous
+  les attendus ; `OUTLINED` = `border-2 border-foreground text-foreground hover:border-primary
+  hover:text-primary` ; `outlined-danger` en `border-2` ; `GHOST_ICON` en `rounded-full` ; le cas
+  « Given rounded » et l'hôte `[rounded]="true"` supprimés (l'entrée disparaît). 16 cas, tous rouges.
+- `src/app/theme-tokens.spec.ts`, `describe('radius tokens')` (ajout) : `@theme` déclare exactement
+  `--radius-part: 0.5rem`, `--radius-field: 0.75rem`, `--radius-card: 1rem`, `--radius-block: 1.375rem` ;
+  `it.each` `form-input` / `app-select` : le seul jeton `rounded*` de l'`@utility` est `rounded-field`
+  (lecture par découpe sur `@utility `, sans capture d'accolades). 3 rouges.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 22:49, 19 failed / 4396 total), par assertion : `rounded-md`, `border border-foreground/15`,
+`hover:border-primary/40`, aucun `--radius-*`, `rounded-lg` dans les deux utilitaires.
+
+### Tranche 6a.2 — l'autocollant existe
+
+- `shared/ui/sticker.spec.ts` (nouveau, TestBed, hôtes à `input()` + `setInput`, `data-testid="sticker"`) :
+  sans liaison, pastille sauge droite et texte projeté « Fait main » ; `it.each` sur `StickerTone`
+  (`bg-sticker-*` + `text-on-sticker-*`) et sur `StickerTilt` (`none` sans rotation, `left` `-rotate-2`,
+  `right` `rotate-2`), listes exactes avec la base `inline-flex w-fit items-center rounded-full border-2
+  border-transparent px-3 py-1 font-display text-sm font-bold leading-tight
+  forced-colors:border-[CanvasText]` ; réactivité (ton et inclinaison changés après rendu) ; ni `role`, ni
+  `tabindex`, ni `aria-*` sur l'hôte, aucun interactif ni titre dedans (vert sous le squelette, par
+  nature : il garde le contrat).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 22:49, 7 failed / 4396 total), par assertion : l'hôte n'a aucune classe.
+
+`e2e/a11y/forced-colors.spec.ts` est **reporté à la tranche 6b.2** : il vise `/`, et l'autocollant n'y est
+posé qu'en 6b ; écrit ici, il serait rouge jusqu'à la PR suivante (une tranche doit être verte sans les
+suivantes), et l'y injecter à la main testerait une copie des classes, pas le composant. En 6a, le
+contour en couleurs forcées est tenu par la classe `forced-colors:border-[CanvasText]` (spec ci-dessus).
+
+### Tranche 6a.3 — tampon, cartouche, cote, carte de lien, toast restylés
+
+- `shared/ui/stamp.spec.ts` (adapté) : liste exacte `inline-block rounded-part border-2 border-foreground
+  bg-surface px-2.5 py-1 text-xs font-semibold text-foreground` (plus de mono majuscule) ; placement et
+  `border-dashed` inchangés. 4 rouges.
+- `shared/ui/cartouche.spec.ts` (ajout) : cadre `block rounded-part border-2 border-foreground bg-surface
+  text-sm overflow-hidden` ; barre de titre `cartouche-head` (testid **à poser au GREEN**) `grid gap-1
+  border-b-2 border-foreground p-3.5` ; lignes `border-t border-line-strong first:border-t-0` ; libellés
+  `dt` `border-r border-line-strong px-3.5 py-2.5 text-xs font-semibold text-muted`. 1 rouge.
+- `shared/ui/dimension-line.spec.ts` (ajout) : les sept pièces de l'hôte, dans l'ordre : attaches
+  `h-3.5 border-l-2`, pointes `size-0 border-y-[5px] border-y-transparent border-r-10` / `border-l-10`
+  (`*-current`), lignes `flex-1 border-t-2`, libellé mono inchangé ; hôte `text-primary`. 1 rouge.
+- `shared/ui/link-card.spec.ts` (adapté, renforcé) : liste **exacte** (était `arrayContaining`)
+  `group grid gap-1 rounded-card border-2 border-foreground bg-surface p-6 transition-colors
+  hover:border-primary`, plus `text-right` en alignement de fin. 2 rouges.
+- `shared/ui/toast.spec.ts` (adapté) : le cas « teinté à 10 % » devient, par sévérité, fond exactement
+  `bg-surface`, aucun `*blur*`, `border-l-4` et une couleur de bord de la sévérité ; ajout : survol du
+  bouton de fermeture exactement `hover:bg-foreground/5`. 8 rouges.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 22:49, 16 failed / 4396 total), par assertion : `rounded-sm`/`rounded-xl`, traits de 1 ou 1,5 px,
+`border-line`, mono majuscule, `bg-*/10`, `backdrop-blur-sm`, survols teintés de la sévérité.
+
+### Tranche 6a.4 — la carte de partage par défaut
+
+- `shared/seo/share-image.spec.ts` (ajout) : golden `DEFAULT_SHARE_IMAGE` = `{ url:
+  https://nedellec-julien.fr/og/julien-nedellec-AAAAMMJJ.png, width: 1200, height: 630, type: 'image/png',
+  alt }`, l'alt valant « Julien Nédellec. » suivi de `STATIC_HERO.headline` (il suit l'accroche de l'accueil) ; `public/og/`
+  contient exactement une carte datée et c'est celle annoncée ; son en-tête est un PNG de 1200 × 630 ;
+  `docs/og/og-default.html` écrit le nom et l'accroche, sans `<img>` ni dégradé. 4 rouges.
+- `core/seo/seo.spec.ts` (adapté) : sans visuel, `og:image` contient `/og/julien-nedellec-` et vaut
+  `DEFAULT_SHARE_IMAGE.url`, alt = `DEFAULT_SHARE_IMAGE.alt`, `1200` × `630`, `image/png`, `twitter:card`
+  `summary_large_image` ; avec visuel, inchangé (vert). 1 rouge.
+- `src/app/browser-identity.spec.ts` (ajout) : `src/index.html` annonce la même carte que `seo.ts`
+  (`og:image`, `og:image:alt`, `og:image:width` `1200`, `og:image:height` `630`, `og:image:type`
+  `image/png`, `twitter:card` `summary_large_image`). 1 rouge.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 22:49, 6 failed / 4396 total), par assertion : avatar 400 × 400 et « Photo de profil »,
+`public/og/` et `docs/og/` absents (`null`, 0 fichier), `index.html` sans dimensions ni type.
+
+Laissé au GREEN, hors Vitest : le PNG lui-même (rendu Playwright de `docs/og/og-default.html`, poids
+mesuré et noté), les deux gardes `ci.yml` (`og:image` du HTML prérendu présente dans `dist/`, `og:image` de
+la coquille `/login` en 200 `image/png`), `header.ts` (`[rounded]` retiré), `DESIGN.md` § 5 et
+`DESIGN.json`. Le validateur Open Graph se passe en production.
 
 ## Journal des tranches
 
