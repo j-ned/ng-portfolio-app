@@ -709,6 +709,45 @@ Laissé au GREEN, hors Vitest : `favicon.ico` 16/32/48 (régénéré hors repo),
 `e2e/a11y/scenarios.ts`, et la règle « teinte ≤ 8 % » hors des gabarits ci-dessus (revue). Les contrastes
 eux-mêmes restent prouvés par le job `a11y` (happy-dom ne les calcule pas).
 
+### Tranche 5 — les titres en Bricolage Grotesque
+
+Sweep de contrat (`archivo`, `Archivo`, `font-stretch`, `fonts/`, `woff2` sur `src/**/*.spec.ts`, `e2e/`,
+`ci/`) : aucun test existant ne fige Archivo ni une largeur, rien à adapter. Hors tests, l'ancien contrat
+reste dans `.github/workflows/ci.yml:238` (nom du fichier de police du job `docker`), à changer au GREEN.
+
+`src/app/display-font.spec.ts` (nouveau, lit `src/styles.css`, `src/index.html` et `public/fonts/` comme
+`theme-tokens.spec.ts` et `browser-identity.spec.ts`) :
+
+- face `'Bricolage Grotesque'` : déclarations exactement `src: url('/fonts/bricolage-grotesque-1.001-latin-opsz48-wdth100-wght600-800.woff2') format('woff2')`,
+  `font-weight: 600 800`, `font-display: swap` (golden : aucun `font-stretch`) ;
+- face `'Bricolage Grotesque Fallback'` : exactement les quatre `local()` (Arial Bold, Arial-BoldMT,
+  Liberation Sans Bold, LiberationSans-Bold), `font-weight: 600 800`, `size-adjust: 97.56%`,
+  `ascent-override: 95.32%`, `descent-override: 27.67%`, `line-gap-override: 0%` ;
+- familles déclarées : exactement Bricolage Grotesque, JN Sans (×2), JN Mono et les deux replis ;
+- `--font-display` = `'Bricolage Grotesque', 'Bricolage Grotesque Fallback', system-ui, sans-serif` ;
+- `styles.css` : aucun `font-stretch` (face et règles `h1`–`h3`) ;
+- `it.each` sur `styles.css` et `index.html` : plus aucune mention d'Archivo (commentaires compris) ;
+- `index.html` : les `link[rel=preload][as=font]` sont exactement un, vers le nouveau fichier,
+  `type="font/woff2"`, `crossorigin` ;
+- `public/fonts/` contient exactement les six fichiers attendus (Bricolage Grotesque et
+  `OFL-bricolage-grotesque.txt` à la place des deux fichiers Archivo) ;
+- le fichier de police commence par la signature `wOF2` ;
+- `OFL-bricolage-grotesque.txt` contient « SIL OPEN FONT LICENSE Version 1.1 » et « The Bricolage Grotesque
+  Project Authors » ;
+- balayage des `.ts` non-spec de `src/app` : aucune ligne avec `font-stretch-` ou `[font-stretch:`
+  (liste `fichier:ligne` attendue vide).
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-22 22:04, 12 failed / 4374 total), après `pnpm exec ng cache clean` et purge de
+`node_modules/.vite`, code de sortie `1` ; `pnpm run format:check` et `eslint` du fichier : verts ; aucune
+erreur de typage. Les 12 échecs sont des `AssertionError` : faces Bricolage absentes (`undefined`), familles
+et `--font-display` à Archivo, 4 `font-stretch` dans `styles.css`, mentions d'Archivo (6 dans `styles.css`,
+1 dans `index.html`), preload vers le fichier Archivo, dossier `public/fonts/` à l'ancienne, fichier et
+licence absents (`null`), 12 lignes de largeur dans 11 gabarits. Les 4362 autres tests restent verts.
+
+Laissé au GREEN, hors Vitest : `ci.yml` (job `docker`), statut d'ADR-0006, `DESIGN.md` § 3 et `DESIGN.json`,
+et la vérification « police bloquée puis débloquée, `h1` immobile » (DevTools, plus Lighthouse).
+
 ## Journal des tranches
 
 - **Tranche 4.1 — le texte reste lisible sur l'accent** : GREEN 4368 passed / 4368 total · refactor : classes de l'état sélectionné des tags factorisées dans une constante (deux palettes, un seul jeu)
