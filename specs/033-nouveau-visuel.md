@@ -753,6 +753,7 @@ et la vérification « police bloquée puis débloquée, `h1` immobile » (DevTo
 - **Tranche 4.1 — le texte reste lisible sur l'accent** : GREEN 4368 passed / 4368 total · refactor : classes de l'état sélectionné des tags factorisées dans une constante (deux palettes, un seul jeu)
 - **Tranche 4.2 — le code se lit dans les deux thèmes** : GREEN 4368 passed / 4368 total · refactor : aucun
 - **Tranche 4.3 — l'identité hors CSS** : GREEN 4368 passed / 4368 total · refactor : aucun
+- **Tranche unique PR 5 — les titres en Bricolage Grotesque** : GREEN 4374 passed / 4374 total · refactor : aucun
 
 ## Verify
 
@@ -783,6 +784,60 @@ Captures : `/blog?tag=Angular` clair, `/blog/article-temoin` clair et sombre, `/
 Console : aucune erreur JS ni d'hydratation (« Angular hydrated 16 component(s) ») ; seules erreurs,
 réseau et environnementales : `GET /api/config` 404 (route absente de la doublure) et le 404 attendu du
 document `/does-not-exist` ; avertissement de dev sur le préchargement d'Archivo (inchangé, PR 5).
+
+Verdict : **PASS**.
+
+### PR 5 (police)
+
+Exécuté par `angular-expert` le 2026-10-22 sur la branche `feat/033-police` : `pnpm start` (port 4200,
+SSR de dev) devant la doublure `ci/api-stub` (`PORT=3000 STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs`),
+navigateur intégré.
+
+Fichier de police produit hors repo (dossier vide du scratchpad), binaire identique sur deux exécutions
+(SHA-256 `10dd73b15fe8917443b93d9ddf0aa1cf5d66c2e665920af37b5b9a50c192b5dd`, 37 460 octets, la valeur
+d'ADR-0031) :
+
+```sh
+npm pack @fontsource-variable/bricolage-grotesque@5.3.0 --registry https://registry.npmjs.org
+tar xzf fontsource-variable-bricolage-grotesque-5.3.0.tgz
+python3 -m pip install --target .ft fonttools==4.67.0 brotli==1.2.0
+PYTHONPATH=.ft python3 -m fontTools.varLib.instancer \
+  package/files/bricolage-grotesque-latin-standard-normal.woff2 \
+  opsz=48 wdth=100 wght=600:800 --no-recalc-timestamp \
+  -o bricolage-grotesque-1.001-latin-opsz48-wdth100-wght600-800.woff2
+```
+
+Source : 131 548 octets, 226 points de code, `head.fontRevision` 1.001, nom ID 5 « Version 1.001 » ;
+sortie : seul l'axe `wght` 600–800 reste, 226 points de code, métriques `OS/2` typo 930 / −270 / 0 sur
+1 000. Licence : `LICENSE` du paquet (« Copyright 2022 The Bricolage Grotesque Project Authors », SIL OFL
+1.1), copiée en `public/fonts/OFL-bricolage-grotesque.txt`.
+
+Steps :
+
+1. `/` à 1 024 px : `h1` en `"Bricolage Grotesque", "Bricolage Grotesque Fallback", system-ui, sans-serif`,
+   graisse 800, `font-stretch` 100 %, face `Bricolage Grotesque 600 800` chargée
+   (`document.fonts.check` vrai) ; ressource `/fonts/bricolage-grotesque-1.001-…woff2` lancée par le
+   `link` de préchargement ; `curl` : `200`, `Content-Type: font/woff2`, `Content-Length: 37460` ; aucune
+   ressource hors origine (`performance.getEntriesByType('resource')`).
+2. Repli seul contre police chargée (famille du `h1` forcée sur `'Bricolage Grotesque Fallback'`, face
+   `local()` chargée, puis rétablie) : boîte du `h1` **identique** au pixel près. 1 024 px : `y` 186,25,
+   `w` 521,41, `h` 172,5, 3 lignes, élément suivant à `y` 402,75 dans les deux cas (largeur du texte
+   470,4 contre 475,7). 375 px : `y` 128, `w` 343, `h` 112,31, 3 lignes, suivant à 280,31 dans les deux
+   cas (306,3 contre 309,7). Trois premiers `h2` : hauteurs et positions identiques.
+3. `/` à 375 px, rechargé : aucune entrée `layout-shift` (`PerformanceObserver`, `buffered`).
+4. Build de production : `dist/…/browser/fonts/` porte les six fichiers attendus, aucun fichier Archivo ;
+   le HTML prérendu précharge le nouveau fichier.
+
+Capture : `/` à 375 px, `h1` « Tourneur CN le jour, développeur web le reste du temps. » en Bricolage
+Grotesque (navigateur intégré de la session).
+
+Console : aucune erreur JS ni d'hydratation (« Angular hydrated 12 component(s) ») ; seule erreur, réseau
+et environnementale : `GET /api/config` 404 (route absente de la doublure, comme en PR 4). Plus
+d'avertissement de préchargement non utilisé.
+
+Gates : `pnpm test` (après `ng cache clean` et purge de `node_modules/.vite`) 226 fichiers, 4374/4374,
+code 0 ; `pnpm lint` 0 ; `pnpm run format:check` 0 ; `pnpm run build --configuration production` 0, sans
+avertissement.
 
 Verdict : **PASS**.
 
