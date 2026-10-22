@@ -708,3 +708,41 @@ Laissé au GREEN, hors Vitest : `favicon.ico` 16/32/48 (régénéré hors repo),
 `theme-color` avec `media` dans le HTML prérendu », scénario axe `/blog?tag=Angular` dans
 `e2e/a11y/scenarios.ts`, et la règle « teinte ≤ 8 % » hors des gabarits ci-dessus (revue). Les contrastes
 eux-mêmes restent prouvés par le job `a11y` (happy-dom ne les calcule pas).
+
+## Journal des tranches
+
+- **Tranche 4.1 — le texte reste lisible sur l'accent** : GREEN 4368 passed / 4368 total · refactor : classes de l'état sélectionné des tags factorisées dans une constante (deux palettes, un seul jeu)
+- **Tranche 4.2 — le code se lit dans les deux thèmes** : GREEN 4368 passed / 4368 total · refactor : aucun
+- **Tranche 4.3 — l'identité hors CSS** : GREEN 4368 passed / 4368 total · refactor : aucun
+
+## Verify
+
+Exécuté par `angular-expert` le 2026-10-22 sur la branche `feat/033-tokens` : `pnpm start` (port 4200,
+SSR de dev) devant la doublure `ci/api-stub` (`PORT=3000 STUB_ADMIN_SESSION=1 node ci/api-stub/server.mjs`,
+cible du proxy `/api`), navigateur intégré, `prefers-color-scheme` émulé.
+
+Steps :
+
+1. Clair, `/blog?tag=Angular` : fond `oklch(0.97 0.015 70)` (sable) ; puce `tag-filter-clear` sur
+   `primary` à 5 %, texte `oklch(0.532 0.178 37)` ; bouton « M'écrire » aplat `oklch(0.68 0.18 48)`,
+   texte `oklch(0.24 0.03 265)` (`on-primary` = `foreground`) ; monogramme de l'en-tête à 5 % ; deux
+   `meta[name="theme-color"]` (`light #fcf4eb`, `dark #141a29`).
+2. Clair, `/blog/article-temoin` : bloc de code, `const` en `oklch(0.515 0.16 40)`, `42` en
+   `oklch(0.505 0.1 80)` (teintes `code-keyword` / `code-number` du plan).
+3. Sombre, `/blog/article-temoin` : classe `app-dark` posée par la préférence système, fond bleu nuit,
+   bloc de code lisible.
+4. Sombre, `/does-not-exist` : fond `oklch(0.22 0.03 265)` ; lien `not-found-home-link` aplat
+   `oklch(0.76 0.15 55)`, texte `oklch(0.22 0.03 265)` (`on-primary` = `background`).
+5. Build de production : garde `ci.yml` « deux `theme-color` avec `media` » jouée sur
+   `dist/…/mentions-legales/index.html` et `index.csr.html` : code 0.
+6. `public/favicon.ico` : capture Playwright du nouveau SVG (pastille orange, « JN » bleu nuit) en 16,
+   32 et 48 px, vérifiée à l'œil sur le 48 px.
+
+Captures : `/blog?tag=Angular` clair, `/blog/article-temoin` clair et sombre, `/does-not-exist` sombre
+(navigateur intégré de la session).
+
+Console : aucune erreur JS ni d'hydratation (« Angular hydrated 16 component(s) ») ; seules erreurs,
+réseau et environnementales : `GET /api/config` 404 (route absente de la doublure) et le 404 attendu du
+document `/does-not-exist` ; avertissement de dev sur le préchargement d'Archivo (inchangé, PR 5).
+
+Verdict : **PASS**.
