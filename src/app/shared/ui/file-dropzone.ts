@@ -138,7 +138,7 @@ import { formatFileSize } from '@shared/format/format-file-size';
         </p>
         <p class="text-xs text-muted">Glisse un fichier ici ou clique pour parcourir</p>
         @if (helperText()) {
-          <p class="text-xs text-muted/80">{{ helperText() }}</p>
+          <p class="text-xs text-muted">{{ helperText() }}</p>
         }
       </button>
     }
