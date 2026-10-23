@@ -40,10 +40,15 @@ import { HomeHero } from './home-hero';
         </div>
       </app-home-hero>
 
-      <div class="flex flex-col">
-        <app-sticker class="mb-4 self-end" data-testid="hero-sticker" tone="sage" tilt="left">{{
-          stickerLabel
-        }}</app-sticker>
+      <!-- Autocollant hors du flux, place réservée par pt-10 : son placement ne déplace pas la fiche -->
+      <div class="relative pt-10">
+        <app-sticker
+          class="absolute top-0 right-0"
+          data-testid="hero-sticker"
+          tone="sage"
+          tilt="left"
+          >{{ stickerLabel }}</app-sticker
+        >
         <app-cartouche
           data-testid="hero-work-frame"
           [title]="workFrame.title"

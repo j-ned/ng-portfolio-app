@@ -543,7 +543,7 @@ La cote d'un dessin technique : deux traits de rappel, deux pointes, une ligne i
 
 ### Accueil : autocollant du premier écran (`features/home/application/home-hero-section.ts`)
 
-- Le seul `app-sticker` du site (Sticker Rule) : « Fait main » (`HOME_HERO_STICKER_LABEL`), ton `sage`, `tilt="left"`, `data-testid="hero-sticker"`. Dans la colonne du cartouche, au-dessus de lui, aligné à droite (`self-end mb-4`) : après le `h1` dans l'ordre du DOM, dans le flux (il ne recouvre aucun texte, à 375 px comme en large), hors de tout titre, lien ou bouton.
+- Le seul `app-sticker` du site (Sticker Rule) : « Fait main » (`HOME_HERO_STICKER_LABEL`), ton `sage`, `tilt="left"`, `data-testid="hero-sticker"`. Dans la colonne du cartouche, au-dessus de lui, aligné à droite, hors du flux (`absolute top-0 right-0` dans une colonne `relative pt-10` qui lui réserve sa place : posé dans le flux, il déplaçait la fiche au chargement, CLS 0,165 en mobile) : après le `h1` dans l'ordre du DOM, dans le flux (il ne recouvre aucun texte, à 375 px comme en large), hors de tout titre, lien ou bouton.
 
 ### Page 404 (`pages/page-not-found.ts`)
 

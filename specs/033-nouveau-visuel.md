@@ -1411,3 +1411,36 @@ Contrastes recalculés indépendamment (OKLCH → sRGB, WCAG 2.x), Sable / Nuit 
 faveur de la règle existante de `DESIGN.md` § 4 (cibles de 44 px) : liens de navigation desktop en
 `inline-flex min-h-11 items-center` (`header.ts`), `DESIGN.md` § 5 aligné. Remarques non bloquantes laissées
 en l'état (`aria-current` sur « Blog » sous `/blog/<slug>` : comportement voulu de la rubrique).
+
+## Mesure Lighthouse (PR 6b)
+
+2026-10-23. Base : image de la PR 6a (`0a83e5f`, rendu de `master` `aa3b9e2`), branche `3916e20` ; même protocole
+(doublure, Lighthouse 12.8.2, mobile et desktop, 5 passes alternées, tiers bloqués, machine sans autre charge),
+120 rapports.
+
+| Page | Profil | Perf (base → branche) | A11y | LCP ms | CLS | Élément LCP |
+|---|---|---|---|---|---|---|
+| `/` | mobile | 87 → 82 | 100 → 100 | 3225 → 3246 | **0,0033 → 0,1652** | même mélange `h1` / `p` |
+| `/` | desktop | 100 → 100 | 100 → 100 | 562 → 562 | 0,0021 → 0,0031 | `h1`, identique |
+| `/blog` | mobile | 91 → 90 | 100 → 100 | 3279 → 3363 | 0,0032 = | même mélange |
+| `/blog` | desktop | 98 → 97 | 100 → 100 | 897 → 909 | 0,0013 = | même mélange |
+| `/blog/article-temoin` | mobile | 68 → 91 (bruit base) | 100 → 100 | 2856 → 2853 | 0,0002 → 0,0005 | identique |
+| `/blog/article-temoin` | desktop | 93 → 100 | 100 → 100 | 645 → 646 | 0,0008 = | identique |
+| `/projects` | mobile | 89 → 90 | 100 → 100 | 3484 → 3422 | 0,0084 = | même mélange |
+| `/projects` | desktop | 100 → 100 | 100 → 100 | 619 → 644 | 0,0119 → 0,0120 | identique |
+| `/projects/projet-temoin` | mobile | 89 → 88 | 100 → 100 | 2857 → 2856 | 0,0052 = | `h1` majoritaire |
+| `/projects/projet-temoin` | desktop | 100 → 100 | 100 → 100 | 649 → 646 | 0,0042 = | identique |
+| `/about` | mobile | 89 → 91 | 100 → 100 | 3165 → 3156 | 0,0222 = | identique |
+| `/about` | desktop | 100 → 100 | 100 → 100 | 734 → 731 | 0,0006 = | identique |
+
+**Régression trouvée et corrigée** : sur `/` mobile, l'autocollant, posé dans le flux au-dessus du cartouche,
+était placé puis replacé pendant le chargement (trace : nœud déplacé de `[0, 0]` à `[329, 597]`) et déplaçait le
+cartouche (CLS 0,1652, au-delà du seuil de 0,1). Correctif : autocollant hors du flux (`absolute top-0 right-0`)
+dans une colonne `relative pt-10` qui lui réserve sa place ; rendu visuel inchangé. Remesure de `/` après
+correctif (3 passes par profil) : mobile Perf 90 / 90 / 93, CLS 0,0121 / 0,0121 / 0,0029 ; desktop Perf 100,
+CLS 0,0089 / 0,0053 / 0,0120. Les autres pages ne contiennent pas l'autocollant.
+
+- **Non-dégradation > 2 points** : PASS après correctif (`/` mobile 87 → 90–93).
+- **CLS médian < 0,02** (critère fixé à la PR 6a) : PASS sur toutes les pages après correctif.
+- **Élément LCP** : mêmes candidats partout.
+- **Octets de police sur `/`** : 90 135 des deux côtés.
