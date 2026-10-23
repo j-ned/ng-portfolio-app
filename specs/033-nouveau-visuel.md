@@ -1185,3 +1185,37 @@ Carte `public/og/julien-nedellec-20261022.png` regardée : conforme au plan (fon
 `ci.yml`, `og-default.html`, `.gitignore`). Décision du propriétaire du 2026-10-23 : la cote de la carte de
 partage porte une durée, « depuis 2025 » (règle des cotes de `DESIGN.md`), au lieu de « Angular · NestJS » ;
 carte re-rendue (`8425fa5`, 34 543 octets).
+
+## Mesure Lighthouse (PR 6a)
+
+2026-10-23. Base : image de la PR 5 (`2276f2a`, rendu identique à `master` `86f54ba`), branche `0a83e5f`
+(`8425fa5` et `d78e2c4` ne touchent ni le rendu ni le code chargé). Même protocole (doublure, Lighthouse 12.8.2,
+mobile et desktop, 5 passes alternées, tiers bloqués), 120 rapports ; recontrôle de `/` et `/about` mobile sur
+machine calme (20 rapports), la première série ayant tourné pendant des builds parallèles.
+
+| Page | Profil | Perf (base → branche) | A11y / BP / SEO | LCP ms | CLS | Élément LCP |
+|---|---|---|---|---|---|---|
+| `/` | mobile (recontrôle) | 87 → 86 | 100 / 96 / 100 | 3263 → 3194 | 0,0028 → 0,0033 | `p` / `h1` en fondu, même mélange |
+| `/` | desktop | 100 → 100 | 100 / 96 / 100 | 562 → 562 | 0,0018 → 0,0021 | `h1`, identique |
+| `/blog` | mobile | 91 → 91 | 100 / 96 / 100 | 3278 → 3275 | 0,0027 → 0,0032 | même mélange |
+| `/blog` | desktop | 98 → 100 | 100 / 96 / 100 | 747 → 717 | 0,0013 = | même mélange |
+| `/blog/article-temoin` | mobile | 67 → 91 (bruit base) | 100 / 96 / 100 | 2897 → 2856 | 0,0003 → 0,0005 | identique |
+| `/blog/article-temoin` | desktop | 88 → 92 | 100 / 96 / 100 | 619 → 628 | 0,0008 = | identique |
+| `/projects` | mobile | 65 → 66 | 100 / 96 / 100 | 3666 → 3656 | 0,0049 → 0,0084 | même mélange |
+| `/projects` | desktop | 98 → 100 | 100 / 96 / 100 | 692 → 643 | 0,0078 → 0,0119 | identique |
+| `/projects/projet-temoin` | mobile | 81 → 87 | 100 / 96 / 100 | 2865 → 2854 | 0,0048 → 0,0052 | `h1` majoritaire |
+| `/projects/projet-temoin` | desktop | 92 → 100 | 100 / 96 / 100 | 646 → 649 | 0,0037 → 0,0042 | identique |
+| `/about` | mobile (recontrôle) | 91 → 91 | 100 / 96 / 100 | 3157 → 3160 | 0,0222 = | identique |
+| `/about` | desktop | 100 → 100 | 100 / 96 / 100 | 725 → 699 | 0,0006 = | identique |
+
+- **Non-dégradation > 2 points** : PASS après recontrôle (la série brute donnait `/` mobile 88 → 68 : TBT
+  multiplié sur le même chunk, base touchée de la même façon ailleurs, signature d'un CPU chargé).
+- **CLS ≤ base** : **non tenu**, petites hausses réelles et reproductibles sur 7 combinaisons : nouveau décalage
+  `app-cartouche > dl` sur `/` (0,0032, à la place de `h1 > span` 0,0027), `section.mt-12` de `/projects`
+  (0,0078 → 0,0119 desktop), lignes du blog, choix techniques de la fiche projet. Maximum 0,0119, très loin du
+  seuil « bon » de 0,1. **Arbitrage du propriétaire (2026-10-23)** : accepté et noté ; correction en suivi à
+  part (réserver la hauteur du cartouche et des sections à traits de 2 px avant hydratation). Pour la PR 6b, le
+  critère devient **CLS médian < 0,02** par page et profil.
+- **Élément LCP** : mêmes candidats (alternance `h1` / `p` d'en-tête déjà présente en base) ; aucun nouveau
+  composant ni image ne devient élément LCP.
+- **Octets de police sur `/`** : 90 135 des deux côtés.
