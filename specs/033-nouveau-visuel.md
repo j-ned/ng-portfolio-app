@@ -1363,3 +1363,51 @@ machine calme (20 rapports), la première série ayant tourné pendant des build
 - **Élément LCP** : mêmes candidats (alternance `h1` / `p` d'en-tête déjà présente en base) ; aucun nouveau
   composant ni image ne devient élément LCP.
 - **Octets de police sur `/`** : 90 135 des deux côtés.
+
+## Review code (PR 6b)
+
+PR 6b (`feat/033-pages`, `2fe94fc` RED + `ef77fde` GREEN), revue le 2026-10-23 contre `feat/033-composants` (`d78e2c4`, PR 6a non mergée).
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test` : 228 fichiers, 4408/4408, exit 0 ; `tsc -p tsconfig.spec.json --noEmit` exit 0) / lint ✅ (`pnpm lint`, exit 0) / format ✅ (`pnpm run format:check`, exit 0) / build ✅ (`pnpm run build --configuration production`, exit 0, postbuild CSP sur 3 pages) / `pnpm a11y:typecheck` ✅ (exit 0)
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main sur les lignes ajoutées (motif d'archéologie du profil : 0 hit ; `export default`, `effect(`, `innerHTML`/`bypassSecurity`, `console.`, `fakeAsync`/`waitForAsync`, snapshots, `.only`/`.skip`, boucles générant des `it` : 0 hit)
+**Warnings de gate** : aucun (test, lint, format, build, a11y:typecheck)
+**Rendu compilé** : ✅ (CSS de prod : `.rounded-card`, `.rounded-block`, `.rounded-part`, `.bg-primary\/8`, `.bg-sticker-sage`, `.-rotate-2` présents ; `.footer-heading` = marge, `text-xs`, `font-semibold`, `muted`, sans mono ni capitales ; `nav-underline` absent. Aucun composant à sélecteur attribut touché)
+**Preuve de verify runtime** : ✅ (`## Verify` › PR 6b : 8 routes × 2 thèmes × 2 largeurs, PASS, captures, aucune `pageerror` ni erreur d'hydratation ; surfaces cohérentes avec le diff)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌ (`DESIGN.json` contredit le code en place, point 1)
+
+Plan tenu : 19 fichiers aux rayons nommés selon le rôle (`part` vignettes, squelettes et anneaux de focus ; `card` dialogues, toast, dropzone, grille de stack ; `block` couvertures, portrait, bloc de code, galerie ; `full` boutons faits main, puces, entrées de navigation) ; cartes `what-i-do-card` et `contact-form-card` en `rounded-card border-2 border-foreground bg-surface` ; navigation principale et tiroir en pilule `bg-primary/8 text-primary` avec `ariaCurrentWhenActive="page"` ; `@utility nav-underline` supprimé (garde « chaque `@utility` a un consommateur » verte) ; monogramme en aplat `bg-primary-bg text-on-primary rounded-full` ; lien de la 404 en `<a appButton>` primaire sans classe propre ; `footer-heading` en JN Sans `font-semibold` ; plus aucun `uppercase` public (`project-detail-nav.ts` ×2) ; garde mécanique `public-templates.spec.ts` sur les 40 fichiers (aucun `rounded-(md…3xl)`, aucun `uppercase`). Autocollant : un seul `app-sticker`, « Fait main » (`HOME_HERO_STICKER_LABEL`), sauge, `tilt="left"`, dans la colonne du cartouche après le `h1` (`app-home-hero`) dans l'ordre du DOM, hors titre, lien et bouton, aucun interactif dedans ; le domaine n'importe pas `shared/ui`. Auth via `icon-tile.ts` : disque pour `login` et `two-factor-verify`, aucune classe de rayon concurrente chez les consommateurs ; icône décorative (bouclier), teintes `primary/10` pré-existantes, gabarits auth inchangés comme le prescrit le plan.
+
+Tests : aucun spec modifié entre RED et GREEN. Les seules lignes retirées sont les trois « (spec 029) » des titres (demandé) et les deux anciens contrats (monogramme teinté, lien de la 404 fait main), remplacés par des assertions plus fortes (liste exacte des jetons du monogramme ; classes du lien égales à celles d'un `appButton` de référence). `accentTints` garde quatre consommateurs. `e2e/a11y/forced-colors.spec.ts` suit le harnais (`./a11y-test`, fixture `visit`, `testDir: ./a11y`, thème par défaut) ; typé par `pnpm a11y:typecheck`, exécuté en CI seulement.
+
+Contrastes recalculés indépendamment (OKLCH → sRGB, WCAG 2.x), Sable / Nuit :
+- entrée de navigation active, `primary` sur `primary/8` composé sur `background` : 4,63 / 6,84 (≥ 4,5:1, texte 15 px `font-medium`) ; sur l'en-tête `background/80` posé sur `surface` : 4,71 / 6,65 ;
+- monogramme `on-primary` sur `primary-bg` : 5,36 / 7,74 (valeurs du plan confirmées) ;
+- liens inactifs `muted` sur `background` : 6,82 / 8,66.
+
+`DESIGN.md` : encadré « État (2026-10-23) » à jour (direction entièrement en place) ; § 5 décrit le code en place (rayons, cartes publiques, galerie, couvertures, bloc de code, navigation et monogramme, pied de page, autocollant de l'accueil, 404, toast). `DESIGN.json` : non à jour, point 1.
+
+**Tests notables** :
+- ✨ `src/app/public-templates.spec.ts` : garde des sources publiques (rayons génériques, capitales) et des `@utility` orphelins ; une régression future d'un gabarit ou un utilitaire mort casse la suite.
+- ✨ `src/app/pages/page-not-found.spec.ts` : compare au rendu réel d'un `appButton` de référence plutôt qu'à une liste figée ; suit la directive sans recalibrage.
+- ✨ `src/app/layout/components/header/header.spec.ts` : navigation réelle du routeur, `aria-current` et pilule sur la seule entrée active.
+
+**Risque résiduel** (advisory, § 8) :
+- réversibilité : profil absent · monitoring : Sentry (profil)
+- advisory, non bloquant : `routerLinkActive` non exact pose `aria-current="page"` sur « Blog » aussi sous `/blog/<slug>` (la section, pas la page) ; acceptable, `aria-current="true"` serait plus exact sur les sous-pages.
+- advisory, non bloquant : dans le tiroir, `hover:bg-foreground/5` remplace la teinte `primary/8` de l'entrée active au survol (cosmétique).
+- advisory, non bloquant : `blog-like-button.ts` reste un bouton fait main (pilule) ; le plan ne nomme que la 404 pour `appButton`.
+- non couvert par les gates : `forced-colors.spec.ts` et l'axe des pages publiques ne tournent qu'en CI (pile Docker) ; mesure Lighthouse 6b pas encore inscrite dans la spec.
+
+**Points à corriger** :
+1. `DESIGN.json:272-277` (composant « Navigation Link », `nav-link`) : décrit une entrée active en « pilule pleine couleur du texte » (`background: #181f2e; color: #fcf4eb`), `min-height: 44px`, `padding: 0 12px`, alors que le code (`header.ts:43-46`) et `DESIGN.md` § 5 « Navigation » posent `rounded-full px-3.5 py-1.5`, active `bg-primary/8 text-primary`. Le miroir doit décrire le code en place (règle du plan : le document ne décrit jamais des classes absentes du code) : réécrire `description` et `css` (`.ds-nav-link[aria-current=page] { background: color-mix(in srgb, #bc3700 8%, transparent); color: #bc3700; }`, padding `6px 14px`), et trancher la hauteur : retirer `min-height: 44px` du miroir (l'entrée desktop mesure environ 34 px, au-dessus du minimum WCAG 2.5.8 de 24 px) ou ajouter `min-h-11` au lien dans `header.ts` si la règle « Cibles tactiles : 44 × 44 px » de `DESIGN.md` § 4 doit s'appliquer aux entrées de navigation.
+
+**Suites (2026-10-23)** : `DESIGN.json` « Navigation Link » réécrit d'après le code. Hauteur tranchée en
+faveur de la règle existante de `DESIGN.md` § 4 (cibles de 44 px) : liens de navigation desktop en
+`inline-flex min-h-11 items-center` (`header.ts`), `DESIGN.md` § 5 aligné. Remarques non bloquantes laissées
+en l'état (`aria-current` sur « Blog » sous `/blog/<slug>` : comportement voulu de la rubrique).

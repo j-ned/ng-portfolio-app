@@ -43,7 +43,7 @@ import { ThemeStore } from '@core/theme/theme-store';
               [routerLink]="item.href"
               routerLinkActive="bg-primary/8 text-primary"
               ariaCurrentWhenActive="page"
-              class="rounded-full px-3.5 py-1.5 text-[0.9375rem] font-medium text-muted hover:text-primary transition-colors"
+              class="inline-flex min-h-11 items-center rounded-full px-3.5 text-[0.9375rem] font-medium text-muted hover:text-primary transition-colors"
             >
               {{ item.label }}
             </a>

@@ -533,7 +533,7 @@ La cote d'un dessin technique : deux traits de rappel, deux pointes, une ligne i
 
 - **Header layout:** sticky en haut, background `var(--theme-background)`, border-bottom `var(--theme-nav-border)`, shadow `var(--theme-nav-shadow)`.
 - **Monogramme « JN »** (`app-icon-tile`, `header-monogram`) : disque en aplat `rounded-full bg-primary-bg text-on-primary`, sans bord ni teinte (5,36 Sable / 7,74 Nuit). `app-icon-tile` est rond pour tous ses usages (connexion, double authentification).
-- **Liens:** pilules `rounded-full px-3.5 py-1.5`, 15 px, `text-muted`, survol `text-primary` ; entrée active `bg-primary/8 text-primary` avec `aria-current="page"` (`ariaCurrentWhenActive`). Pas de barre soulignée.
+- **Liens:** pilules `inline-flex min-h-11 items-center rounded-full px-3.5` (cible de 44 px, § 4), 15 px, `text-muted`, survol `text-primary` ; entrée active `bg-primary/8 text-primary` avec `aria-current="page"` (`ariaCurrentWhenActive`). Pas de barre soulignée.
 - **Mobile:** drawer (`shared/ui/drawer.ts`) via icon hamburger ; entrées en pilule, active `bg-primary/8 text-primary` et `aria-current="page"` ; bascule de thème en pilule bordée.
 - **Focus visible:** outline 2px `primary`, cohérent avec les boutons.
 
