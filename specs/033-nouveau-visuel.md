@@ -1127,3 +1127,61 @@ PR 4 (doublure, Lighthouse 12.8.2, mobile et desktop, 5 passes alternées, tiers
   l'ADR-0031), à chaque passe.
 - **Police de titres bloquée** (repli seul, `/`, 1 passe) : CLS 0,0082 en desktop, 0,0028 en mobile, sous la
   base dans les deux cas.
+
+## Review code (PR 6a)
+
+PR 6a (`feat/033-composants`, `af50ec8` RED + `0a83e5f` GREEN), revue le 2026-10-23 contre `origin/master` (`86f54ba`).
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test` : 227 fichiers, 4396/4396, exit 0) / lint ✅ (`pnpm lint`, exit 0) / format ✅ (`pnpm run format:check`, exit 0) / build ✅ (`pnpm run build --configuration production`, exit 0, postbuild CSP sur 3 pages)
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main sur les lignes ajoutées (motif d'archéologie du profil : 5 hits, 4 retenus ; `export default`, `effect(`, `innerHTML`/`bypassSecurity`, `console.`, `fakeAsync`/`waitForAsync`, `@capacitor`, snapshots, `.only`/`.skip`, `fireEvent` : 0 hit ; balayage `[rounded]`, `rounded()`, `avatar.png`, « Photo de profil » sur `src`, `e2e`, `ci`, `.github` : 0 hit)
+**Warnings de gate** : aucun (test, lint, format, build)
+**Rendu compilé** : ✅ (CSS de prod : `--radius-part`, `.rounded-part`/`-field`/`-card`, `.bg-sticker-sage`, `forced-colors:border-[CanvasText]` → `border-color:CanvasText` présents ; garde `ci.yml` du job `verify` rejouée sur `mentions-legales/index.html` et `index.csr.html` : `og/julien-nedellec-20261022.png` existe dans `dist/…/browser/`)
+**Preuve de verify runtime** : ✅ (`## Verify` › PR 6a : steps, PASS, captures, console sans erreur JS ni d'hydratation ; surfaces cohérentes avec le diff)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ❌ (archéologie, point 1 ; le reste conforme)
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+Plan tenu : bouton en pilule dans la base, entrée `rounded` retirée (directive, `header.ts` ×2, spec), `outlined` et `outlined-danger` en `border-2`, `ghost-icon` `rounded-full`, `min-h-11`/`size-11`/`min-w-11` intacts ; `Sticker` à API fermée (`StickerTone`, `StickerTilt`), classes exactes du plan, `forced-colors`, ni rôle, ni `tabindex`, ni `aria-*` ; tampon neutre, cartouche (`cartouche-head`, `overflow-hidden`), cote 2 px et pointes 5/10 px, carte de lien `rounded-card border-2`, toast opaque sans flou ; quatre rayons `@theme`, `form-input`/`app-select` en `rounded-field` ; `DEFAULT_SHARE_IMAGE`, `seo.ts` (`summary_large_image` constant), `index.html` (+ width/height/type), PNG 1200 × 630 de 35 246 octets, une seule carte datée ; deux gardes `ci.yml`. Rien de la PR 6b (aucun consommateur de `app-sticker`, `HOME_HERO_STICKER_LABEL` absent). Aucun spec modifié entre RED et GREEN ; les specs adaptés renforcent (`link-card` passe d'`arrayContaining` à liste exacte), aucun n'affaiblit.
+
+Écarts déclarés, jugés :
+- alt écrit en dur dans `shared/seo/share-image.ts` : accepté. Le plan prescrit déjà un littéral, et `share-image.spec.ts` épingle `alt` = « Julien Nédellec. » + `STATIC_HERO.headline` : une dérive de l'accroche casse la suite.
+- `.gitignore` `!/docs/og/` : accepté, nécessaire (`/docs/*` exclu, sinon la source du PNG n'est pas versionnée).
+- fusion `iconClass`/`close` en `colour` (`toast.ts`) : acceptée, les deux valeurs étaient identiques après retrait du survol teinté.
+- garde du job `docker` non rejouée en local : acceptée, la CI la joue. Script relu : `curl -fsS` de `/login`, extraction de l'`og:image`, test `200 image/png`.
+- `e2e/a11y/forced-colors.spec.ts` reporté en 6b.2 : accepté (motif écrit au plan de test ; le contour reste porté par la classe testée).
+- `DESIGN.json` non modifié : déjà à l'état cible depuis la PR 3 (`.ds-sticker`, `.ds-btn-outlined` 2 px, `.ds-card` 16 px, `.ds-input` 12 px).
+
+Contrastes recalculés indépendamment (OKLCH → sRGB, WCAG), Sable / Nuit :
+- bord `foreground` 2 px : 16,47 / 13,43 sur `surface`, 15,08 / 15,42 sur `background` ;
+- bord de survol `primary` de la carte de lien : 5,69 / 6,74 sur `surface`, 5,21 / 7,74 sur `background` ;
+- autocollant : sauge 8,10 / 7,57, lavande 8,44 / 7,93 ;
+- toast sur `surface` (icône et bouton fermer, survol `foreground/5` entre parenthèses) : succès 6,16 (5,59) / 7,99 (6,96), alerte 6,20 (5,63) / 8,88 (7,74), erreur 6,63 (6,02) / 5,67 (4,94), info 5,69 (5,17) / 6,74 (5,87) ; titre `foreground` 16,47 / 13,43. Tout ≥ 4,5:1, au-delà de 3:1 pour les icônes.
+
+Carte `public/og/julien-nedellec-20261022.png` regardée : conforme au plan (fond sable, carte blanche à bord sombre et grand rayon, nom en Bricolage, accroche sur deux lignes, autocollant sauge incliné, cote orange « depuis 2025 », information déjà dans `SITE_IDENTITY`, adresse du site ; ni photo ni dégradé).
+
+`DESIGN.md` § 5 décrit les classes en place : bouton, carte de lien, cartouche, autocollant (nouveau), tampon, cote, champs, toast.
+
+**Tests notables** :
+- ✨ `src/app/shared/seo/share-image.spec.ts` : relie l'alt à l'accroche, le nom du fichier au dossier `public/og/` et l'en-tête PNG aux dimensions annoncées. Une carte renommée sans mise à jour de la constante casse la suite.
+- ✨ `src/app/browser-identity.spec.ts` : parité `index.html` ↔ `DEFAULT_SHARE_IMAGE`, filet des coquilles CSR.
+- ✨ `src/app/shared/ui/link-card.spec.ts:82` : passage d'`arrayContaining` à la liste exacte, une classe parasite ne passe plus.
+
+**Risque résiduel** (advisory, § 8) :
+- réversibilité : profil absent · monitoring : Sentry (profil)
+- non couvert par les gates : la garde `docker` (coquille `/login` → PNG servi par nginx) n'est prouvée qu'en CI ; la carte lue par un validateur Open Graph se vérifie en production ; le contour en couleurs forcées n'est éprouvé en navigateur qu'en 6b.2.
+
+**Points à corriger** :
+1. Archéologie (§ 2bis, motif du profil `ADR-[0-9]|spec [0-9]{3}`) : retirer la référence et garder le WHY d'une ligne, sur les 4 sites du diff :
+   - `src/app/shared/seo/share-image.ts:10` : « Nom daté (ADR-0007) : … » ; écrire « Nom daté : un réseau social garde la carte en cache par URL, on la renomme à chaque refonte. »
+   - `.github/workflows/ci.yml:92` : « nom daté (ADR-0007) » ; retirer `(ADR-0007)`.
+   - `docs/og/og-default.html:3` : « …julien-nedellec-AAAAMMJJ.png, ADR-0007) » ; retirer `, ADR-0007`. La procédure de rendu (l. 4-6) peut rester : c'est le mode d'emploi du fichier source.
+   - `.gitignore:9` : la ligne est réécrite par le diff et porte `(spec 030)` ; retirer la référence (« les brouillons d'articles »).
+
+**Suites (2026-10-23)** : les quatre références d'archéologie retirées des commentaires (`share-image.ts`,
+`ci.yml`, `og-default.html`, `.gitignore`). Décision du propriétaire du 2026-10-23 : la cote de la carte de
+partage porte une durée, « depuis 2025 » (règle des cotes de `DESIGN.md`), au lieu de « Angular · NestJS » ;
+carte re-rendue (`8425fa5`, 34 543 octets).

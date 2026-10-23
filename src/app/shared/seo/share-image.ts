@@ -7,7 +7,7 @@ import { SITE_IDENTITY } from '../identity/site-identity.static-data';
  */
 export const SHARE_IMAGE = { width: 1200, height: 630, type: 'image/jpeg' } as const;
 
-// Nom daté (ADR-0007) : un réseau social garde la carte en cache par URL, on la renomme à chaque refonte.
+// Nom daté : un réseau social garde la carte en cache par URL, on la renomme à chaque refonte.
 export const DEFAULT_SHARE_IMAGE = {
   url: `${SITE_IDENTITY.siteUrl}/og/julien-nedellec-20261022.png`,
   width: 1200,

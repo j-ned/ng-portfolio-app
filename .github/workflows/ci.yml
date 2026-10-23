@@ -89,7 +89,7 @@ jobs:
             echo "$metas" | grep -q 'media="(prefers-color-scheme: light)"'
             echo "$metas" | grep -q 'media="(prefers-color-scheme: dark)"'
           done
-          # Carte de partage par défaut : nom daté (ADR-0007), un renommage oublié annoncerait une image absente.
+          # Carte de partage par défaut : nom daté, un renommage oublié annoncerait une image absente.
           og_image=$(tr '\n' ' ' < $browser/mentions-legales/index.html | grep -oE '<meta[[:space:]]+property="og:image"[[:space:]]+content="[^"]*"' | sed -E 's|.*content="https://nedellec-julien\.fr/(.*)"|\1|')
           test -n "$og_image"
           test -f "$browser/$og_image" || { echo "og:image sans fichier : $og_image"; exit 1; }
