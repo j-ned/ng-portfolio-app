@@ -101,7 +101,7 @@ describe('HomeHeroSection', () => {
     ]);
   });
 
-  it('states no availability any more (spec 029)', () => {
+  it('states no availability any more', () => {
     expect(byTestId('hero-availability')).toBeNull();
   });
 

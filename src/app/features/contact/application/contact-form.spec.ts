@@ -376,7 +376,7 @@ describe('ContactForm (Signal Forms)', () => {
   });
 
   describe('Qualification', () => {
-    it('no longer asks for a project type nor a timeline (spec 029)', async () => {
+    it('no longer asks for a project type nor a timeline', async () => {
       const fixture = await setup();
       const host = fixture.nativeElement as HTMLElement;
 
@@ -460,7 +460,7 @@ describe('ContactForm (Signal Forms)', () => {
   });
 
   describe('Booking invite', () => {
-    it('no longer invites the visitor to book a call, the booking is retired (spec 029)', async () => {
+    it('no longer invites the visitor to book a call, the booking is retired', async () => {
       const fixture = await setup();
       const host = fixture.nativeElement as HTMLElement;
 

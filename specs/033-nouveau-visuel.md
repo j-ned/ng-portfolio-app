@@ -975,6 +975,8 @@ le non-recouvrement de texte à 375 px (à l'œil et par le job `a11y`), la mesu
 - **Tranche 6a.2 — l'autocollant existe** : GREEN 4396 passed / 4396 total · refactor : aucun
 - **Tranche 6a.3 — tampon, cartouche, cote, carte de lien, toast restylés** : GREEN 4396 passed / 4396 total · refactor : `iconClass` et `close` du toast fusionnés en un seul champ `colour` (devenus identiques une fois le survol teinté retiré)
 - **Tranche 6a.4 — la carte de partage par défaut** : GREEN 4396 passed / 4396 total · refactor : aucun
+- **Tranche 6b.1 — formes des gabarits publics** : GREEN 4408 passed / 4408 total · refactor : `group` retiré du lien du monogramme (plus aucun `group-hover` après l'aplat)
+- **Tranche 6b.2 — l'autocollant de l'accueil** : GREEN 4408 passed / 4408 total · refactor : aucun
 
 ## Verify
 
@@ -1100,6 +1102,38 @@ réseau et environnementales : `GET /api/config` 404 (route absente de la doublu
 
 Gates : `pnpm test` 227 fichiers, 4396/4396, code 0 ; `pnpm lint` 0 ; `pnpm run format:check` 0 ;
 `pnpm run build --configuration production` 0.
+
+Verdict : **PASS**.
+
+### PR 6b (gabarits publics, autocollant de l'accueil)
+
+Exécuté par `angular-expert` le 2026-10-23 sur la branche `feat/033-pages` : `ng serve` (port 4200, SSR de
+dev) devant la doublure `ci/api-stub` (`PORT=3002 STUB_ADMIN_SESSION=1`, le port 3000 étant tenu par une
+pile `a11y` Docker en cours : proxy `/api` copié vers `localhost:3002`), Chromium Playwright,
+`colorScheme` clair puis sombre, viewports 375 × 800 et 1280 × 800.
+
+Steps (8 routes × 2 thèmes × 2 largeurs) :
+
+1. `/` : un seul `app-sticker`, `hero-sticker` « Fait main », sauge, incliné, au-dessus du cartouche,
+   aligné à droite (1280 : `x` 1158, `y` 252, 90 × 33 ; 375 : `x` 270, `y` 625, sous les boutons).
+   Intersection de sa boîte avec tout élément texte de la page (`h1`, `p`, `a`, `button`, cellules,
+   cartouche) : **vide** aux deux largeurs et dans les deux thèmes.
+2. `/blog` : navigation principale `/blog` `aria-current="page"`, `/projects` et `/about` sans ; pilule
+   teintée visible.
+3. `/blog/article-temoin`, `/projects`, `/projects/projet-temoin`, `/about`, `/contact`, `/page-inexistante` :
+   rendus (titres « Article témoin A », « Projet témoin A »), monogramme en disque orange, lien de la 404 en
+   bouton primaire.
+
+Captures : `/` clair 1280, `/` sombre 1280, `/` clair 375 (Playwright, scratchpad de la session).
+
+Console : aucune `pageerror`, aucune erreur d'hydratation (« Angular hydrated … 0 component(s) were
+skipped ») ; seules erreurs, réseau et environnementales : `GET /api/config` 404 (route absente de la
+doublure), `giscus.app` 404 (discussion inexistante), statut 404 du document SSR de dev sur les deux pages de
+détail (le serveur de dev n'a pas d'`API_UPSTREAM`, le client rend ensuite la page ; aucun fichier de données
+ni de routage dans le diff).
+
+Gates : `pnpm test` 228 fichiers, 4408/4408, code 0 ; `pnpm lint` 0 ; `pnpm run format:check` 0 ;
+`pnpm run build --configuration production` 0 ; `pnpm a11y:typecheck` 0.
 
 Verdict : **PASS**.
 
