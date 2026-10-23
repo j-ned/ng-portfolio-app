@@ -545,4 +545,19 @@ describe('ContactForm (Signal Forms)', () => {
       expect(intro(fixture)).toBe('Dites-moi ce que vous usinez.');
     });
   });
+
+  describe('Shape', () => {
+    it('Given the form When it is rendered Then the message panel is a card: card radius, 2 px foreground edge, surface fill', async () => {
+      const fixture = await setup();
+      const card = (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="contact-form-card"]',
+      );
+
+      expect(
+        [...(card?.classList ?? [])]
+          .filter((token) => /^(?:rounded|border|bg)(?:-|$)/.test(token))
+          .sort(),
+      ).toEqual(['bg-surface', 'border-2', 'border-foreground', 'rounded-card']);
+    });
+  });
 });

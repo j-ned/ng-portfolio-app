@@ -855,6 +855,116 @@ mesuré et noté), les deux gardes `ci.yml` (`og:image` du HTML prérendu prése
 la coquille `/login` en 200 `image/png`), `header.ts` (`[rounded]` retiré), `DESIGN.md` § 5 et
 `DESIGN.json`. Le validateur Open Graph se passe en production.
 
+### PR 6b — inventaire, balayage et mesure communs
+
+Inventaire recalculé le 2026-10-23 sur `feat/033-pages` (`d78e2c4`, PR 6a non mergée, specs 031 et 032
+déjà sur la base) : `grep -rlE "rounded-(md|lg|xl|2xl)|border-foreground/[0-9]+|border-line|uppercase" src/app
+--exclude-dir=admin --exclude-dir=auth`, specs exclus : **40 fichiers** (43 au 2026-10-21).
+
+- Blog (7) : `blog-tag-palette.ts`, `blog-like-button.ts`, `blog-post-row.ts`, `blog-tag-link.ts`,
+  `render-code-block.ts`, `blog-detail.ts`, `blog-list.ts`.
+- Contact (2) : `contact-info-panel.ts`, `contact-form.ts`.
+- Accueil (3) : `home-hero.ts`, `home-latest-posts.ts`, `pages/home/home.ts`.
+- Parcours (8) : `about-diploma.ts`, `about-hero.ts`, `about-highlights.ts`, `about-journey.ts`,
+  `about-motivation.ts`, `about-stack.ts`, `about-what-i-do.ts`, `pages/about/about.ts`.
+- Réalisations (10) : `project-articles.ts`, `project-cover.ts`, `project-detail-arch-decisions.ts`,
+  `project-detail-header.ts`, `project-detail-nav.ts`, `project-detail-tech-choices.ts`,
+  `project-gallery.ts`, `project-kind-legend.ts`, `pages/project-detail/project-detail.ts`,
+  `pages/projects/projects.ts`.
+- Coque (3) : `footer.ts`, `header.ts`, `pages/page-not-found.ts`.
+- `shared/ui` (7) : `cartouche.ts`, `confirm-dialog.ts`, `drawer.ts`, `fact-list.ts`, `file-dropzone.ts`,
+  `icon-tile.ts`, `toast.ts` (`cartouche` et `toast` n'y restent que par `border-line*`, traits décoratifs
+  légitimes, et `rounded-lg`/`rounded-md` pour le toast).
+
+Les `border-line*` restants sont des traits décoratifs (Decorative Line Rule) : ni balayés ni testés en
+masse ; les `border-foreground/N` des cartes tombent avec les cartes. Sur 40 fichiers, **19** portent un
+rayon générique (38 occurrences), **1** des capitales (`project-detail-nav.ts`, deux libellés
+`uppercase` sans mono). Le seul `font-mono uppercase` public est `@utility footer-heading`
+(`table-head` est consommé par l'admin seulement).
+
+Règles mesurables retenues : (1) aucun `rounded-(md|lg|xl|2xl|3xl)` (côtés compris) dans les sources
+publiques, **sans exception** : chaque occurrence a son rayon nommé (`part`, `field`, `card`, `block`,
+`full`) ; (2) aucun `uppercase` dans les sources publiques ; (3) le mono reste autorisé partout où il
+pose une donnée (dates, durées, références, cotes, compteurs, catégories en sur-titre, code) : il n'est
+pas balayé, la frontière libellé / donnée n'étant pas mécanique. Public = toute source `.ts` non spec de
+`src/app` hors dossiers `admin` et `auth` (même périmètre que la commande d'inventaire).
+
+Sweep de contrat (`header-monogram`, `not-found-home-link`, `nav-underline`, `is-link-active`,
+`footer-heading`, `rounded-(md|lg|xl)`, `uppercase`, `bg-primary/5` du monogramme, `font-mono`) sur
+`src/**/*.spec.ts`, `e2e/` et `ci/` : seuls `header.spec.ts` (monogramme) et `page-not-found.spec.ts`
+(lien) figeaient l'ancien contrat, adaptés ci-dessous. `blog-post-row.spec.ts` (sur-titre `font-mono`,
+donnée) et `blog-list.spec.ts` (teintes de la puce de filtre) restent valides. Hors tests, `icon-tile.ts`
+sert aussi `login.ts` et `two-factor-verify.ts` : son rayon change pour l'auth aussi (au GREEN, le
+choisir sans conflit avec le `rounded-full` posé par l'en-tête).
+
+Mesure : les deux tranches touchent des fichiers disjoints et ont été mesurées ensemble,
+sous un squelette jetable retiré après mesure (précédent : 6a) : `export const HOME_HERO_STICKER_LABEL =
+''` dans `home-hero.static-data.ts`. Sur l'arbre commité, la compilation s'arrête sur `TS2724`
+`HOME_HERO_STICKER_LABEL` (deux specs) : **symbole dû au GREEN**
+(`src/app/features/home/domain/home-hero.static-data.ts`), aucune autre erreur de typage
+(`tsc -p tsconfig.spec.json`). `prettier --check` et `eslint` des 10 specs : verts ; `pnpm a11y:typecheck` : vert.
+
+Mesure commune : `pnpm test` le 2026-10-23 13:48, après `pnpm exec ng cache clean` et purge de
+`node_modules/.vite`, code de sortie `1`, 13 failed / 4408 total ; les 13 échecs sont des
+`AssertionError`, aucun échec de harnais ; les 4395 autres tests sont verts (tranches 4.1 à 6a.4
+comprises).
+
+### Tranche 6b.1 — formes des gabarits publics
+
+- `layout/components/header/header.spec.ts` (ajout) : routeur sur `/blog` (routes de `NAV_LINKS`
+  posées par `resetConfig`), la navigation principale vaut exactement `/blog` `aria-current="page"` en
+  pilule (`rounded-full` et `bg-primary/8`), `/projects` et `/about` sans `aria-current` ni teinte. Rouge :
+  `aria-current` absent (le lien porte bien `is-link-active`, la navigation a eu lieu).
+- `header.spec.ts` (adapté) : la tuile `header-monogram` a pour seuls jetons de fond, texte, bord et
+  rayon `bg-primary-bg`, `rounded-full`, `text-on-primary` (plus de teinte 5 / 8 %, plus de bord, plus de
+  `rounded-xl` hérité d'`icon-tile`). Rouge : `bg-primary/5`, `border`, `border-primary/25`, `rounded-xl`.
+- `pages/page-not-found.spec.ts` (adapté) : `not-found-home-link` mène à `/` et a **exactement** les
+  classes d'un `<a appButton>` primaire rendu à côté (hôte de référence dans le spec). Rouge : bouton
+  fait main (`rounded-lg`, `shadow-sm`, `text-sm`).
+- `features/profile/application/about-what-i-do.spec.ts` (ajout) : chaque activité
+  (`what-i-do-card`, **testid à poser au GREEN**) a pour jetons de rayon, bord et fond exactement
+  `bg-surface border-2 border-foreground rounded-card`. Rouge : aucune carte trouvée (`[]`).
+- `features/contact/application/contact-form.spec.ts` (ajout) : panneau du message (`contact-form-card`,
+  **testid à poser au GREEN**), même liste. Rouge : `[]`.
+- `features/blog/infra/parse-markdown.spec.ts` (ajout) : le seul rayon d'un `[data-code-block]` est
+  `rounded-block`. Rouge : `rounded-lg`.
+- `src/app/theme-tokens.spec.ts`, `describe('footer heading')` (ajout) : `@utility footer-heading`
+  applique exactement `mb-3 text-xs font-semibold text-muted` (triés ; plus de mono, de capitales ni
+  d'interlettrage). Rouge : `font-mono`, `font-medium`, `uppercase`, `tracking-[0.06em]`.
+- `src/app/public-templates.spec.ts` (nouveau, lecture des sources) : aucun rayon générique dans les
+  sources publiques (rouge : les 38 occurrences listées fichier par fichier) ; aucune capitale (rouge :
+  `project-detail-nav.ts` ×2) ; garde « chaque `@utility` de `styles.css` a un consommateur » (`src/app`
+  hors specs, `index.html` ou autre utilitaire), **verte par nature** : elle fera tomber le GREEN s'il
+  retire la barre de l'en-tête sans supprimer `@utility nav-underline`.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-23 13:48, 9 failed / 4408 total), par assertion : `aria-current` absent, monogramme teinté,
+lien fait main, cartes sans testid, `rounded-lg` du bloc de code, `footer-heading` mono majuscule,
+38 rayons génériques, 2 capitales.
+
+### Tranche 6b.2 — l'autocollant de l'accueil
+
+- `features/home/domain/home-hero.static-data.spec.ts` (ajout) : `HOME_HERO_STICKER_LABEL` vaut
+  « Fait main ». Rouge : `''` sous le squelette.
+- `features/home/application/home-hero-section.spec.ts`, `describe('sticker')` (ajout ; testid
+  `hero-sticker` **à poser au GREEN**) : un seul `app-sticker` dans le premier écran, c'est
+  `hero-sticker` et il lit `HOME_HERO_STICKER_LABEL` ; jetons de ton et d'inclinaison exactement
+  `-rotate-2 bg-sticker-sage text-on-sticker-sage` ; il suit le `h1` (`hero-headline`) dans l'ordre du
+  DOM, sans titre, lien ni bouton parmi ses ancêtres, sans interactif dedans. 3 rouges : aucun
+  autocollant rendu.
+- `e2e/a11y/forced-colors.spec.ts` (nouveau, Playwright, harnais `a11y-test.ts`, contre l'image Docker en
+  CI, **hors `pnpm test`**) : `/` sous `emulateMedia({ forcedColors: 'active' })`, `forced-colors: active`
+  vérifié dans la page, un seul `app-sticker`, bord haut de `hero-sticker` à `2px` `solid` et non
+  transparent. Typé par `pnpm a11y:typecheck` (vert) ; non exécuté localement (pile Docker), il tomberait
+  aujourd'hui sur `hero-sticker` introuvable.
+
+Tous les tests de cette tranche échouent à ce stade (RED confirmé via la commande test du profil le
+2026-10-23 13:48, 4 failed / 4408 total), par assertion : aucun autocollant dans le hero, libellé vide
+sous le squelette.
+
+Laissé au GREEN, hors Vitest : `DESIGN.md` § 5 (composants de page, bloc de code en `rounded-block`),
+le non-recouvrement de texte à 375 px (à l'œil et par le job `a11y`), la mesure Lighthouse 6b.
+
 ## Journal des tranches
 
 - **Tranche 4.1 — le texte reste lisible sur l'accent** : GREEN 4368 passed / 4368 total · refactor : classes de l'état sélectionné des tags factorisées dans une constante (deux palettes, un seul jeu)
