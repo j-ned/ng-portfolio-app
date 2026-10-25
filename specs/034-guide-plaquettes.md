@@ -771,6 +771,20 @@ Chaque tranche passe sans les suivantes : les PR 5 et 6+ ne cassent rien des pr�
    re-ciblée sur `master` avant le sien (jamais de PR empilée au moment du merge).
 3. **SEO de l'accueil** (question 4, partie accueil) : titre, description et « L'atelier » en dernier
    dans le menu validés tels quels.
+4. **Slugs d'URL des opérations** (arbitré pour Julien, à sa demande) : ceux de `OPERATION_FAMILIES`
+   sont retenus, sauf `percage`, qui devient **`percage-plaquettes`** pour laisser la place à un
+   perçage au foret monobloc sans changer une URL déjà partagée. À appliquer en PR 5 (constante et
+   test golden), avant toute mise en ligne du guide.
+5. **Couleurs ISO 513** (question 7, arbitré pour Julien) : **lettre et nom seuls, sans couleur**.
+   La couleur du groupe S se confondrait avec l'accent orange (ADR-0030), une couleur ne porte
+   jamais seule l'information, et chaque couleur demanderait une source. En PR 5 : `IsoGroupColor`
+   et le champ `color` d'`IsoGroup` sont retirés, aucun token `--color-iso-*`, aucune exception à la
+   One Orange Rule. `IsoGroupBadge` affiche la lettre en pastille neutre et le nom.
+6. **Carte du guide** (question 2, arbitré pour Julien) : sur-titre « Outil », titre « Guide des
+   plaquettes », et un résumé : « Choisis ta matière et ton opération : le guide t'indique le type
+   de plaquette à prendre. » (typographie du site appliquée). `LinkCard` gagne une entrée `summary`
+   optionnelle (`text-muted`, sous le titre), documentée dans `DESIGN.md` § 5 ; sans `summary`, la
+   carte reste inchangée pour ses usages actuels.
 
 ## Plan de test
 
