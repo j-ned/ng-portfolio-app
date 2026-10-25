@@ -122,10 +122,10 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
    Coromant. Ce qui n'y figure pas n'est pas publié. Les trois passages coupés ne sont pas à
    récupérer : leur contenu viendra de la même source.
 3. **Fiche de codification** : écartée comme source (voir Constat).
+4. **Liste des matières** : celles du référentiel seulement pour cette version, une fois vérifiées
+   dans Sandvik Coromant. D'autres matières pourront s'ajouter plus tard, selon la même règle.
 
 ### Questions ouvertes
 
 1. **Ordre avec la spec 032** : le guide attend-il la page « L'atelier » (V1), ou passe-t-il avant,
    avec la route `/atelier` créée pour lui ?
-2. **Liste des matières** : celles du référentiel seulement, ou d'autres que tu usines (sans lien
-   avec les pièces de ton employeur) ?
