@@ -1,0 +1,119 @@
+---
+id: 034
+title: Guide des plaquettes, de la matière à l'outil de coupe
+type: feature
+status: draft
+created: 2026-10-25
+related: [specs/032-atelier.md, specs/031-ton-amical.md, PRODUCT.md, DESIGN.md, docs/adr/0032-confidentialite-verifiable-du-contenu-d-atelier.md]
+---
+
+# 034 — Guide des plaquettes
+
+## Description
+
+### Objectif
+
+Demande du propriétaire (2026-10-25) : un outil de l'atelier (spec 032) qui guide le choix d'un
+outil de coupe en tournage. On tape le début du nom d'une matière, le guide propose les matières
+connues ; on choisit la matière puis l'opération, et le guide indique le **type** de plaquette à
+utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : des devs et des curieux
+(PRODUCT.md), mais aussi des usineurs débutants ; ton de la spec 031, au tutoiement.
+
+### Parcours
+
+1. **Matière** : un champ de saisie avec suggestions. La recherche porte sur toutes les désignations
+   d'une matière (EN, numéro matière, AISI/UNS, ancienne AFNOR, nom courant), sans tenir compte de
+   la casse, des espaces, des tirets ni des accents : `42cd4`, `4140` et `1.7225` trouvent toutes
+   `42CrMo4`. Le choix affiche le groupe ISO 513 (lettre, couleur, nom) et le comportement de la
+   matière à la coupe.
+2. **Opération**, regroupée par famille :
+
+   | Famille | Opérations |
+   |---|---|
+   | Tournage extérieur | ébauche, semi-finition, finition |
+   | Intérieur (alésage) | ébauche, finition |
+   | Gorge et tronçonnage | gorge, tronçonnage |
+   | Filetage | filetage |
+   | Perçage | perçage au foret à plaquettes |
+
+3. **Recommandation** pour le couple matière × opération :
+   - le type de plaquette. En tournage extérieur et intérieur, c'est un code de désignation ISO
+     partiel (forme, dépouille, rayon de bec…) dont chaque champ est expliqué. En gorge,
+     tronçonnage, filetage et perçage, les plaquettes ne suivent pas cette désignation : elles sont
+     décrites par leur type (largeur, profil, nombre d'arêtes, système de fixation) ;
+   - la géométrie (brise-copeaux, préparation d'arête) et la nuance, **décrites avec des mots**,
+     jamais par un nom commercial ;
+   - une plage de vitesse de coupe indicative quand la source en donne une ;
+   - les pièges propres à la matière (écrouissage, arête rapportée, usure en entaille…) ;
+   - la source de chaque information et un avertissement : la recommandation est indicative et ne
+     remplace ni le catalogue de l'outil ni l'expérience.
+
+### Exigences
+
+1. **Exactitude (exigence 1 de la spec 032)** : chaque donnée affichée porte sa source. Une
+   recommandation sans source n'existe pas dans le référentiel. Aucune donnée inventée : une
+   combinaison matière × opération sans recommandation sourcée l'affiche franchement (« pas encore
+   de recommandation pour ce cas ») plutôt que d'extrapoler.
+2. **Sources** :
+   - matières, groupes ISO 513 et comportement : le « Référentiel des alliages d'usinage » fourni
+     par Julien (source externe, citée) ;
+   - recommandations d'outils par matière et opération : un **catalogue de fabricant d'outils**,
+     cité sur chaque fiche ;
+   - désignation des plaquettes : la norme ISO 1832, via la page « désignation » du catalogue
+     retenu.
+3. **Confidentialité (spec 032, ADR-0032)** : aucune donnée de l'employeur ni de ses clients. Les
+   noms d'alliages, de normes et les valeurs de coupe génériques sont autorisés.
+4. **Accessibilité** : le champ à suggestions est utilisable au clavier (flèches, Entrée, Échap) et
+   annoncé au lecteur d'écran (nombre de suggestions, suggestion active) ; la recommandation est
+   annoncée quand elle change ; aucune information portée par la seule couleur du groupe ISO.
+5. **Rendu et SEO** : page publique rendue côté serveur, sans appel d'API ; la saisie (matière,
+   opération) se reflète dans l'URL pour partager une fiche ; titre, description et canonical
+   comme le reste du site.
+6. **Lien avec la spec 032** : le guide vit sous « L'atelier ». La plage de vitesse affichée
+   pré-remplit le calculateur de conditions de coupe (V3) quand celui-ci existe.
+
+### Constat (2026-10-25, `master` `5c2e228`)
+
+- **Référentiel des alliages** (3 pages) : 6 groupes ISO 513, une trentaine de matières avec
+  correspondances EN / numéro / AISI-UNS / AFNOR, usinabilité et applications. Correspondances
+  contrôlées par sondage (C45 1.0503, 42CrMo4 1.7225 / 4140, 316L 1.4404, 17-4 PH 1.4542,
+  TA6V R56400 / 3.7165, Inconel 718 N07718 / 2.4668…) : aucun écart trouvé. Trois passages sont
+  **coupés au saut de page** : les règles d'or du groupe P, la fin du tableau des aluminiums (série
+  5000 et suivantes, cuivreux, laitons, bronzes), et les repères de vitesse des groupes S et H.
+  Le document ne contient **aucune recommandation de plaquette par opération**.
+- **Fiche de codification des plaquettes** : elle cite « ISO 1853 », alors que la désignation des
+  plaquettes amovibles relève de l'ISO 1832 ; son tableau des angles de dépouille donne deux valeurs
+  pour les lettres D, E et P. Elle ne sert donc pas de source ; la désignation sera reprise du
+  catalogue retenu.
+- La page « L'atelier » (V1 de la spec 032) a son plan technique (PR #256) mais n'est pas encore
+  implémentée : la route `/atelier` n'existe pas.
+
+### Découpage en PR (proposé)
+
+| # | Périmètre | Dépend de |
+|---|---|---|
+| 1 | cette spec | — |
+| 2 | plan technique (`architect`) | 1, questions 1 et 2 tranchées |
+| 3 | référentiel des matières et recherche (domaine pur, sans interface) | 2 |
+| 4 | interface : champ à suggestions, choix de l'opération, fiche matière | 3 |
+| 5+ | recommandations, une famille d'opérations par PR, au rythme de la saisie des données sourcées | 4 |
+
+### Hors périmètre
+
+- Fraisage.
+- Références commerciales, prix, liens d'achat.
+- Conditions de coupe complètes (profondeur de passe, avance) au-delà de ce que donne la source.
+- Décodeur et composeur de désignation ISO en outil séparé : à rouvrir après ce guide.
+
+### Questions ouvertes
+
+1. **Catalogue** : quel fabricant (Sandvik, Iscar, Kennametal, Seco…) ? Un seul pour toutes les
+   opérations, ou un par famille ? (à trancher avant le plan technique)
+2. **Référentiel des alliages** : qui en est l'auteur (site, formation, fournisseur) et sous quelle
+   licence ? Selon la réponse, on reprend ses données en le citant, ou on les reconstruit depuis
+   des sources primaires (normes, fiches matière). As-tu une version complète des trois passages
+   coupés ? (à trancher avant le plan technique)
+3. **Ordre avec la spec 032** : le guide attend-il la page « L'atelier » (V1), ou passe-t-il avant,
+   avec la route `/atelier` créée pour lui ?
+4. **Liste des matières** : celles du référentiel seulement, ou d'autres que tu usines (sans lien
+   avec les pièces de ton employeur) ?
