@@ -778,6 +778,81 @@ Domaine pur, sans TestBed, fixtures manifestement fictives (`ZZ-FICTIF-1`, `TEST
 essai Alpha », source fictive, `locator: 'fixture'`). `fast-check` absent du dépôt : pas de test par
 propriétés, idempotence en `it.each`.
 
+### Tranche 1 — l'accueil de l'atelier existe et se trouve
+
+Le texte de l'intro n'est réécrit dans aucun test : la page est comparée à `WORKSHOP_SPACE.intro`,
+et la constante est jugée par les verrous éditoriaux (typographie, formulations interdites,
+vouvoiement) via `EDITORIAL_SOURCES`. Seuls le titre et la description SEO, validés par Julien,
+sont épinglés mot pour mot.
+
+`features/workshop/domain/workshop-space.static-data.spec.ts` (3 tests)
+- Type exact `WorkshopSpace` (`expectTypeOf`). Vert d'emblée dès que le module existe.
+- `heading` vaut « L'atelier » (apostrophe droite, norme du site). **RED**.
+- Aucun paragraphe d'intro vide ni entouré d'espaces. Vert d'emblée dès que le module existe.
+
+`features/workshop/pages/workshop/workshop.spec.ts` (3 tests, TestBed, `provideRouter([])`,
+`await fixture.whenStable()`)
+- Un seul `h1`, porteur de `data-testid="workshop-title"`, de texte `WORKSHOP_SPACE.heading`. **RED**.
+- Chaque `[data-testid="workshop-intro"]` est un `<p>` ; leurs textes valent `WORKSHOP_SPACE.intro`,
+  dans l'ordre. **RED**.
+- Aucun `main`, `header` ni `footer` dans la page ; classes de l'hôte exactement `block min-h-svh
+  pt-20`. **RED**.
+
+`src/app/app.routes.workshop.spec.ts` (6 tests)
+- Navigation vers `/atelier` avec les routes réelles → URL `/atelier`, feuille `atelier`, composant
+  `Workshop` (pas la 404). **RED**.
+- Route de premier niveau chargée à la demande : ni `component` ni `loadChildren`,
+  `loadComponent()` rend `Workshop`. **RED**.
+- Titre d'onglet `L'atelier : outils de tourneur CN | Julien Nédellec`. **RED**.
+- `data` exacte (`toEqual`) : `preload: true` et `seo` = titre, description validée, `url`
+  canonique `${siteUrl}/atelier`, `type: 'website'`, `BreadcrumbList` Accueil → L'atelier ; donc
+  ni `keywords` ni image propre. **RED**.
+- Description de 1 à 160 caractères. **RED**.
+- `ROUTE_TEXTS['/atelier']` porte le titre et le SEO : les verrous éditoriaux lisent la route.
+  **RED**.
+
+Suites existantes adaptées (même RED)
+- `app.routes.server.spec.ts` : `atelier` ajouté au `it.each` des pages prérendues. **RED**. Le test
+  « exactly the content routes » reste tel quel : `atelier` n'est pas en `Server`.
+- `src/server/feeds/sitemap.spec.ts` : `/atelier` inséré après `/about` dans l'ordre attendu, sept
+  pages statiques au lieu de six, et un test neuf pour son entrée (`monthly`, `0.8`, datée du
+  démarrage). **RED** (3 tests).
+- `src/app/testing/editorial-sources.ts` : `['WORKSHOP_SPACE', WORKSHOP_SPACE]`, soit 25 lignes de
+  plus dans les verrous (typographie 1, formulations interdites 23, vouvoiement 1), plus 3 lignes du
+  verrou de vouvoiement sur fichiers, qui lit d'office les trois fichiers du scaffold. Elles jugent
+  le texte de Julien au GREEN ; face à un stub, elles passent par construction.
+- `e2e/a11y/scenarios.ts` : `{ path: '/atelier', ready: 'workshop-title' }` dans `PUBLIC_PAGES`
+  (clair et sombre, Playwright, hors `pnpm test` ; `pnpm a11y:typecheck` vert).
+
+Sweep : `confidentialite`, `mentions-legales`, `sitemap`, `Prerender`, `atelier`, `workshop`
+cherchés dans `src/`, `e2e/`, `ci/` ; seuls `sitemap.spec.ts` et `app.routes.server.spec.ts`
+encodent la liste des pages statiques. `feed-handler.spec.ts` ne vérifie que des URL de contenu, il
+reste vert.
+
+Non couvert, à trancher : la section « Les outils » (`toolsHeading`, grille de cartes). Avec
+`tools` vide, une section titrée sans contenu n'a pas de sens ; aucun test ne l'exige ni ne
+l'interdit dans cette tranche. Proposition : ne pas la rendre avant la tranche 7, qui l'ajoute avec
+la carte du guide et ses tests (autant de cartes que `tools`, chaque `path` déclaré dans `routes`).
+
+Scaffold dû au GREEN (code applicatif) : `domain/models/workshop-space.model.ts` (`WorkshopSpace`,
+`WorkshopTool`, `WorkshopToolId`) ; `domain/workshop-space.static-data.ts` (`WORKSHOP_SPACE`, intro
+de Julien, `tools: []`) ; `pages/workshop/workshop.ts` (`Workshop`, `app-workshop`) ; route
+`atelier` dans `app.routes.ts` ; `atelier` en `Prerender` dans `app.routes.server.ts` ; `/atelier`
+dans `STATIC_URLS` de `sitemap.ts`. Hors tests, au GREEN : job `verify` de `ci.yml`, `test -f
+$browser/atelier/index.html` ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"`
+dans le corps et sans `X-Cache-Status`.
+
+RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_modules/.vite`) :
+- état livré : le build échoue sur `TS2307 Cannot find module` pour les trois modules du scaffold,
+  et seulement sur eux (plus les `TS7006` qui en découlent), code de sortie 1 ; `prettier --check`
+  et `eslint` verts sur les fichiers touchés.
+- mesure des assertions, avec des stubs temporaires typés selon le plan (`heading: ''`, une intro
+  provisoire, `tools: []`, composant au gabarit vide, routes et sitemap inchangés), retirés ensuite :
+  RED confirmé via la commande test du profil le 2026-10-25 22:30, 14 failed / 4687 total (Test
+  Files 5 failed | 233 passed), code de sortie 1. Les 14 échecs sont des `AssertionError`, aucune
+  erreur de harnais. Verts d'emblée face aux stubs : le type exact, l'intro non vide et les 28
+  lignes des verrous ; les 4645 tests des suites existantes et des tranches 4 à 6 restent verts.
+
 ### Tranche 4 — une désignation tapée n'importe comment retrouve sa matière
 
 Builders : `src/app/features/workshop/testing/insert-guide-builders.ts` — `aCitation()`,
@@ -983,9 +1058,36 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
 
 ## Journal des tranches
 
+- **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
 - **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
 - **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
 - **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
+
+## Verify
+
+Tranche 1, 2026-10-25, worktree `034-pr3`.
+
+- Steps : `pnpm run build --configuration production` (code de sortie 0, « Prerendered 3 static routes »),
+  puis lecture de `dist/angular-portfolio-app/browser/atelier/index.html` ; ce dossier servi en statique
+  (`python3 -m http.server`), `/atelier/` ouvert dans le navigateur, en thème sombre.
+- Extrait du HTML prérendu :
+  ```html
+  <title>L'atelier&nbsp;: outils de tourneur CN | Julien Nédellec</title>
+  <meta name="description" content="Mon coin de tourneur CN&nbsp;: des outils d'usinage, à commencer par un guide pour choisir le type de plaquette selon la matière et l'opération.">
+  <link rel="canonical" href="https://nedellec-julien.fr/atelier">
+  <meta name="robots" content="index, follow">
+  <app-workshop class="block min-h-svh pt-20" ngh="3">
+  <h1 data-testid="workshop-title" class="…"> L'atelier </h1>
+  <p data-testid="workshop-intro">À l'atelier comme dans le code, une règle tient tout&nbsp;: une pièce hors tolérance ne part pas.</p>
+  <p data-testid="workshop-intro">Cet espace rassemble ce que j'apprends derrière mon tour CN, mis en forme en outils et en fiches que tu peux utiliser. Que tu sois dev curieux ou usineur qui débute, prends ce qui te sert.</p>
+  "@type":"BreadcrumbList","itemListElement":[{…"name":"Accueil"…},{…"name":"L'atelier","item":"https://nedellec-julien.fr/atelier"}]
+  ```
+  Aucune CSP `unsafe-inline` dans le fichier.
+- Capture : rendu après hydratation, en-tête du site, `h1` « L'atelier », deux paragraphes d'intro
+  en `text-muted` (capture prise dans la session, non versionnée).
+- Console : aucune erreur de l'application ni d'hydratation. Deux erreurs réseau propres au serveur
+  statique de la vérification, sans API : `GET /api/config` 404 et `POST /api/analytics/track` 501.
+- Verdict : **PASS**.
 
 ## Review code
 
