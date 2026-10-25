@@ -55,8 +55,11 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
    combinaison matière × opération sans recommandation sourcée l'affiche franchement (« pas encore
    de recommandation pour ce cas ») plutôt que d'extrapoler.
 2. **Sources** :
-   - matières, groupes ISO 513 et comportement : le « Référentiel des alliages d'usinage » fourni
-     par Julien (source externe, citée) ;
+   - matières, groupes ISO 513, correspondances de désignations et comportement : les tables de
+     classification et de correspondance des matières de Sandvik Coromant. Le « Référentiel des
+     alliages d'usinage » fourni par Julien a été produit par une IA (Gemini) : il sert de liste de
+     départ, chaque valeur est vérifiée dans la source citée avant d'entrer dans le référentiel, et
+     il n'est jamais cité comme source ;
    - recommandations d'outils par matière et opération : le **catalogue Sandvik Coromant**, cité
      sur chaque fiche ;
    - désignation des plaquettes : la norme ISO 1832, via la page « désignation » du catalogue
@@ -81,10 +84,13 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
   **coupés au saut de page** : les règles d'or du groupe P, la fin du tableau des aluminiums (série
   5000 et suivantes, cuivreux, laitons, bronzes), et les repères de vitesse des groupes S et H.
   Le document ne contient **aucune recommandation de plaquette par opération**.
-- **Fiche de codification des plaquettes** : elle cite « ISO 1853 », alors que la désignation des
-  plaquettes amovibles relève de l'ISO 1832 ; son tableau des angles de dépouille donne deux valeurs
-  pour les lettres D, E et P. Elle ne sert donc pas de source ; la désignation sera reprise du
-  catalogue retenu.
+- **Fiche de codification des plaquettes** : affiche de la boutique « Un Petit Usineur », offerte en
+  téléchargement sur sa page « Guide complet : tout savoir sur la désignation des plaquettes de
+  tournage » (copyright 2026, aucune condition de réutilisation, aucune source citée). Elle cite
+  « ISO 1853 », alors que la désignation des plaquettes amovibles relève de l'ISO 1832 ; son tableau
+  des angles de dépouille donne deux valeurs pour les lettres D, E et P. Ni l'affiche ni la page ne
+  donnent de recommandation par matière ou par opération. Elle ne sert donc pas de source et rien
+  n'en est recopié ; la désignation est reprise de Sandvik Coromant.
 - La page « L'atelier » (V1 de la spec 032) a son plan technique (PR #256) mais n'est pas encore
   implémentée : la route `/atelier` n'existe pas.
 
@@ -93,7 +99,7 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
 | # | Périmètre | Dépend de |
 |---|---|---|
 | 1 | cette spec | — |
-| 2 | plan technique (`architect`) | 1, question 1 tranchée |
+| 2 | plan technique (`architect`) | 1 |
 | 3 | référentiel des matières et recherche (domaine pur, sans interface) | 2 |
 | 4 | interface : champ à suggestions, choix de l'opération, fiche matière | 3 |
 | 5+ | recommandations, une famille d'opérations par PR, au rythme de la saisie des données sourcées | 4 |
@@ -110,14 +116,16 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
 1. **Catalogue** : Sandvik Coromant, pour toutes les familles d'opérations. Les fiches décrivent les
    types de plaquettes et les géométries avec des mots ; aucun nom commercial ni référence Sandvik
    n'est affiché, seule la source est citée.
+2. **Référentiel des alliages** : produit par Gemini à la demande de Julien. Une sortie d'IA n'est
+   pas une source (exigence 1) : la liste des matières est reprise comme point de départ, mais
+   chaque correspondance, groupe, comportement et plage de vitesse est vérifié et cité dans Sandvik
+   Coromant. Ce qui n'y figure pas n'est pas publié. Les trois passages coupés ne sont pas à
+   récupérer : leur contenu viendra de la même source.
+3. **Fiche de codification** : écartée comme source (voir Constat).
 
 ### Questions ouvertes
 
-1. **Référentiel des alliages** : qui en est l'auteur (site, formation, fournisseur) et sous quelle
-   licence ? Selon la réponse, on reprend ses données en le citant, ou on les reconstruit depuis
-   des sources primaires (normes, fiches matière). As-tu une version complète des trois passages
-   coupés ? (à trancher avant le plan technique)
-2. **Ordre avec la spec 032** : le guide attend-il la page « L'atelier » (V1), ou passe-t-il avant,
+1. **Ordre avec la spec 032** : le guide attend-il la page « L'atelier » (V1), ou passe-t-il avant,
    avec la route `/atelier` créée pour lui ?
-3. **Liste des matières** : celles du référentiel seulement, ou d'autres que tu usines (sans lien
+2. **Liste des matières** : celles du référentiel seulement, ou d'autres que tu usines (sans lien
    avec les pièces de ton employeur) ?
