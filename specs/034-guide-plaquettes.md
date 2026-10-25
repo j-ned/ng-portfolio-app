@@ -853,6 +853,56 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
   erreur de harnais. Verts d'emblée face aux stubs : le type exact, l'intro non vide et les 28
   lignes des verrous ; les 4645 tests des suites existantes et des tranches 4 à 6 restent verts.
 
+### Tranche 2 — on y arrive depuis le menu et le pied de page
+
+Icône vérifiée : `lucide-wrench` → `{ id: 'wrench', style: 'solid' }` dans `icon-map.ts`, symbole
+`solid-wrench` présent dans `public/icons/sprite.svg` ; pas de `pnpm icons:build`.
+
+`src/app/layout/components/header/header.spec.ts` (suite existante adaptée, 2 tests recalibrés, 3
+neufs)
+- Ordre du menu : `NAV_LINKS` vaut exactement (`toEqual`, icônes comprises) Blog, Réalisations,
+  Parcours, puis `{ label: "L'atelier", href: '/atelier', icons: 'lucide-wrench' }`. Recalibré
+  (l'ancien n'épinglait que libellé et lien de trois entrées). **RED**.
+- État actif en `it.each` sur `/blog` et `/atelier` : la nav desktop rend quatre liens, seul celui
+  de l'URL courante porte `aria-current="page"` et la pilule `rounded-full bg-primary/8`. Le cas
+  `/blog` est le test existant recalibré à quatre lignes ; le cas `/atelier` est neuf. **RED** (2).
+- Drawer ouvert : la nav mobile compte quatre liens, le dernier pointe vers `/atelier`, libellé
+  « L'atelier », icône dont le `use` vise `#solid-wrench`. **RED**.
+- Drawer ouvert, clic sur « L'atelier » : le routeur atterrit sur `/atelier` et le drawer se ferme.
+  **RED**.
+- Le harnais de routes des tests d'état actif et de clic déclare ses destinations
+  (`blog`, `projects`, `about`, `atelier`) au lieu de les dériver de `NAV_LINKS` : dérivées, la
+  route `/atelier` manquait et l'échec était un `NG04002` du routeur, pas une assertion.
+- Inchangé et vert : « dessert chaque destination de NAV_LINKS par un lien routé », dérivé de la
+  constante.
+
+`src/app/layout/components/footer/footer.spec.ts` (suite existante adaptée, 2 tests recalibrés, 1
+cas neuf)
+- Golden de `FOOTER_COPY` : `resources` gagne `workshop: "L'atelier"`. **RED**.
+- Colonne Ressources : liens `/projects`, `/blog`, `/about`, `/atelier`, libellés Réalisations,
+  Blog, Parcours, « L'atelier », rien d'autre. Libellés attendus écrits en clair : la constante est
+  déjà épinglée par le golden, et `FOOTER_COPY.resources.workshop` n'existe pas avant le GREEN.
+  **RED**.
+- `it.each` d'atterrissage du routeur : cas `/atelier` ajouté. **RED**.
+
+Sweep : `NAV_LINKS`, `FOOTER_COPY`, `nav-items`, `footer-resource-link`, `Navigation principale`
+cherchés dans `src/`, `e2e/`, `ci/`. `editorial-sources.ts` porte déjà `NAV_LINKS` et `FOOTER_COPY` :
+les verrous éditoriaux jugeront « L'atelier » au GREEN sans ajout. `editorial-identity.spec.ts` ne
+lit que la tagline. `project-detail.spec.ts` (`navLinks`) parle d'une autre nav. Le scénario axe
+`open mobile menu` couvre la nouvelle entrée du drawer sans changement.
+
+Scaffold dû au GREEN : entrée `{ label: "L'atelier", href: '/atelier', icons: 'lucide-wrench' }` en
+fin de `NAV_LINKS` ; `FOOTER_COPY.resources.workshop = "L'atelier"` ; lien `/atelier` après
+`/about` dans `RESOURCE_LINKS` de `footer.ts`. À l'œil en Verify : menu desktop sur une ligne à
+1 024 px.
+
+RED confirmé via la commande test du profil le 2026-10-25 22:46, 8 failed / 4691 total (Test Files
+2 failed | 236 passed), code de sortie 1, cache invalidé (`ng cache clean`, `node_modules/.vite`).
+Les 8 échecs sont des `AssertionError` (5 dans `header.spec.ts`, 3 dans `footer.spec.ts`), aucune
+erreur de harnais ni de type ; `eslint` et `prettier --check` verts sur les deux specs. Les 4683
+autres tests restent verts, tranche 1 comprise. Un premier passage avait aussi fait tomber
+`admin-post-editor.spec.ts` sur un délai de 5 s ; il passe au second, sans rapport avec ce diff.
+
 ### Tranche 4 — une désignation tapée n'importe comment retrouve sa matière
 
 Builders : `src/app/features/workshop/testing/insert-guide-builders.ts` — `aCitation()`,
@@ -1059,6 +1109,7 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
+- **Tranche 2 — on y arrive depuis le menu et le pied de page** : GREEN 4691 passed / 4691 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois lignes de données relu, rien à simplifier). Verify faite (§ Verify) : le menu et le pied de page, déjà atteignables sur tout le site, changent. `admin-post-editor.spec.ts` n'a pas dépassé son délai sur ce passage.
 - **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
 - **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
 - **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
@@ -1087,6 +1138,23 @@ Tranche 1, 2026-10-25, worktree `034-pr3`.
   en `text-muted` (capture prise dans la session, non versionnée).
 - Console : aucune erreur de l'application ni d'hydratation. Deux erreurs réseau propres au serveur
   statique de la vérification, sans API : `GET /api/config` 404 et `POST /api/analytics/track` 501.
+- Verdict : **PASS**.
+
+Tranche 2, 2026-10-25, worktree `034-pr3`.
+
+- Steps : `pnpm run build --configuration production` (code de sortie 0), dossier
+  `dist/angular-portfolio-app/browser` servi en statique (`python3 -m http.server`), `/atelier/`
+  ouvert dans le navigateur, thème clair.
+- Menu desktop à 1 024 × 768 : les quatre liens Blog, Réalisations, Parcours, « L'atelier » sont
+  sur **une ligne** (même `top` 18 px, hauteur 44 px, de 352 à 718 px en abscisse), en-tête de
+  81 px, aucun défilement horizontal (`scrollWidth` 1 009 px, barre de défilement déduite).
+  « L'atelier » porte `aria-current="page"` et la pilule.
+- Menu mobile à 375 × 812, drawer ouvert : quatre liens de 48 px de haut, le dernier est
+  `/atelier`, « L'atelier », icône `#solid-wrench`, pilule active ; `scrollWidth` 375 px.
+- Pied de page : colonne Ressources `/projects`, `/blog`, `/about`, `/atelier` dans cet ordre.
+- Captures : en-tête à 1 024 px et drawer ouvert à 375 px (prises dans la session, non versionnées).
+- Console : aucune erreur de l'application ni d'hydratation. Erreurs réseau propres au serveur
+  statique sans API : `GET /api/config` 404 et `POST /api/analytics/track` 501.
 - Verdict : **PASS**.
 
 ## Review code
