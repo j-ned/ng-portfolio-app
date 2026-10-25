@@ -1239,3 +1239,35 @@ PR 4 (tranches 4 à 6), `git diff origin/master...HEAD` (`35ef862`, `294b178`, `
 1. `src/app/features/workshop/testing/insert-guide-builders.ts:97` : `export type RecommendationFor<O>` n'a aucun consommateur hors du fichier (seul usage : type de retour de `aRecommendation`, l. 107) et le projet n'émet pas de déclarations. Retirer l'`export`.
 
 **Suite (2026-10-25)** : point 1 corrigé (`export` retiré, session principale) ; gates rejouées avant la PR.
+
+PR 3 (tranches 1 à 3), `git diff origin/master...HEAD` (`7ac26d2`, `42ee751`, `63898df`, `4ab7035`), revue du 2026-10-25.
+
+**Verdict** : REJECTED
+**Gates CI locaux** : cache invalidé (`ng cache clean`, `node_modules/.vite`) ; `pnpm install --frozen-lockfile` 0 / `pnpm run build --configuration production` 0 (« Prerendered 3 static routes ») / `pnpm test` 0 (240 fichiers, 4735 passed / 4735) / `pnpm lint` 0 / `pnpm run format:check` 0
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main. Archéologie (`ADR-`, `spec N`, `§`) 0 hit dans `src/`, `e2e/`, `.github/` ; `fakeAsync`/`.only`/`.skip`/`innerHTML`/`console.`/`export default` 0 ; noms d'employeur ou de client 0 dans le diff et dans tout le dépôt.
+**Warnings de gate** : (b) pré-existant hors diff : `pnpm install`, « Ignored build scripts » (lockfile non touché). Build, test, lint, format : aucun. (c) pré-existant, à trancher par la session principale : `.github/workflows/ci.yml:75`, `:80`, `:190` et `:250`, `! grep …` isolés sous `set -e` et suivis d'autres commandes : bash n'arrête jamais le script sur une commande niée, ces quatre gardes (CSP `unsafe-inline` des pages prérendues, `ng-state` dans `index.csr.html`, `X-Cache-Status` de `/healthz`, version de nginx) ne peuvent pas échouer. Les gardes ajoutées par la PR (l. 72, 146-147) échouent bien.
+**Rendu compilé** : N/A (aucun composant à sélecteur attribut ni `shared/ui` touché)
+**Preuve de verify runtime** : ✅ (preuve tranches 1-2 complète ; rejouée sur le build de cette revue : `dist/…/browser` servi en statique, `/atelier/` hydraté (bascule de thème active), à 1 024 × 768 quatre liens sur une ligne (top 18 px, 352 à 718 px, `scrollWidth` 1 009), `aria-current="page"` sur « L'atelier » seul ; navigation client `/projects` → `/atelier` : titre, canonical et état actif suivent ; console : seules les erreurs réseau du serveur statique sans API, `/api/config` 404 et `/api/analytics/track` 501)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ❌
+**Alignement spec** : ❌
+
+Contrôles demandés : (1) intro identique mot pour mot à la réponse de Julien (54 mots, comparés après normalisation des espaces ; seule l'espace avant le deux-points devient U+00A0) ; (3) `atelier/index.html` prérendu avec `h1`, deux paragraphes d'intro, titre, description, canonical, `BreadcrumbList`, meta CSP hachée, aucune page prérendue avec `unsafe-inline`, `Dockerfile` non modifié (`/atelier/` servi par `location /`) ; (4) gardes ajoutées correctes (`test -f` arrête le script ; `! grep … || { …; exit 1; }` échoue bien) ; (5) menu contrôlé, cf. ligne verify.
+
+**Tests notables** :
+- ✨ `src/app/workshop-confidentiality.spec.ts:38-127` : chaque champ gardé est doublé d'une fixture fictive qui prouve que la garde mord sur son chemin exact.
+- ⚠️ `src/app/features/workshop/pages/workshop/workshop.spec.ts:42` : épingle la liste de classes de l'hôte, détail de style qui casse au moindre ajustement visuel ; prescrit par le plan de test, à garder en tête.
+
+**Risque résiduel** :
+- réversibilité : profil muet · monitoring : Sentry (profil)
+- non couvert par les gates : la confidentialité de fond (un détail qui fait reconnaître un client) reste humaine ; ADR-0032 §4 exige la liste « confidentialité » cochée par Julien dans la description de la PR.
+
+**Points à corriger** :
+1. `src/app/features/workshop/domain/confidential-references.ts:7-8` : « plan n° » et « n° de plan » ne sont reconnus qu'en minuscules. « Plan n° 12 repris. » et « N° de plan à part. », soit les deux motifs en début de phrase, ne sont pas signalés (vérifié en exécutant l'expression), alors que `réf.` (l. 6) et `indice` (l. 10) acceptent la majuscule initiale. Accepter la majuscule initiale sur ces deux motifs, et ajouter les deux cas au `it.each` des textes signalés de `confidential-references.spec.ts:5-23` (RED d'abord).
+2. `src/app/workshop-confidentiality.spec.ts:29-34` : ADR-0032 §3 applique la garde à tout le contenu publié de l'atelier, mais le titre, la description et le fil d'Ariane de la route `atelier` (`src/app/app.routes.ts:91-119`) ne sont pas lus. Ajouter `ROUTE_TEXTS['/atelier']` à la liste des données réelles gardées.
+3. `DESIGN.md` § 5 : le plan technique prévoit une entrée « Accueil de l'atelier » dans la PR 3 (Fichiers à modifier) ; elle est absente, et le journal ne trace pas son report. L'ajouter, ou consigner le report dans `## Journal des tranches`.
+
+**Suite (2026-10-25, session principale)** : point 1 corrigé (majuscule initiale acceptée sur « Plan n° » et « N° de plan », deux cas ajoutés en RED d'abord) ; point 2 corrigé (`ROUTE_TEXTS['/atelier']` gardé) ; point 3 corrigé (entrée « Accueil de l'atelier » dans `DESIGN.md` § 5). Les gardes `! grep` isolées de `ci.yml` sont corrigées sur `master` par la PR #267. Gates rejouées : `pnpm test` 4738/4738, `pnpm lint` et `pnpm run format:check` en code 0.

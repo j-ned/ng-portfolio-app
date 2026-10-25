@@ -14,7 +14,7 @@ import {
   aRecommendation,
   aSourced,
 } from '@features/workshop/testing/insert-guide-builders';
-import { editorialTexts } from './testing/editorial-sources';
+import { editorialTexts, ROUTE_TEXTS } from './testing/editorial-sources';
 
 // A designation value is checked by its format: a UNS number has five digits.
 const DESIGNATION_VALUE = /\.designations\[\d+\]\.value$/u;
@@ -31,6 +31,7 @@ describe('workshop confidentiality', () => {
     ['MATERIALS', MATERIALS],
     ['OPERATION_FAMILIES', OPERATION_FAMILIES],
     ['RECOMMENDATIONS', RECOMMENDATIONS],
+    ['the /atelier route', ROUTE_TEXTS['/atelier']],
   ])('Given %s When its texts are read Then none carries a part reference', (name, value) => {
     expect(confidentialPaths(value, name)).toEqual([]);
   });

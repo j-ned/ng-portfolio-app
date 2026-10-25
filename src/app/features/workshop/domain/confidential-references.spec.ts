@@ -10,6 +10,8 @@ describe('findConfidentialReferences', () => {
     ['a customer reference', 'réf. client'],
     ['a drawing number', 'plan n° 12'],
     ['a drawing number written the other way', 'n° de plan'],
+    ['a drawing number opening a sentence', 'Plan n° 12 repris.'],
+    ['a drawing number written the other way, opening a sentence', 'N° de plan à part.'],
     ['a work order number', 'OF n° 3'],
     ['a revision letter', 'indice C'],
     ['a revision digit', 'indice 3'],
