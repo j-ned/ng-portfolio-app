@@ -754,3 +754,67 @@ Chaque tranche passe sans les suivantes : les PR 5 et 6+ ne cassent rien des pr�
     profondeur), laquelle affiche-t-on, et faut-il dire la condition à côté ?
 11. **Matières de la PR 5** : la PR 5 part-elle avec les matières déjà vérifiées (même peu), ou
     attend-elle la liste complète du référentiel ?
+
+## Plan de test
+
+Domaine pur, sans TestBed, fixtures manifestement fictives (`ZZ-FICTIF-1`, `TEST-002`, « Alliage
+essai Alpha », source fictive, `locator: 'fixture'`). `fast-check` absent du dépôt : pas de test par
+propriétés, idempotence en `it.each`.
+
+### Tranche 4 — une désignation tapée n'importe comment retrouve sa matière
+
+Builders : `src/app/features/workshop/testing/insert-guide-builders.ts` — `aCitation()`,
+`aSourced(value)`, `aDesignation(value, system)`, `aMaterial(overrides)`. `aRecommendation()` et
+`aReference()` viendront avec leurs modèles (tranche 6), pas avant.
+
+`domain/normalize-designation.spec.ts` (16 tests)
+- `it.each` « Given <cas> When the designation is normalized Then it gives <attendu> » : majuscules,
+  accents (`Éprouvette fîctive ç` → `eprouvettefictivec`), espaces, espace insécable U+00A0, espace
+  fine insécable U+202F, tiret `-`, trait d'union U+2010, demi-cadratin U+2013, points conservés
+  (`9.99.01`), tout combiné (`zzfictif1.0`), texte blanc → `''`. Égalité stricte `toBe`.
+- `it.each` idempotence sur 5 entrées : `f(f(x)) === f(x)`.
+
+`domain/search-materials.spec.ts` (15 tests)
+- Un système de désignation par cas (`common-name`, `en-symbol`, `material-number`, `aisi`, `uns`,
+  `afnor-legacy`), saisie volontairement salie (casse, insécable, tiret, espaces) → exactement
+  `[{ material, matched }]`, la désignation trouvée étant celle du système.
+- Plusieurs désignations correspondent → une seule suggestion, la première qui a trouvé.
+- Classement : préfixe avant contenu, chaque groupe dans l'ordre du référentiel (ordre choisi pour
+  différer de l'ordre alphabétique) ; une matière dont une désignation contient et une autre commence
+  est classée en préfixe, avec la désignation préfixe ; deux désignations qui contiennent → la
+  première.
+- Saisie accentuée, en majuscules et avec tiret (`BLÔC-D`) → mêmes résultats que la saisie nue.
+- Requête vide ou blanche (`''`, espaces, insécable, ` - `) → toutes les matières, ordre du
+  référentiel, `matched` = première désignation (nom affiché).
+- Aucune correspondance → `[]` ; référentiel vide → `[]`.
+
+`domain/reference-integrity.spec.ts`, bloc `MATERIALS` (3 tests, sur les données réelles, vides à ce
+stade donc verts dès que le module existe)
+- Slugs uniques et au format `^[a-z0-9]+(?:-[a-z0-9]+)*$`.
+- Aucune désignation normalisée partagée par deux matières.
+- Aucun texte blanc (valeurs de désignation et de comportement, `locator` de chaque citation).
+
+Non couverts dans cette tranche, à trancher : le format propre à chaque système de désignation
+(motifs non fixés par le plan, à valider par Julien avant d'écrire une regex) ; « chaque groupe ISO
+cité a son entrée » (dépend de `ISO_513_GROUPS`, tranche 5) ; l'ajout de `MATERIALS` à
+`EDITORIAL_SOURCES` (même tranche que la garde de texte libre).
+
+Scaffold dû au GREEN (code applicatif, hors mandat `qa`) : `domain/models/source.model.ts`
+(`SourceId`, `SourceCitation`, `Sourced<T>`), `domain/models/material.model.ts` (`IsoGroupLetter`,
+`DesignationSystem`, `Designation`, `Material`, `MaterialSuggestion`), `domain/materials.static-data.ts`
+(`MATERIALS: readonly Material[]`), `domain/normalize-designation.ts`, `domain/search-materials.ts`.
+
+RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_modules/.vite`) :
+- état livré (modules absents) : le build échoue sur `TS2307 Cannot find module` pour les cinq
+  fichiers ci-dessus, et seulement sur eux (plus les `any` implicites qui en découlent), code de
+  sortie 1 ;
+- mesure des assertions, avec des stubs temporaires typés selon le plan (identité, `[]`, `MATERIALS`
+  vide), retirés ensuite : RED confirmé via la commande test du profil le 2026-10-25 21:12,
+  23 failed / 4447 total (Test Files 2 failed | 229 passed), code de sortie 1. Les 23 échecs sont
+  des `AssertionError` (`toBe` / `toEqual`), aucune erreur de harnais. Les 11 autres tests de la
+  tranche passent face aux stubs par construction (idempotence de l'identité, intégrité d'un
+  référentiel vide, référentiel vide → `[]`) ; les 4413 tests des suites existantes restent verts.
+
+## Journal des tranches
+
+- **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
