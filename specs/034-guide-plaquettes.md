@@ -759,6 +759,19 @@ Chaque tranche passe sans les suivantes : les PR 5 et 6+ ne cassent rien des pr�
 11. **Matières de la PR 5** : la PR 5 part-elle avec les matières déjà vérifiées (même peu), ou
     attend-elle la liste complète du référentiel ?
 
+### Réponses de Julien (2026-10-25)
+
+1. **Intro de l'accueil** (question 1), texte retenu mot pour mot (la typographie du site, espaces
+   fines et apostrophes, s'applique) :
+   > À l'atelier comme dans le code, une règle tient tout : une pièce hors tolérance ne part pas.
+   > Cet espace rassemble ce que j'apprends derrière mon tour CN, mis en forme en outils et en fiches
+   > que tu peux utiliser. Que tu sois dev curieux ou usineur qui débute, prends ce qui te sert.
+2. **Ordre de merge** (question 3) : la PR 3 reste ouverte en brouillon jusqu'à ce que la PR 5 soit
+   prête ; l'atelier apparaît en ligne avec son guide. Au merge, la PR 3 passe d'abord, la PR 5 est
+   re-ciblée sur `master` avant le sien (jamais de PR empilée au moment du merge).
+3. **SEO de l'accueil** (question 4, partie accueil) : titre, description et « L'atelier » en dernier
+   dans le menu validés tels quels.
+
 ## Plan de test
 
 Domaine pur, sans TestBed, fixtures manifestement fictives (`ZZ-FICTIF-1`, `TEST-002`, « Alliage
