@@ -57,10 +57,10 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
 2. **Sources** :
    - matières, groupes ISO 513 et comportement : le « Référentiel des alliages d'usinage » fourni
      par Julien (source externe, citée) ;
-   - recommandations d'outils par matière et opération : un **catalogue de fabricant d'outils**,
-     cité sur chaque fiche ;
+   - recommandations d'outils par matière et opération : le **catalogue Sandvik Coromant**, cité
+     sur chaque fiche ;
    - désignation des plaquettes : la norme ISO 1832, via la page « désignation » du catalogue
-     retenu.
+     Sandvik Coromant.
 3. **Confidentialité (spec 032, ADR-0032)** : aucune donnée de l'employeur ni de ses clients. Les
    noms d'alliages, de normes et les valeurs de coupe génériques sont autorisés.
 4. **Accessibilité** : le champ à suggestions est utilisable au clavier (flèches, Entrée, Échap) et
@@ -93,7 +93,7 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
 | # | Périmètre | Dépend de |
 |---|---|---|
 | 1 | cette spec | — |
-| 2 | plan technique (`architect`) | 1, questions 1 et 2 tranchées |
+| 2 | plan technique (`architect`) | 1, question 1 tranchée |
 | 3 | référentiel des matières et recherche (domaine pur, sans interface) | 2 |
 | 4 | interface : champ à suggestions, choix de l'opération, fiche matière | 3 |
 | 5+ | recommandations, une famille d'opérations par PR, au rythme de la saisie des données sourcées | 4 |
@@ -105,15 +105,19 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
 - Conditions de coupe complètes (profondeur de passe, avance) au-delà de ce que donne la source.
 - Décodeur et composeur de désignation ISO en outil séparé : à rouvrir après ce guide.
 
+### Arbitrages (2026-10-25)
+
+1. **Catalogue** : Sandvik Coromant, pour toutes les familles d'opérations. Les fiches décrivent les
+   types de plaquettes et les géométries avec des mots ; aucun nom commercial ni référence Sandvik
+   n'est affiché, seule la source est citée.
+
 ### Questions ouvertes
 
-1. **Catalogue** : quel fabricant (Sandvik, Iscar, Kennametal, Seco…) ? Un seul pour toutes les
-   opérations, ou un par famille ? (à trancher avant le plan technique)
-2. **Référentiel des alliages** : qui en est l'auteur (site, formation, fournisseur) et sous quelle
+1. **Référentiel des alliages** : qui en est l'auteur (site, formation, fournisseur) et sous quelle
    licence ? Selon la réponse, on reprend ses données en le citant, ou on les reconstruit depuis
    des sources primaires (normes, fiches matière). As-tu une version complète des trois passages
    coupés ? (à trancher avant le plan technique)
-3. **Ordre avec la spec 032** : le guide attend-il la page « L'atelier » (V1), ou passe-t-il avant,
+2. **Ordre avec la spec 032** : le guide attend-il la page « L'atelier » (V1), ou passe-t-il avant,
    avec la route `/atelier` créée pour lui ?
-4. **Liste des matières** : celles du référentiel seulement, ou d'autres que tu usines (sans lien
+3. **Liste des matières** : celles du référentiel seulement, ou d'autres que tu usines (sans lien
    avec les pièces de ton employeur) ?
