@@ -1,8 +1,26 @@
-import type { Designation, DesignationSystem, Material } from '../domain/models/material.model';
-import type { SourceCitation, SourceId, Sourced } from '../domain/models/source.model';
+import type {
+  Designation,
+  DesignationSystem,
+  IsoGroup,
+  IsoGroupColor,
+  IsoGroupLetter,
+  Material,
+} from '../domain/models/material.model';
+import type { Source, SourceCitation, SourceId, Sourced } from '../domain/models/source.model';
 
-// A fictional source must stay assignable whatever documents the real catalogue lists.
+// Fictional ids stay assignable whatever the real closed unions list.
 const FICTIONAL_SOURCE_ID = 'source-fictive' as string as SourceId;
+const FICTIONAL_COLOR = 'couleur-fictive' as string as IsoGroupColor;
+
+export function aSource(overrides: Partial<Source> = {}): Source {
+  return {
+    title: 'Document fictif de test',
+    publisher: 'Éditeur fictif',
+    url: 'https://exemple.invalid/document-fictif',
+    consultedOn: '2001-01-01',
+    ...overrides,
+  };
+}
 
 export function aCitation(overrides: Partial<SourceCitation> = {}): SourceCitation {
   return {
@@ -29,6 +47,15 @@ export function aMaterial(overrides: Partial<Material> = {}): Material {
     designations: [aDesignation('Matière fictive'), aDesignation('ZZ-FICTIF-0', 'en-symbol')],
     isoGroup: aSourced('P'),
     behaviour: [aSourced('Comportement fictif à la coupe.')],
+    ...overrides,
+  };
+}
+
+export function anIsoGroup(letter: IsoGroupLetter, overrides: Partial<IsoGroup> = {}): IsoGroup {
+  return {
+    letter,
+    name: aSourced(`Groupe fictif ${letter}`),
+    color: aSourced(FICTIONAL_COLOR),
     ...overrides,
   };
 }

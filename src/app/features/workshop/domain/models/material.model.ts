@@ -2,6 +2,14 @@ import type { Sourced } from './source.model';
 
 export type IsoGroupLetter = 'P' | 'M' | 'K' | 'N' | 'S' | 'H';
 
+export type IsoGroupColor = never;
+
+export type IsoGroup = {
+  readonly letter: IsoGroupLetter;
+  readonly name: Sourced<string>;
+  readonly color: Sourced<IsoGroupColor>;
+};
+
 export type DesignationSystem =
   'en-symbol' | 'material-number' | 'aisi' | 'uns' | 'afnor-legacy' | 'common-name';
 

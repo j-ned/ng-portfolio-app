@@ -665,6 +665,9 @@ PR 4 (référentiel et recherche, domaine pur)
   matières.
 - **Tranche 5 — une donnée sans source ne compile pas** : `SOURCES`, `ISO_513_GROUPS`,
   `reference-types.spec.ts` (partie source et matière), garde « aucune source IA ».
+  `ISO_513_GROUPS` reporté à la première PR de données (première source Sandvik Coromant), avec
+  sa garantie de type, l'invariant « chaque groupe ISO cité par une matière a son entrée » et son
+  ajout à `EDITORIAL_SOURCES`.
 - **Tranche 6 — une combinaison sans recommandation le dit** : modèles opération et recommandation,
   `OPERATION_FAMILIES`, `RECOMMENDATIONS` vide, `parseGuideSelection`, `findRecommendation`,
   `resolveGuideState`, garanties de compilation de `InsertFor<O>`, intégrité des recommandations,
@@ -815,6 +818,61 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
   tranche passent face aux stubs par construction (idempotence de l'identité, intégrité d'un
   référentiel vide, référentiel vide → `[]`) ; les 4413 tests des suites existantes restent verts.
 
+### Tranche 5 — une donnée sans source ne compile pas
+
+Builders étendus (`testing/insert-guide-builders.ts`) : `aSource(overrides)` (titre, éditeur,
+URL `https://exemple.invalid/…`, date `2001-01-01`, tous fictifs) et `anIsoGroup(letter, overrides)`
+(nom et couleur sourcés, couleur fictive convertie comme l'identifiant de source fictif).
+
+`domain/reference-types.spec.ts` (18 tests, garanties de compilation, `// @ts-expect-error: <raison>`)
+- Catalogue : `SOURCES` a exactement le type `Readonly<Record<SourceId, Source>>`
+  (`expectTypeOf`), donc un identifiant sans entrée ne compile pas. **RED** (module absent).
+- Source : URL `http://` refusée, date de consultation absente refusée, éditeur absent refusé.
+  **RED** (`Source` absent).
+- Groupe ISO : lettre hors des six, nom non sourcé, couleur hors de l'union fermée, couleur non
+  sourcée : refusés. **RED** (`IsoGroup`, `IsoGroupColor` absents).
+- Verts d'emblée, ne comptent pas comme RED (types de la tranche 4 qui refusent déjà) : valeur sans
+  citation, source hors catalogue (vrai tant que `SourceId` vaut `never`, et après la saisie pour
+  tout identifiant non catalogué), citation sans `locator`, matière sans désignation, sans
+  comportement, groupe hors des six lettres, groupe non sourcé, désignation non sourcée, système de
+  désignation inconnu, ligne de comportement non sourcée.
+
+`domain/reference-integrity.spec.ts`, bloc `SOURCES` (17 tests)
+- Données réelles : aucune source du catalogue n'a de défaut (vrai sur le catalogue vide, il protège
+  la saisie).
+- Contrôle sur fixtures, pour prouver que la garde mord : une source fictive bien formée n'a aucun
+  défaut ; `it.each` de 9 sources fictives qui citent une IA (titre Gemini, ChatGPT, Claude,
+  Copilot, « Référentiel des alliages » ; éditeur « Intelligence artificielle », « … IA … »,
+  OpenAI ; URL `gemini.google.com`) → exactement `['ai']` ; `it.each` de 6 défauts de format
+  (titre blanc, éditeur insécable seul, URL sans hôte, URL qui ne se lit pas, date `01/01/2001`,
+  date inexistante `2001-02-30`) → exactement le défaut attendu. Ces 16 tests passent par
+  construction dès que `Source` existe : le contrôle vit dans la spec, il n'y a pas de code
+  applicatif à juger.
+
+Non couvert, **bloqué** : `ISO_513_GROUPS` réel et l'invariant « chaque groupe ISO cité par une
+matière a son entrée ». Le nom et la couleur d'un groupe sont des `Sourced<…>` et `SourceId` vaut
+`never` : aucune entrée ne se construit sans inventer une source ni sans conversion de type, et
+`IsoGroupColor` (union remplie à la saisie) est vide aussi. Aucun test n'importe donc
+`ISO_513_GROUPS` dans cette tranche ; décision demandée à la session principale.
+
+Scaffold dû au GREEN (code applicatif) : `Source` dans `domain/models/source.model.ts` ;
+`IsoGroupColor` et `IsoGroup` dans `domain/models/material.model.ts` ;
+`domain/sources.static-data.ts` (`SOURCES`).
+
+RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_modules/.vite`) :
+- état livré : RED confirmé via la commande test du profil le 2026-10-25 21:33, 8 failed / 18 total
+  sur les garanties de compilation de la tranche (7 directives `@ts-expect-error` inutilisées,
+  TS2578, et l'`expectTypeOf` du catalogue, TS2307), code de sortie 1. Les seules autres erreurs du
+  build sont les symboles du scaffold (TS2305, TS2724, TS2307) ; aucune erreur de format ni de
+  lint (`prettier --check`, `eslint` verts sur `features/workshop`).
+- discriminance, avec des stubs plus lâches que le plan (`url: string`, `publisher` et
+  `consultedOn` optionnels, `letter: string`, nom et couleur `string` acceptés,
+  `Record<string, Source>`), retirés ensuite : les mêmes 8 garanties tombent, une par contrainte.
+- non-régression, avec des stubs typés selon le plan (`IsoGroupColor = never`, `SOURCES = {}`),
+  retirés ensuite : 4483 passed / 4483 total, code de sortie 0. Les 10 garanties vertes d'emblée et
+  les 17 tests d'intégrité passent, les tests de la tranche 4 restent verts.
+
 ## Journal des tranches
 
 - **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
+- **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
