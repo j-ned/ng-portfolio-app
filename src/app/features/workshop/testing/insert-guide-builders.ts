@@ -94,7 +94,7 @@ export function aDescribedInsert(): DescribedInsert {
 
 type EntryCommon = Omit<RecommendationEntry, 'operation' | 'insert'>;
 
-export type RecommendationFor<O extends OperationId> = EntryCommon & {
+type RecommendationFor<O extends OperationId> = EntryCommon & {
   readonly operation: O;
   readonly insert: InsertFor<O>;
 };

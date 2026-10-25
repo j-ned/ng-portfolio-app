@@ -973,3 +973,29 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
 - **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
 - **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
 - **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
+
+## Review code
+
+PR 4 (tranches 4 à 6), `git diff origin/master...HEAD` (`35ef862`, `294b178`, `ed89943`), revue du 2026-10-25.
+
+**Verdict** : REJECTED
+**Gates CI locaux** : `pnpm install --frozen-lockfile` 0 / `pnpm run build --configuration production` 0 / `pnpm test` 0 (235 fichiers, 4645 passed / 4645) / `pnpm lint` 0 / `pnpm run format:check` 0
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main. Archéologie 0 hit ; import Angular/RxJS dans `features/workshop/domain` 0 ; `fakeAsync`/`.only`/`.skip`/snapshot/`getByTestId`/`innerHTML`/`console` 0 ; Gemini, Sandvik, `Coro[A-Z]` hors `reference-integrity.spec.ts` 0 ; données réelles (désignations du Constat) 0.
+**Warnings de gate** : (b) pré-existant hors diff : `pnpm install`, « Ignored build scripts: @parcel/watcher, @sentry/cli, lmdb, msgpackr-extract » (lockfile non touché). Build, test, lint : aucun.
+**Rendu compilé** : N/A
+**Preuve de verify runtime** : N/A (exception : code non atteint par le bundle ; aucune route, aucun `app.routes*`, aucun `package.json` modifié ; `dist/angular-portfolio-app` ne contient aucune chaîne du référentiel ; seul consommateur hors domaine : `src/app/testing/editorial-sources.ts`, test-only)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ❌
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+**Tests notables** :
+- ✨ `reference-integrity.spec.ts:74-103`, `:204-338`, `:363-396` : chaque garde sur les données réelles (vides) est doublée de contrôles sur fixtures qui prouvent qu'elle mord ; sans eux, ces tests seraient verts par construction.
+- ✨ `find-recommendation.spec.ts:158-165` : l'absence de repli par groupe ISO est épinglée par un voisin du même groupe.
+
+**Points à corriger** :
+1. `src/app/features/workshop/testing/insert-guide-builders.ts:97` : `export type RecommendationFor<O>` n'a aucun consommateur hors du fichier (seul usage : type de retour de `aRecommendation`, l. 107) et le projet n'émet pas de déclarations. Retirer l'`export`.
+
+**Suite (2026-10-25)** : point 1 corrigé (`export` retiré, session principale) ; gates rejouées avant la PR.
