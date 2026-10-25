@@ -99,10 +99,11 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
 | # | Périmètre | Dépend de |
 |---|---|---|
 | 1 | cette spec | — |
-| 2 | plan technique (`architect`) | 1 |
-| 3 | référentiel des matières et recherche (domaine pur, sans interface) | 2 |
-| 4 | interface : champ à suggestions, choix de l'opération, fiche matière | 3 |
-| 5+ | recommandations, une famille d'opérations par PR, au rythme de la saisie des données sourcées | 4 |
+| 2 | plan technique (`architect`) de l'accueil de l'espace et du guide | 1 |
+| 3 | accueil `/atelier` (intro courte, carte du guide, menu et pied de page) | 2 |
+| 4 | référentiel des matières et recherche (domaine pur, sans interface) | 2 |
+| 5 | interface : champ à suggestions, choix de l'opération, fiche matière | 3, 4 |
+| 6+ | recommandations, une famille d'opérations par PR, au rythme de la saisie des données sourcées | 5 |
 
 ### Hors périmètre
 
@@ -124,8 +125,7 @@ utiliser, avec ce qu'il faut savoir pour bien usiner cette matière. Public : de
 3. **Fiche de codification** : écartée comme source (voir Constat).
 4. **Liste des matières** : celles du référentiel seulement pour cette version, une fois vérifiées
    dans Sandvik Coromant. D'autres matières pourront s'ajouter plus tard, selon la même règle.
-
-### Questions ouvertes
-
-1. **Ordre avec la spec 032** : le guide attend-il la page « L'atelier » (V1), ou passe-t-il avant,
-   avec la route `/atelier` créée pour lui ?
+5. **Place dans « L'atelier »** : « L'atelier » devient un espace d'éléments de métier (spec 032,
+   arbitrages du 2026-10-25). Le guide en est le **premier outil** : il est livré avec l'accueil de
+   l'espace (`/atelier` : intro courte, cartes des éléments), et vit sous `/atelier` (chemin exact
+   fixé par le plan technique). Le plan technique couvre donc les deux.
