@@ -903,6 +903,62 @@ erreur de harnais ni de type ; `eslint` et `prettier --check` verts sur les deux
 autres tests restent verts, tranche 1 comprise. Un premier passage avait aussi fait tomber
 `admin-post-editor.spec.ts` sur un délai de 5 s ; il passe au second, sans rapport avec ce diff.
 
+### Tranche 3 — une référence de pièce ne peut pas partir
+
+Exemples d'ADR-0032 §3 et du plan V1 de la spec 032 repris tels quels ; les ajouts sont fictifs.
+Aucun nom d'employeur ni de client, dans aucun fichier.
+
+`features/workshop/domain/confidential-references.spec.ts` (27 tests, sans TestBed)
+- `it.each` de 13 textes signalés → exactement un fragment, non blanc, contenu dans le texte :
+  `P/N 4521-07`, `PN: 88-123`, `réf. pièce`, `réf. plan`, `réf. client`, `plan n° 12`, `n° de plan`,
+  `OF n° 3`, `indice C`, `indice 3`, `D23456789`, `12345` (borne des cinq chiffres), et une phrase
+  qui contient `plan n° 12`. **RED** (13).
+- `it.each` de 13 textes non signalés → `[]` : `AS9100`, `EN 9100`, `ISO 2768`, `Inconel 718`,
+  `Ti-6Al-4V`, `7075-T6`, `Ø20 ±0,02`, `G71`, `M30`, `10 000 tr/min` avec U+202F, `1234` (borne),
+  « L'indice de rugosité… » (« indice » suivi d'un mot, pas d'une lettre seule : proposé, l'ADR ne
+  le tranche pas), texte vide. Verts face au stub par construction.
+- Deux références dans un texte → deux fragments, non blancs, contenus, dans l'ordre du texte.
+  **RED**.
+
+`src/app/workshop-confidentiality.spec.ts` (16 tests). La garde lit chaque chaîne par
+`editorialTexts` (même parcours que la garde des noms commerciaux) et n'exclut qu'un chemin :
+`.designations[n].value`, contrôlée par son format (un UNS compte cinq chiffres). Tout le reste est
+lu, `locator` des désignations compris : un champ de texte ajouté plus tard est gardé d'office.
+- Données réelles, `it.each` sur `WORKSHOP_SPACE`, `MATERIALS`, `OPERATION_FAMILIES` (libellés de
+  famille et d'opération), `RECOMMENDATIONS` → aucun chemin signalé. Verts par construction
+  (référentiel vide, intro sans référence) ; ils jugeront la première donnée de la PR 5.
+- Preuve que la garde mord, `it.each` de 11 fixtures fictives (builders du guide) → exactement le
+  chemin attendu : paragraphe d'intro, comportement de matière, `locator` d'une désignation,
+  géométrie, nuance, piège (le second d'une liste), aspect décrit, signification d'un champ ISO,
+  `locator` d'une citation, libellé de famille, libellé d'opération. **RED** (11).
+- Désignation UNS fictive à cinq chiffres (`X99999`) → non signalée. Vert face au stub par
+  construction ; prouvé discriminant avec l'implémentation de contrôle ci-dessous.
+
+Conséquence à connaître : un slug de matière ou un identifiant de source qui porterait cinq chiffres
+consécutifs serait signalé ; il s'écrit avec un tiret.
+
+Sweep : `findConfidentialReferences`, `confidential`, `EDITORIAL_SOURCES`, `editorialTexts` cherchés
+dans `src/` ; aucune suite existante n'encode la garde, rien à adapter. `EDITORIAL_SOURCES` porte déjà
+les quatre constantes ; aucun builder étendu.
+
+Scaffold dû au GREEN (code applicatif) : `domain/confidential-references.ts`,
+`findConfidentialReferences(text: string): readonly string[]`.
+
+RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_modules/.vite`) :
+- état livré : le build échoue sur `TS2307 Cannot find module` pour `confidential-references`
+  (deux imports), plus un `TS7006` qui en découle, code de sortie 1 ; `prettier --check` et `eslint`
+  verts sur les deux specs ; grep d'archéologie sans résultat.
+- mesure des assertions, avec un stub temporaire typé selon le plan (retourne toujours `[]`), retiré
+  ensuite : RED confirmé via la commande test du profil le 2026-10-25 22:56, 25 failed / 4735 total
+  (Test Files 2 failed | 238 passed), code de sortie 1. Les 25 échecs sont des `AssertionError`
+  (`toHaveLength`, `toEqual`), aucune erreur de harnais ni de type. Verts d'emblée face au stub : les
+  13 textes non signalés, les 4 gardes sur données réelles et la désignation à cinq chiffres ; les
+  4692 tests des suites existantes et des tranches 1, 2, 4 à 6 restent verts.
+- contrôle de cohérence des fixtures : avec une implémentation jetable d'une seule expression
+  régulière (cinq chiffres ou plus et les motifs de l'ADR), retirée ensuite, les 43 tests de la
+  tranche passent au runner ciblé : le contrat est tenable et chaque fixture ne signale que son
+  chemin.
+
 ### Tranche 4 — une désignation tapée n'importe comment retrouve sa matière
 
 Builders : `src/app/features/workshop/testing/insert-guide-builders.ts` — `aCitation()`,
@@ -1110,6 +1166,7 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
 - **Tranche 2 — on y arrive depuis le menu et le pied de page** : GREEN 4691 passed / 4691 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois lignes de données relu, rien à simplifier). Verify faite (§ Verify) : le menu et le pied de page, déjà atteignables sur tout le site, changent. `admin-post-editor.spec.ts` n'a pas dépassé son délai sur ce passage.
+- **Tranche 3 — une référence de pièce ne peut pas partir** : GREEN 4735 passed / 4735 total (au premier cycle), code de sortie 0 · GREEN fait en session (règle du 2026-10-25 : petites tranches en session) · refactor : l'expression régulière unique est découpée en motifs nommés (`REFERENCE_PATTERNS`), tests inchangés et verts. Verify reportée : fonction pure et garde de test, aucune surface atteignable modifiée. Décisions retenues du RED : « L'indice de rugosité » n'est pas signalé (« indice » suivi d'un mot) ; la garde lit tout le texte du référentiel sauf les valeurs de désignation, donc un slug ou un identifiant à cinq chiffres consécutifs serait signalé (l'écrire avec un tiret) ; `SOURCES` n'est pas lu (une URL peut porter un long numéro de document). L'extension au référentiel, renvoyée ici par la tranche 6, est faite.
 - **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
 - **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
 - **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
