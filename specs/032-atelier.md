@@ -139,13 +139,12 @@ définition de V1 ci-dessus.
 16. Le volet demande une évolution de l'**API** (dépôt séparé : entité, routes d'admin et publiques),
     à livrer et déployer avant la PR front (CLAUDE.md, ordre de déploiement).
 
-### Questions ouvertes (2026-10-25)
-
-1. **Fiche ou article ?** En quoi une fiche diffère-t-elle d'un article de la rubrique « Atelier » ?
-   Hypothèse à confirmer : une fiche est une page de référence, sans date, qu'on met à jour (un
-   lexique, une explication du tour), là où un article est daté et raconte. Si la différence est
-   mince, V5 peut devenir de simples articles mis en avant sur l'accueil de l'espace, sans
-   évolution de l'API.
+17. **Fiche ou article** (tranché par Julien le 2026-10-25) : une fiche est une **page de référence
+    sans date**, que Julien met à jour au fil du temps (un lexique, l'explication du tour) ; un
+    article est **daté et raconte**. Une fiche n'a donc ni date de publication affichée, ni place dans
+    le flux RSS ni dans la liste du blog ; elle a sa place dans le sitemap. Les deux se renvoient l'un
+    à l'autre quand le sujet s'y prête (V4). La différence justifie une entité distincte côté API
+    (exigence 16) plutôt qu'un article mis en avant.
 
 ### Questions ouvertes
 
