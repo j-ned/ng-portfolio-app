@@ -1,14 +1,28 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import {
   aCitation,
+  aDescribedInsert,
   aDesignation,
   aMaterial,
   anIsoGroup,
+  anIsoInsert,
+  anOperation,
+  anOperationFamily,
+  aRecommendation,
   aSource,
   aSourced,
 } from '../testing/insert-guide-builders';
 import type { IsoGroup, Material } from './models/material.model';
+import type { Operation, OperationFamily } from './models/operation.model';
+import type {
+  DescribedInsert,
+  GuideState,
+  InsertFor,
+  IsoInsertDesignation,
+  RecommendationEntry,
+} from './models/recommendation.model';
 import type { Source, SourceCitation, SourceId, Sourced } from './models/source.model';
+import { RECOMMENDATIONS } from './recommendations.static-data';
 import { SOURCES } from './sources.static-data';
 
 describe('Source types', () => {
@@ -106,5 +120,91 @@ describe('Material types', () => {
   it('Given a material When a behaviour line is not sourced Then it does not compile', () => {
     // @ts-expect-error: every behaviour line comes from a cited source
     const _refused: Material = aMaterial({ behaviour: ['Comportement fictif.'] });
+  });
+});
+
+describe('Operation types', () => {
+  it('Given an operation When its id is unknown Then it does not compile', () => {
+    // @ts-expect-error: the guide only knows the operations of its families
+    const _refused: Operation = { ...anOperation('threading'), id: 'milling' };
+  });
+
+  it('Given a family When it has no operation Then it does not compile', () => {
+    // @ts-expect-error: a family always offers at least one operation
+    const _refused: OperationFamily = anOperationFamily({ operations: [] });
+  });
+
+  it('Given a family When its id is unknown Then it does not compile', () => {
+    // @ts-expect-error: the families form a closed list
+    const _refused: OperationFamily = { ...anOperationFamily(), id: 'milling' };
+  });
+});
+
+describe('Recommendation types', () => {
+  it('Given the reference When its recommendations are read Then each one is checked against the model', () => {
+    expectTypeOf(RECOMMENDATIONS).toEqualTypeOf<readonly RecommendationEntry[]>();
+  });
+
+  it('Given an external or internal turning operation When its insert type is read Then it is an ISO 1832 designation', () => {
+    expectTypeOf<
+      InsertFor<
+        | 'external-roughing'
+        | 'external-semi-finishing'
+        | 'external-finishing'
+        | 'internal-roughing'
+        | 'internal-finishing'
+      >
+    >().toEqualTypeOf<IsoInsertDesignation>();
+  });
+
+  it('Given a grooving, parting, threading or drilling operation When its insert type is read Then it is a described insert', () => {
+    expectTypeOf<
+      InsertFor<'grooving' | 'parting-off' | 'threading' | 'insert-drilling'>
+    >().toEqualTypeOf<DescribedInsert>();
+  });
+
+  it('Given a grooving entry When its insert is an ISO designation Then it does not compile', () => {
+    // @ts-expect-error: grooving inserts do not follow the ISO 1832 designation
+    const _refused: RecommendationEntry = { ...aRecommendation('grooving'), insert: anIsoInsert() };
+  });
+
+  it('Given an external finishing entry When its insert is described Then it does not compile', () => {
+    const described = { ...aRecommendation('external-finishing'), insert: aDescribedInsert() };
+    // @ts-expect-error: external turning inserts are given by their ISO 1832 designation
+    const _refused: RecommendationEntry = described;
+  });
+
+  it('Given an entry When it names no material Then it does not compile', () => {
+    // @ts-expect-error: an entry lists explicitly the materials it covers
+    const _refused: RecommendationEntry = { ...aRecommendation('threading'), materials: [] };
+  });
+
+  it('Given an entry When its operation is unknown Then it does not compile', () => {
+    // @ts-expect-error: an entry is for one of the operations of the guide
+    const _refused: RecommendationEntry = { ...aRecommendation('threading'), operation: 'milling' };
+  });
+
+  it('Given an entry When its geometry is not sourced Then it does not compile', () => {
+    const unsourced = { ...aRecommendation('parting-off'), geometry: 'Géométrie fictive.' };
+    // @ts-expect-error: the geometry comes from a cited source
+    const _refused: RecommendationEntry = unsourced;
+  });
+
+  it('Given an entry When its cutting speed is in another unit Then it does not compile', () => {
+    const inRevolutions = {
+      ...aRecommendation('external-roughing'),
+      cuttingSpeed: aSourced({ min: 1, max: 2, unit: 'tr/min' }),
+    };
+    // @ts-expect-error: a cutting speed is given in metres per minute
+    const _refused: RecommendationEntry = inRevolutions;
+  });
+
+  it('Given an available guide state When its entry is missing Then it does not compile', () => {
+    // @ts-expect-error: an available state always carries the entry it shows
+    const _refused: GuideState = {
+      status: 'available',
+      material: aMaterial(),
+      operation: anOperation('threading'),
+    };
   });
 });

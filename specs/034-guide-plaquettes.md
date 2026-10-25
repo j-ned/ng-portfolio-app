@@ -671,7 +671,8 @@ PR 4 (référentiel et recherche, domaine pur)
 - **Tranche 6 — une combinaison sans recommandation le dit** : modèles opération et recommandation,
   `OPERATION_FAMILIES`, `RECOMMENDATIONS` vide, `parseGuideSelection`, `findRecommendation`,
   `resolveGuideState`, garanties de compilation de `InsertFor<O>`, intégrité des recommandations,
-  garde des noms commerciaux, extension de la garde de confidentialité au texte libre.
+  garde des noms commerciaux. L'extension de la garde de confidentialité au texte libre du
+  référentiel est renvoyée à la tranche 3, qui crée `findConfidentialReferences`.
 
 PR 5 (interface)
 - **Tranche 7 — le guide existe et se trouve** : token, copie, page `InsertGuide` (`h1`, chapô,
@@ -872,7 +873,103 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
   retirés ensuite : 4483 passed / 4483 total, code de sortie 0. Les 10 garanties vertes d'emblée et
   les 17 tests d'intégrité passent, les tests de la tranche 4 restent verts.
 
+### Tranche 6 — une combinaison sans recommandation le dit
+
+Builders étendus (`testing/insert-guide-builders.ts`) : `anOperation(id, overrides)`,
+`anOperationFamily(overrides)`, `anIsoInsert()`, `aDescribedInsert()`,
+`aRecommendation(operation, overrides)` (type `RecommendationFor<O>` : l'opération garde son type
+littéral, donc la forme de plaquette qu'impose `InsertFor<O>`), `aReference(overrides)` (six groupes
+fictifs, une famille, une matière, aucune entrée).
+
+Proposés dans les tests, à valider par Julien : slugs d'opération `ebauche-exterieure`,
+`semi-finition-exterieure`, `finition-exterieure`, `ebauche-interieure`, `finition-interieure`,
+`gorge`, `tronconnage`, `filetage`, `percage` ; libellés d'opération de la spec avec une majuscule
+initiale (« Ébauche », « Perçage au foret à plaquettes »), puisqu'ils s'affichent seuls à côté d'un
+bouton radio.
+
+`domain/operations.static-data.spec.ts` (2 tests)
+- Type exact `readonly OperationFamily[]` (`expectTypeOf`).
+- Golden `toEqual` : cinq familles et neuf opérations dans l'ordre du tableau du Parcours, avec
+  identifiant, slug et libellé. **RED**.
+
+`domain/guide-selection.spec.ts` (17 tests, fixture de deux matières et trois opérations fictives)
+- `it.each` de 3 couples connus → les deux slugs retenus tels quels. **RED**.
+- `it.each` de 6 matières non retenues (absente, vide, inconnue, autre casse, entourée d'espaces,
+  slug d'opération) → `material: ''`, l'opération connue gardée. **RED**.
+- `it.each` de 7 opérations non retenues (mêmes cas, plus un slug de matière et l'identifiant
+  `external-roughing` au lieu du slug) → `operation: ''`, la matière gardée. **RED**.
+- Référentiel vide → les deux à `''`. Passe face au stub par construction.
+
+`domain/find-recommendation.spec.ts` (20 tests ; Alpha et Beta du groupe P, Gamma du groupe S ;
+entrées Alpha × finition, Alpha + Gamma × gorge, Gamma × finition)
+- `findRecommendation`, `it.each` de 4 couples couverts → l'entrée exacte (`toBe`), y compris les
+  deux matières d'une entrée multi-matières. **RED**.
+- `findRecommendation`, `it.each` de 4 couples non couverts (opération sans entrée, matière
+  inconnue, Beta du même groupe P qu'Alpha, matière vide) et la liste vide → `undefined`. Passent
+  face au stub par construction.
+- `resolveGuideState`, `it.each` de 5 cas `incomplete` (rien, matière seule, opération seule, matière
+  ou opération hors du référentiel) → exactement `{ status: 'incomplete' }`. Passent face au stub par
+  construction.
+- `unavailable` : Beta × gorge ; référentiel sans entrée ; Beta × finition, voisine d'Alpha dans le
+  groupe P, sans rien lui emprunter → `{ status: 'unavailable', material, operation }` exact. **RED**.
+- `available`, `it.each` de 3 couples → `{ status: 'available', material, operation, entry }` exact.
+  **RED**.
+
+`domain/reference-types.spec.ts` (13 garanties ajoutées, `// @ts-expect-error: <raison>` ou
+`expectTypeOf`) : opération d'identifiant inconnu, famille sans opération, famille d'identifiant
+inconnu ; `RECOMMENDATIONS` de type exact `readonly RecommendationEntry[]` ; `InsertFor<…>` des cinq
+opérations de tournage = `IsoInsertDesignation`, des quatre autres = `DescribedInsert` ; désignation
+ISO refusée pour une gorge ; description refusée pour une finition extérieure ; entrée sans matière ;
+entrée d'opération inconnue ; géométrie non sourcée ; vitesse dans une autre unité que `m/min` ; état
+`available` sans entrée. **RED** à la compilation (types absents).
+
+`domain/reference-integrity.spec.ts`
+- Bloc `RECOMMENDATIONS` (19 tests). Données réelles : aucune entrée n'a de défaut (matière inconnue,
+  couple couvert deux fois, vitesse hors de `0 < min ≤ max` ou non finie, texte blanc, `locator`
+  compris). Contrôles sur fixtures : 4 jeux sains (aucune entrée, entrée sans vitesse, plage d'une
+  seule valeur, une matière dans deux opérations et deux matières dans une) → `[]` ; 14 jeux fautifs
+  → exactement le défaut attendu.
+- Bloc `commercial names` (9 tests) : `/sandvik/iu` et `/\bCoro\p{Lu}/u` sur tout le texte de
+  `MATERIALS`, `OPERATION_FAMILIES` et `RECOMMENDATIONS`, identifiants de source cités (`cite.source`)
+  exceptés ; contrôles : signalé dans une valeur, en capitales, sur un nom de produit, dans un
+  `locator` ; non signalé : « Corrosion », « Coromandel », un identifiant de source.
+- Ces 28 tests passent dès que les modules existent : le contrôle vit dans la spec, il n'y a pas de
+  code applicatif à juger.
+
+`src/app/testing/editorial-sources.ts` : `MATERIALS`, `OPERATION_FAMILIES`, `RECOMMENDATIONS`
+ajoutés à `EDITORIAL_SOURCES`, soit 75 lignes de plus dans les verrous (typographie 3, identité et
+vouvoiement 72), vertes face aux données de la spec. `editorial-identity.spec.ts` lit en plus chaque
+fichier applicatif non-spec de `features/workshop` : 7 lignes de plus pour les 7 fichiers du scaffold.
+
+Non couvert, **en attente de décision** : la garde de confidentialité sur le texte libre du
+référentiel. `findConfidentialReferences` n'existe pas dans le dépôt (tranche 3, PR 3, non
+commencée).
+
+Scaffold dû au GREEN (code applicatif) : `domain/models/operation.model.ts` (`OperationFamilyId`,
+`OperationId`, `Operation`, `OperationFamily`) ; `domain/models/recommendation.model.ts`
+(`IsoInsertDesignation`, `DescribedInsert`, `InsertFor`, `CuttingSpeedRange`,
+`RecommendationEntry`, `GuideState`) ; `domain/models/insert-guide-reference.model.ts`
+(`InsertGuideReference`) ; `domain/operations.static-data.ts` ; `domain/recommendations.static-data.ts`
+(vide) ; `domain/guide-selection.ts` ; `domain/find-recommendation.ts`.
+
+RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_modules/.vite`) :
+- état livré : le build échoue sur `TS2307 Cannot find module` pour les sept fichiers du scaffold, et
+  seulement sur eux (plus les `TS2578` et `TS7006` qui en découlent), code de sortie 1 ;
+  `prettier --check` et `eslint` verts sur `features/workshop` et `editorial-sources.ts`.
+- mesure des assertions, avec des stubs temporaires typés selon le plan (`{ material: '',
+  operation: '' }`, `undefined`, `{ status: 'incomplete' }`, `OPERATION_FAMILIES` et
+  `RECOMMENDATIONS` vides), retirés ensuite : RED confirmé via la commande test du profil le
+  2026-10-25 21:47, 27 failed / 4645 total (Test Files 3 failed | 232 passed), code de sortie 1.
+  Les 27 échecs sont des `AssertionError` (`toEqual` / `toBe`), aucune erreur de harnais. Les 13
+  garanties de compilation passent face à ces stubs ; les 4483 tests des tranches 4 et 5 et des
+  suites existantes restent verts.
+- discriminance des garanties de compilation : dix relâchements des types stubés, un à la fois
+  (`InsertFor` non conditionnel, matières en tableau simple, opération ou identifiants ouverts à
+  `string`, géométrie non sourcée, unité libre, `entry` optionnelle, famille vide permise,
+  `RECOMMENDATIONS` typé `unknown[]`) : chaque garantie tombe sous le sien (`TS2578`, `TS2344`).
+
 ## Journal des tranches
 
 - **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
 - **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
+- **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
