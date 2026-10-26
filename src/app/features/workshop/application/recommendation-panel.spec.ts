@@ -1,11 +1,17 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import { settle } from '@shared/testing/settle';
-import type { GuideState, RecommendationEntry } from '../domain/models/recommendation.model';
+import type {
+  ExternalSituation,
+  GuideState,
+  RecommendationEntry,
+} from '../domain/models/recommendation.model';
 import {
   aCitation,
   aMaterialCatalogue,
+  anIsoInsert,
   anIsoInsertField,
+  anIsoInsertProposal,
   anOperation,
   aRecommendation,
   aReference,
@@ -63,14 +69,26 @@ describe('RecommendationPanel', () => {
 
   const ENTRY = aRecommendation('external-finishing', {
     materials: [ALPHA.slug],
-    insert: {
-      kind: 'iso-1832',
-      choice: [aCitation({ basis: 'deduced' })],
-      fields: [
-        anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
-        anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif', aCitation({ basis: 'deduced' })),
-      ],
-    },
+    insert: anIsoInsert<ExternalSituation>(
+      anIsoInsertProposal({
+        situation: 'external-shoulder',
+        choice: [aCitation({ basis: 'deduced' })],
+        fields: [
+          anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
+          anIsoInsertField(
+            'Dépouille fictive',
+            'Q',
+            'Angle fictif',
+            aCitation({ basis: 'deduced' }),
+          ),
+        ],
+      }),
+      anIsoInsertProposal({
+        situation: 'external-steep-profiling',
+        choice: [aCitation()],
+        fields: [anIsoInsertField('Forme fictive', 'Y', 'Losange fictif étroit')],
+      }),
+    ),
     geometry: [
       { value: 'Géométrie fictive.', cite: aCitation({ basis: 'deduced' }) },
       { value: 'Seconde géométrie fictive.', cite: aCitation({ scope: 'group' }) },
@@ -95,6 +113,7 @@ describe('RecommendationPanel', () => {
       heading: block.firstElementChild?.tagName,
       title: block.firstElementChild?.textContent?.trim(),
       values: page.texts('recommendation-value', block),
+      situations: page.texts('iso-insert-situation', block),
       code: page.texts('iso-insert-code', block),
       mentions: page
         .all('source-citation', block)
@@ -115,7 +134,7 @@ describe('RecommendationPanel', () => {
     });
   });
 
-  it('Given an available recommendation When the panel renders Then every value is followed by its citation, the insert code by the principles it is deduced from, each saying when it is deduced or given for the group', async () => {
+  it('Given an available recommendation When the panel renders Then every value is followed by its citation, each insert code under its situation, followed by the principles it is deduced from, each saying when it is deduced or given for the group', async () => {
     const page = await render(available());
 
     expect(blocks(page)).toEqual([
@@ -123,21 +142,37 @@ describe('RecommendationPanel', () => {
         heading: 'H3',
         title: 'Plaquette',
         values: [],
-        code: ['ZQ'],
-        mentions: ['déduit des principes du fabricant', '', 'déduit des principes du fabricant'],
+        situations: ['Chariotage avec épaulement', 'Profilage à forte rampe'],
+        code: ['ZQ', 'Y'],
+        mentions: [
+          'déduit des principes du fabricant',
+          '',
+          'déduit des principes du fabricant',
+          '',
+          '',
+        ],
       },
       {
         heading: 'H3',
         title: 'Géométrie',
         values: ['Géométrie fictive.', 'Seconde géométrie fictive.'],
+        situations: [],
         code: [],
         mentions: ['déduit des principes du fabricant', 'conseil du groupe'],
       },
-      { heading: 'H3', title: 'Nuance', values: ['Nuance fictive.'], code: [], mentions: [''] },
+      {
+        heading: 'H3',
+        title: 'Nuance',
+        values: ['Nuance fictive.'],
+        situations: [],
+        code: [],
+        mentions: [''],
+      },
       {
         heading: 'H3',
         title: 'Pièges',
         values: ['Premier piège fictif.', 'Second piège fictif.'],
+        situations: [],
         code: [],
         mentions: ['', 'conseil du groupe'],
       },

@@ -12,7 +12,7 @@ export type SourceId =
 export type Source = {
   readonly title: string;
   readonly publisher: string;
-  readonly url: `https://${string}`;
+  readonly url?: `https://${string}`;
   readonly consultedOn: string;
 };
 

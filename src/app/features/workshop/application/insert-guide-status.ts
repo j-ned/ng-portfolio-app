@@ -18,7 +18,15 @@ export function insertGuideStatus(state: GuideState, families: readonly Operatio
   const named = `${state.material.designations[0].value}, ${spokenOperation(state.operation, families)}.`;
   if (state.status === 'unavailable') return `${named} ${INSERT_GUIDE_COPY.unavailable}`;
   const { insert } = state.entry;
-  return insert.kind === 'iso-1832'
-    ? `${named} ${INSERT_GUIDE_COPY.proposedInsert} ${isoInsertCode(insert)}.`
-    : named;
+  if (insert.kind !== 'iso-1832') return named;
+  const { proposals } = insert;
+  const intro =
+    proposals.length > 1 ? INSERT_GUIDE_COPY.proposedInserts : INSERT_GUIDE_COPY.proposedInsert;
+  const codes = proposals
+    .map(
+      (proposal) =>
+        `${isoInsertCode(proposal)} (${INSERT_GUIDE_COPY.situations[proposal.situation].toLocaleLowerCase('fr-FR')})`,
+    )
+    .join(', ');
+  return `${named} ${intro} ${codes}.`;
 }

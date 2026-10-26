@@ -6,6 +6,7 @@ import {
   aMaterial,
   anIsoGroup,
   anIsoInsert,
+  anIsoInsertProposal,
   anOperation,
   anOperationFamily,
   aRecommendation,
@@ -19,8 +20,11 @@ import type { Operation, OperationFamily } from './models/operation.model';
 import type {
   DescribedInsert,
   GuideState,
+  ExternalSituation,
   InsertFor,
+  InternalSituation,
   IsoInsertDesignation,
+  IsoInsertProposal,
   RecommendationEntry,
 } from './models/recommendation.model';
 import type { Source, SourceCitation, SourceId, Sourced } from './models/source.model';
@@ -60,6 +64,11 @@ describe('Source types', () => {
   it('Given a citation When its scope is other than the group Then it does not compile', () => {
     // @ts-expect-error: a citation only widens to the advice of the material's ISO group
     const _refused = aCitation({ scope: 'family' });
+  });
+
+  it('Given a source without public URL When it is typed Then it compiles', () => {
+    const { url: _dropped, ...unlinked } = aSource();
+    expectTypeOf(unlinked).toExtend<Source>();
   });
 
   it('Given a source When its URL is not https Then it does not compile', () => {
@@ -167,16 +176,50 @@ describe('Recommendation types', () => {
     expectTypeOf(RECOMMENDATIONS).toEqualTypeOf<readonly RecommendationEntry[]>();
   });
 
-  it('Given an external or internal turning operation When its insert type is read Then it is an ISO 1832 designation', () => {
+  it('Given an external turning operation When its insert type is read Then it is an ISO 1832 designation for external situations', () => {
     expectTypeOf<
-      InsertFor<
-        | 'external-roughing'
-        | 'external-semi-finishing'
-        | 'external-finishing'
-        | 'internal-roughing'
-        | 'internal-finishing'
-      >
-    >().toEqualTypeOf<IsoInsertDesignation>();
+      InsertFor<'external-roughing' | 'external-semi-finishing' | 'external-finishing'>
+    >().toEqualTypeOf<IsoInsertDesignation<ExternalSituation>>();
+  });
+
+  it('Given an internal turning operation When its insert type is read Then it is an ISO 1832 designation for internal situations', () => {
+    expectTypeOf<InsertFor<'internal-roughing' | 'internal-finishing'>>().toEqualTypeOf<
+      IsoInsertDesignation<InternalSituation>
+    >();
+  });
+
+  it('Given an internal entry When it proposes an external situation Then it does not compile', () => {
+    const facing = {
+      ...aRecommendation('internal-finishing'),
+      insert: anIsoInsert(anIsoInsertProposal({ situation: 'external-facing' })),
+    };
+    // @ts-expect-error: an internal entry only proposes the situations of internal turning
+    const _refused: RecommendationEntry = facing;
+  });
+
+  it('Given an external entry When it proposes an internal situation Then it does not compile', () => {
+    const inside = {
+      ...aRecommendation('external-roughing'),
+      insert: anIsoInsert(anIsoInsertProposal({ situation: 'internal-stronger-edge' })),
+    };
+    // @ts-expect-error: an external entry only proposes the situations of external turning
+    const _refused: RecommendationEntry = inside;
+  });
+
+  it('Given a proposal When its situation is outside the closed list Then it does not compile', () => {
+    // @ts-expect-error: a situation is one the maker writes a shape for
+    const _refused: IsoInsertProposal = { ...anIsoInsertProposal(), situation: 'threading' };
+  });
+
+  it('Given a proposal When its situation is missing Then it does not compile', () => {
+    const { situation: _dropped, ...unplaced } = anIsoInsertProposal();
+    // @ts-expect-error: a code is always proposed for a situation
+    const _refused: IsoInsertProposal = unplaced;
+  });
+
+  it('Given an ISO designation When it proposes nothing Then it does not compile', () => {
+    // @ts-expect-error: an ISO designation proposes at least one code
+    const _refused: IsoInsertDesignation = { kind: 'iso-1832', proposals: [] };
   });
 
   it('Given a grooving, parting, threading or drilling operation When its insert type is read Then it is a described insert', () => {
@@ -217,15 +260,15 @@ describe('Recommendation types', () => {
     const _refused: RecommendationEntry = { ...aRecommendation('threading'), geometry: [] };
   });
 
-  it('Given an ISO designation When it does not cite the principle of its choice Then it does not compile', () => {
-    const { choice: _dropped, ...unexplained } = anIsoInsert();
+  it('Given a proposal When it does not cite the principle of its choice Then it does not compile', () => {
+    const { choice: _dropped, ...unexplained } = anIsoInsertProposal();
     // @ts-expect-error: a code always cites the principle it is deduced from, or the source that writes it
-    const _refused: IsoInsertDesignation = unexplained;
+    const _refused: IsoInsertProposal = unexplained;
   });
 
-  it('Given an ISO designation When its list of principles is empty Then it does not compile', () => {
+  it('Given a proposal When its list of principles is empty Then it does not compile', () => {
     // @ts-expect-error: a code always cites at least one principle or source
-    const _refused: IsoInsertDesignation = { ...anIsoInsert(), choice: [] };
+    const _refused: IsoInsertProposal = { ...anIsoInsertProposal(), choice: [] };
   });
 
   it('Given an entry When its cutting speed is in another unit Then it does not compile', () => {

@@ -1,6 +1,6 @@
 # Données du tournage extérieur et intérieur (spec 034, tranches 10 et 11)
 
-Saisie du 2026-10-26, source unique de vérité : `src/app/features/workshop/domain/`
+Saisie du 2026-10-26, codes par situation le même jour (décisions 14 à 16), source unique de vérité : `src/app/features/workshop/domain/`
 (`sources.static-data.ts`, `iso-groups.static-data.ts`, `materials.static-data.ts`,
 `recommendations.static-data.ts`). Ce tableau les résume pour la revue ; en cas d'écart, le code fait
 foi.
@@ -17,7 +17,7 @@ foi.
 | `mitsubishi-insert-identification` (MMC) | Turning Insert Identification | Mitsubishi Materials | `mitsubishicarbide.net/…/turning/tip_sensaku.html` |
 | `kyocera-turning-inserts` (KYO) | Turning Indexable Inserts (catalogue, p. B1) | Kyocera | `asia.kyocera.com/…/B-Turning-Indexable.pdf` |
 | `kyocera-aluminium-finishing` (KYO-AP) | AP Breaker | Kyocera | `tool-global.kyocera.com/en/prdct/tool/product/ap.php` |
-| `julien-working-list` (LT) | Liste de travail de Julien — correspondances indicatives | Julien Nédellec | `https://nedellec-julien.fr/atelier` (aucune URL publique du document) |
+| `julien-working-list` (LT) | Liste de travail de Julien — correspondances indicatives | Julien Nédellec | aucune (document sans adresse publique, titre affiché sans lien, décision 15) |
 
 Toutes consultées le 2026-10-26. Les pages Sandvik ont été relues en `fr-fr` le jour de la saisie
 (titres, intitulés de section, noms des groupes).
@@ -47,7 +47,7 @@ correspondances indicatives. Groupe : S5, base écrite, sous-groupe entre parent
 | `x5crni18-10` | X5CrNi18-10, 1.4301, 304, Z7CN18-09 | M (austénitiques) |
 | `x2crni18-9` | X2CrNi18-9, 1.4307, 304L, Z3CN18-10 | M (austénitiques) |
 | `x2crnimo17-12-2` | X2CrNiMo17-12-2, 1.4404, 316L, Z3CND17-11-02 | M (austénitiques) |
-| `x20cr13-x30cr13` | X20Cr13, X30Cr13, 1.4021, 1.4028, 420, Z20C13, Z30C13 | M (ferritiques et martensitiques) |
+| `x20cr13-x30cr13` | X20Cr13, X30Cr13, 1.4021, 1.4028, 420, Z20C13, Z30C13 | **M (ferritiques et martensitiques)** |
 | `x5crnicunb16-4` | X5CrNiCuNb16-4, 1.4542, 17-4 PH, 630, Z6CNU17-04 | M |
 | `x2crnimon22-5-3` | X2CrNiMoN22-5-3, 1.4462, 2205, Z3CND22-05Az | M (duplex) |
 | `en-gjl-250` | EN-GJL-250, GG25, FGL 250, Ft 25 | K (grise) |
@@ -71,41 +71,92 @@ Exclues (passages coupés en bas de page de la liste) : la troisième ligne alum
 5754, illisible) et tout ce qui la suit dans le groupe N, l'encadré « Règles d'or » du groupe P, le
 tableau des vitesses (de toute façon jamais affiché, décision 13).
 
-## Groupe × opération → code
+## Classement : Sandvik l'emporte (décision 16)
 
-Chaque champ du code est cité **pour son sens** sur la table de lecture (forme et tolérance : MMC ;
-dépouille et fixation : KYO p. B1 ; base écrite). Le **choix** du code est porté par les citations
-listées sous le code, à l'écran juste après lui. « déduit » = base `deduced`, mention « déduit des
-principes du fabricant » affichée ; « écrit » = la source écrit le code. Une entrée couvre toutes les
-matières de son groupe (décision 11).
+Quand la liste de travail et Sandvik divergent, le classement de S5 (« Matériaux de pièce ») fait foi :
+**Stellite 6 en H** (la liste la mettait en S) et **X20Cr13 / X30Cr13 en M** (S4 range les
+martensitiques en P5). Un test d'intégrité garde ces deux classements.
 
-| Groupe | Ébauche ext. | Semi-finition ext. | Finition ext. | Ébauche int. | Finition int. |
-|---|---|---|---|---|---|
-| P | CNMG | CNMG | CNMG | CCMT | DCMT |
-| M | RCMT | RCMT | RCMT | CCMT | DCMT |
-| K | CNMA | CNMA | CNMA | CCMT | DCMT |
-| N | CCGT | CCGT | CCGT | CCGT | DCGT |
-| S | RCGT | RCGT | RCGT | — | — |
-| H | — | — | CNGA | — | — |
+## Situations
 
-« — » : aucune recommandation, l'interface dit « Pas encore de recommandation pour ce cas. »
+Libellés repris des pages Sandvik `fr-fr`, qui écrivent « Profilage » (pas « copiage ») et parlent
+d'« angle de ramping plus grand » pour la forme V :
+
+| Famille | Situation | Forme écrite | Page, section |
+|---|---|---|---|
+| Extérieur | Chariotage avec épaulement | C (80°) en priorité, épaulement à 91–95° | S2, « Chariotage » |
+| Extérieur | Chariotage sans épaulement | S, carrée à 75° | S2, « Chariotage » |
+| Extérieur | Profilage | D (55°) en premier choix, 93° | S2, « Profilage » |
+| Extérieur | Profilage à forte rampe | V (35°) | S2, « Profilage » |
+| Extérieur | Dressage | W, « trigone » à 95°, pour la polyvalence | S2, « Dressage » |
+| Intérieur | Chariotage avec épaulement | T, triangulaire, 91–95° | S3, « Chariotage » |
+| Intérieur | Avec épaulement, arête plus résistante | C (80°) | S3, « Chariotage » |
+| Intérieur | Chariotage sans épaulement | S, carrée à 75° | S3, « Chariotage » |
+| Intérieur | Profilage | D (55°) en premier choix | S3, « Profilage » |
+
+Le dressage à 75° (S, « pour l'optimisation ») n'est pas une situation : il donne le même code que le
+chariotage sans épaulement. La lettre W n'est pas écrite par S2, qui écrit « trigone » ; la table de
+lecture (MMC) donne W = trigone.
+
+## Groupe × opération → situations → code
+
+Chaque proposition cite d'abord **la forme écrite pour sa situation** (page de la famille, base
+écrite, sans mention), puis les principes d'où viennent la dépouille, la tolérance et la fixation (base
+déduite, mention « déduit des principes du fabricant »), sauf quand une source écrit le code entier
+(Kyocera, alu en finition : tout écrit, aucune mention). Chaque champ reste cité pour son **sens** sur la
+table de lecture (forme et tolérance : MMC ; dépouille et fixation : KYO p. B1 ; écrit). Une entrée
+couvre toutes les matières de son groupe (décision 11).
+
+| Groupe | Opération | Situations → code |
+|---|---|---|
+| P | Ébauche ext. | chariotage avec épaulement **CNMG** · sans épaulement **SNMG** · dressage **WNMG** |
+| P | Semi-finition ext. | chariotage avec épaulement **CNMG** · profilage **DNMG** · dressage **WNMG** |
+| P | Finition ext. | chariotage avec épaulement **CNMG** · profilage **DNMG** · profilage à forte rampe **VNMG** |
+| P, K | Ébauche int. | arête plus résistante **CCMT** · avec épaulement **TCMT** |
+| P, K | Finition int. | avec épaulement **TCMT** · profilage **DCMT** |
+| M | Ébauche, semi-finition, finition ext. | chariotage sans épaulement **SCMT** · profilage **RCMT** (ronde) |
+| M | Ébauche, finition int. | chariotage sans épaulement **SCMT** |
+| K | Ébauche ext. | chariotage avec épaulement **CNMA** · sans épaulement **SNMA** |
+| K | Semi-finition, finition ext. | chariotage avec épaulement **CNMA** · profilage **DNMA** |
+| N | Ébauche ext. | chariotage avec épaulement **CCGT** · sans épaulement **SCGT** · profilage **DCGT** |
+| N | Semi-finition ext. | chariotage avec épaulement **CCGT** · profilage **DCGT** |
+| N | Finition ext. | chariotage avec épaulement **CCGT** · profilage **DCGT** · profilage à forte rampe **VCGT** (écrits, KYO-AP) |
+| N | Ébauche int. | arête plus résistante **CCGT** · avec épaulement **TCGT** · profilage **DCGT** |
+| N | Finition int. | profilage **DCGT** · arête plus résistante **CCGT** (écrits, KYO-AP) |
+| S | Ébauche, semi-finition, finition ext. | chariotage sans épaulement **RCGT** · profilage **RCGT** |
+| H | Finition ext. | chariotage avec épaulement **CNGA** · dressage **WNGA** |
+
+« — » ailleurs : H en ébauche, en semi-finition et à l'intérieur, S à l'intérieur (cf. plus bas).
 
 ### D'où vient chaque lettre
 
-| Code (cases) | Lettre ← principe (source, section, base) |
+| Lettres | Principe (source, section, base) |
 |---|---|
-| CNMG (P ext.) | N et G ← S1 « Plaquette de tournage négative » (premier choix en extérieur, réversible) ; C ← S2 « Chariotage » (C 80° en premier choix avec épaulement) ; M ← S1 « Ebauche » / « Semi-finition » / « Finition » selon l'étape. Déduit. |
-| CNMA (K ext.) | N ← S1 négative ; C ← S2 ; M ← S1 étape ; A ← S4 « Tournage des fontes » (copeau court, bon contrôle). Déduit. |
-| CCMT (P, K int.) | C (dépouille) et T ← S1 « Plaquette de tournage positive » (premier choix en alésage, ne se retourne pas) ; C (forme) ← S3 « Chariotage » (C pour une arête plus résistante) ; M ← S1 « Ebauche ». Déduit. |
-| DCMT (P, K int.) | idem, D ← S3 « Chariotage » (D 55° avec épaulement), M ← S1 « Finition ». Déduit. |
-| CCMT / DCMT (M int.) | idem P, plus dépouille C ← S4 « Tournage des aciers inoxydables austénitiques » (dépouille positive). Déduit. |
-| RCMT (M ext.) | R et C ← S4 « … austénitiques » (plaquette ronde ou faible angle d'attaque contre l'entaille, dépouille positive) ; M ← S1 étape ; T ← S1 positive. Déduit. |
-| CCGT (N ext. ébauche et semi-finition) | C (dépouille) et G ← S4 « Tournage des alliages d'aluminium » (forme de base positive et arêtes vives, toujours) ; C (forme) ← S2 ; T ← S1 positive. Déduit. |
-| CCGT (N finition ext.) | **Écrit** : KYO-AP (gamme CCGT, DCGT, TPGT, VCGT pour la finition de l'aluminium, extérieur et intérieur) ; C parmi les quatre ← S2 « Chariotage ». |
-| CCGT (N ébauche int.) | S4 aluminium + S1 positive + S3 (C, arête plus résistante). Déduit. |
-| DCGT (N finition int.) | **Écrit** : KYO-AP ; D parmi les quatre ← S3 « Chariotage » (D avec épaulement). |
-| RCGT (S ext.) | R ← S4 « Tournage des superalliages réfractaires » (angle d'attaque inférieur à 45°) ; C et G ← S4 (arêtes vives indispensables) ; T ← S1 positive. Déduit. |
-| CNGA (H finition ext.) | N ← S1 négative ; C ← S2 ; G et A ← S4 « Tournage des aciers trempés » (CBN, préparation d'arête). Déduit. |
+| Forme, P · K · N · H | Page de la famille pour la situation (S2 ou S3, tableau ci-dessus), **écrit**. |
+| N, G (P) ; N (K, H) | S1 « Plaquette de tournage négative » (premier choix en extérieur), déduit. |
+| M (tolérance) | S1 « Ebauche », « Semi-finition » ou « Finition » selon l'étape, déduit. |
+| A (K) | S4 « Tournage des fontes » (copeau court), déduit. |
+| C, T (P, K int.) | S1 « Plaquette de tournage positive » (premier choix en alésage), déduit. |
+| C, G (N) | S4 « Tournage des alliages d'aluminium » (forme de base positive, arêtes vives, toujours), déduit ; T ← S1 positive, déduit. |
+| Code entier (N finition) | KYO-AP, gamme CCGT, DCGT, TPGT et VCGT pour la finition de l'aluminium, **écrit**. |
+| Forme S (M) | S2 ou S3 sans épaulement, écrit ; **plus** S4 inox « angle d'attaque faible contre l'usure en entaille, d'où 75° sans épaulement plutôt que 91–95° », écrit, conseil du groupe. |
+| Forme R (M) | S4 inox « plaquette ronde contre l'usure en entaille, à la place de la forme D du profilage », écrit, conseil du groupe. |
+| C (dépouille, M) | S4 inox « face de dépouille positive », déduit ; T ← S1 positive, déduit. |
+| Forme R (S) | S4 superalliages « angle d'attaque inférieur à 45° » : la ronde, seule à le tenir, est **déduite** (la page n'écrit pas « ronde »), conseil du groupe. |
+| C, G (S) | S4 superalliages (arêtes vives), déduit ; T ← S1 positive, déduit. |
+| G, A (H) | S4 « Tournage des aciers trempés » (CBN, profondeur de coupe aussi petite que possible, arête wiper), déduit. |
+
+Chaque proposition dont la matière impose une autre forme que la situation garde la citation de la
+situation (S2 ou S3), puis la citation du groupe qui la remplace : l'écran dit pourquoi le code n'est
+pas celui de la page de la situation.
+
+## Situations omises (contrainte de matière)
+
+| Groupe | Situations omises | Raison |
+|---|---|---|
+| M, extérieur | chariotage avec épaulement, profilage D, profilage à forte rampe, dressage | 91 à 95° (ou 93°) : angle d'attaque grand, contraire à « ronde ou angle d'attaque faible » (S4 inox, duplex aussi) ; la ronde ne fait pas d'épaulement. |
+| M, intérieur | avec épaulement, arête plus résistante, profilage | Même raison ; la ronde est exclue aussi, car son angle d'attaque descend sous 75°, que S3 interdit à l'intérieur. Reste la carrée à 75°. |
+| S, extérieur | chariotage avec épaulement, profilage D ou V, dressage | S4 : angle d'attaque inférieur à 45°. Seule la ronde le tient ; le chariotage sans épaulement (S à 75°) et le profilage passent à la ronde, en le disant. |
 
 ### Géométrie, nuance, pièges
 

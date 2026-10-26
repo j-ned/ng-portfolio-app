@@ -55,7 +55,6 @@ export const SOURCES: Readonly<Record<SourceId, Source>> = {
   'julien-working-list': {
     title: 'Liste de travail de Julien — correspondances indicatives',
     publisher: 'Julien Nédellec',
-    url: 'https://nedellec-julien.fr/atelier',
     consultedOn: CONSULTED_ON,
   },
 };

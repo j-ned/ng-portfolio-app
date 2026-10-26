@@ -10,7 +10,9 @@ import type { Operation, OperationFamily, OperationId } from '../domain/models/o
 import type {
   DescribedInsert,
   InsertFor,
+  InsertSituation,
   IsoInsertDesignation,
+  IsoInsertProposal,
   RecommendationEntry,
 } from '../domain/models/recommendation.model';
 import type { Source, SourceCitation, SourceId, Sourced } from '../domain/models/source.model';
@@ -95,16 +97,26 @@ export function anIsoInsertField(
   code: string,
   meaning: string,
   cite: SourceCitation = aCitation(),
-): IsoInsertDesignation['fields'][number] {
+): IsoInsertProposal['fields'][number] {
   return { value: { field, code, meaning }, cite };
 }
 
-export function anIsoInsert(): IsoInsertDesignation {
+export function anIsoInsertProposal<S extends InsertSituation = 'external-shoulder'>(
+  overrides: Partial<IsoInsertProposal<S>> = {},
+): IsoInsertProposal<S> {
   return {
-    kind: 'iso-1832',
+    situation: 'external-shoulder' as S,
     choice: [aCitation()],
     fields: [aSourced({ field: 'Champ fictif', code: 'Z', meaning: 'Signification fictive' })],
+    ...overrides,
   };
+}
+
+export function anIsoInsert<S extends InsertSituation = 'external-shoulder'>(
+  ...proposals: readonly IsoInsertProposal<S>[]
+): IsoInsertDesignation<S> {
+  const [first = anIsoInsertProposal<S>(), ...others] = proposals;
+  return { kind: 'iso-1832', proposals: [first, ...others] };
 }
 
 export function aDescribedInsert(): DescribedInsert {
@@ -124,7 +136,11 @@ export function aRecommendation<O extends OperationId>(
   operation: O,
   overrides: Partial<EntryCommon & { readonly insert: InsertFor<O> }> = {},
 ): RecommendationFor<O> {
-  const insert = ISO_DESIGNATED_OPERATION.test(operation) ? anIsoInsert() : aDescribedInsert();
+  const insert = operation.startsWith('internal-')
+    ? anIsoInsert(anIsoInsertProposal({ situation: 'internal-shoulder' }))
+    : ISO_DESIGNATED_OPERATION.test(operation)
+      ? anIsoInsert()
+      : aDescribedInsert();
   return {
     operation,
     materials: ['matiere-fictive'],

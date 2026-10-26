@@ -3,6 +3,7 @@ import { editorialTexts } from '../../../testing/editorial-sources';
 import {
   aCitation,
   anIsoInsert,
+  anIsoInsertProposal,
   aRecommendation,
   aSource,
   aSourced,
@@ -10,7 +11,11 @@ import {
 import { ISO_513_GROUPS } from './iso-groups.static-data';
 import { MATERIALS } from './materials.static-data';
 import type { IsoGroupLetter, Material } from './models/material.model';
-import type { CuttingSpeedRange, RecommendationEntry } from './models/recommendation.model';
+import type {
+  CuttingSpeedRange,
+  IsoInsertProposal,
+  RecommendationEntry,
+} from './models/recommendation.model';
 import type { Source, SourceCitation, SourceId, Sourced } from './models/source.model';
 import { normalizeDesignation } from './normalize-designation';
 import { OPERATION_FAMILIES } from './operations.static-data';
@@ -44,13 +49,13 @@ const isHttpsUrl = (text: string): boolean =>
 
 const sourceDefects = (source: Source): readonly SourceDefect[] => {
   const defects: SourceDefect[] = [];
-  if ([source.title, source.publisher, source.url].some((text) => GENERATIVE_AI.test(text))) {
+  if ([source.title, source.publisher, source.url ?? ''].some((text) => GENERATIVE_AI.test(text))) {
     defects.push('ai');
   }
   if ([source.title, source.publisher].some((text) => text.trim() === '')) {
     defects.push('blank-text');
   }
-  if (!isHttpsUrl(source.url)) {
+  if (source.url !== undefined && !isHttpsUrl(source.url)) {
     defects.push('invalid-url');
   }
   if (!isCalendarDate(source.consultedOn)) {
@@ -70,6 +75,26 @@ describe('SOURCES', () => {
 
   it('Given a well-formed fictional source When it is checked Then it has no defect', () => {
     expect(sourceDefects(aSource())).toEqual([]);
+  });
+
+  it('Given a fictional source without public URL When it is checked Then it has no defect', () => {
+    const { url: _dropped, ...unlinked } = aSource();
+
+    expect(sourceDefects(unlinked)).toEqual([]);
+  });
+
+  it('Given the catalogue When URLs are read Then only the working list has none, and nothing points to the site itself', () => {
+    const entries = Object.entries<Source>(SOURCES);
+
+    expect({
+      unlinked: entries.filter(([, { url }]) => url === undefined).map(([id]) => id),
+      ownSite: entries
+        .filter(
+          ([, { url }]) =>
+            url !== undefined && new URL(url).hostname.endsWith('nedellec-julien.fr'),
+        )
+        .map(([id]) => id),
+    }).toEqual({ unlinked: ['julien-working-list'], ownSite: [] });
   });
 
   it.each<[string, Partial<Source>]>([
@@ -306,10 +331,11 @@ describe('RECOMMENDATIONS', () => {
         [
           aRecommendation('external-finishing', {
             materials: ['alliage-essai-alpha'],
-            insert: {
-              ...anIsoInsert(),
-              fields: [aSourced({ field: 'Champ fictif', code: 'Z', meaning: ' ' })],
-            },
+            insert: anIsoInsert(
+              anIsoInsertProposal({
+                fields: [aSourced({ field: 'Champ fictif', code: 'Z', meaning: ' ' })],
+              }),
+            ),
           }),
         ],
         'blank-text',
@@ -403,7 +429,10 @@ const SANDVIK_HOST = 'www.sandvik.coromant.com';
 
 const WORKING_LIST: SourceId = 'julien-working-list';
 
-const isSandvikPage = (id: SourceId): boolean => new URL(SOURCES[id].url).hostname === SANDVIK_HOST;
+const isSandvikPage = (id: SourceId): boolean => {
+  const { url } = SOURCES[id];
+  return url !== undefined && new URL(url).hostname === SANDVIK_HOST;
+};
 
 const isCitation = (value: object): value is SourceCitation =>
   'source' in value && 'locator' in value && 'basis' in value;
@@ -462,6 +491,16 @@ describe('ISO_513_GROUPS', () => {
 });
 
 describe('MATERIALS content', () => {
+  it.each<[string, IsoGroupLetter]>([
+    ['stellite-6', 'H'],
+    ['x20cr13-x30cr13', 'M'],
+  ])(
+    'Given %s When its group is read Then the Sandvik classification wins over the working list',
+    (slug, letter) => {
+      expect(groupOf(slug)).toBe(letter);
+    },
+  );
+
   it('Given the reference When materials are grouped Then every ISO group has at least one', () => {
     expect(ISO_GROUP_LETTERS.filter((letter) => materialsOf(letter).length === 0)).toEqual([]);
   });
@@ -505,6 +544,41 @@ describe('MATERIALS content', () => {
 
 const TURNING_FIELDS = ['Forme', 'Dépouille', 'Tolérance', 'Fixation et brise-copeaux'];
 
+type PlacedProposal = {
+  readonly entry: RecommendationEntry;
+  readonly group: IsoGroupLetter | undefined;
+  readonly proposal: IsoInsertProposal;
+};
+
+const proposalsOf = (entries: readonly RecommendationEntry[]): readonly PlacedProposal[] =>
+  entries.flatMap((entry) =>
+    entry.insert.kind === 'iso-1832'
+      ? entry.insert.proposals.map((proposal) => ({
+          entry,
+          group: groupOf(entry.materials[0]),
+          proposal,
+        }))
+      : [],
+  );
+
+const label = ({ entry, group, proposal }: PlacedProposal): string =>
+  `${group} × ${entry.operation} × ${proposal.situation}`;
+
+const shapeCitation = (proposal: IsoInsertProposal): SourceCitation | undefined =>
+  proposal.choice.find(({ locator }) =>
+    new RegExp(`forme ${proposal.fields[0].value.code}(?![\\p{L}])`, 'u').test(locator),
+  );
+
+const NAMES_A_SHAPE = /forme \p{Lu}(?![\p{L}])/u;
+
+const familyOf = ({ operation }: RecommendationEntry): 'external' | 'internal' =>
+  operation.startsWith('internal-') ? 'internal' : 'external';
+
+const FAMILY_PAGE: Readonly<Record<'external' | 'internal', SourceId>> = {
+  external: 'sandvik-external-turning',
+  internal: 'sandvik-internal-turning',
+};
+
 describe('RECOMMENDATIONS content', () => {
   it('Given the reference When external finishing is read Then every ISO group has a recommendation', () => {
     const covered = RECOMMENDATIONS.filter(({ operation }) => operation === 'external-finishing')
@@ -542,13 +616,126 @@ describe('RECOMMENDATIONS content', () => {
 
   it('Given the turning entries When their codes are read Then each one reads shape, clearance, tolerance and fixing, each meaning written by the code table', () => {
     expect(
-      RECOMMENDATIONS.flatMap(({ operation, insert }) =>
-        insert.kind === 'iso-1832' &&
-        (insert.fields.map(({ value }) => value.field).join() !== TURNING_FIELDS.join() ||
-          insert.fields.some(({ cite }) => cite.basis !== 'stated' || isSandvikPage(cite.source)))
-          ? [operation]
-          : [],
-      ),
+      proposalsOf(RECOMMENDATIONS)
+        .filter(
+          ({ proposal }) =>
+            proposal.fields.map(({ value }) => value.field).join() !== TURNING_FIELDS.join() ||
+            proposal.fields.some(
+              ({ cite }) => cite.basis !== 'stated' || isSandvikPage(cite.source),
+            ),
+        )
+        .map(label),
+    ).toEqual([]);
+  });
+
+  it('Given the turning entries When their situations are counted Then each proposes one to three distinct situations, and fewer than two only where a material constraint rules the others out', () => {
+    expect(
+      RECOMMENDATIONS.flatMap((entry) => {
+        if (entry.insert.kind !== 'iso-1832') return [];
+        const situations = entry.insert.proposals.map(({ situation }) => situation);
+        const group = groupOf(entry.materials[0]);
+        const tooFew = situations.length < 2 && group !== 'M' && group !== 'S';
+        return situations.length > 3 || duplicates(situations).length > 0 || tooFew
+          ? [`${group} × ${entry.operation}`]
+          : [];
+      }),
+    ).toEqual([]);
+  });
+
+  it('Given each proposal When its choice is read Then one citation names its shape letter for its situation', () => {
+    expect(
+      proposalsOf(RECOMMENDATIONS)
+        .filter(({ proposal }) => shapeCitation(proposal) === undefined)
+        .map(label),
+    ).toEqual([]);
+  });
+
+  it('Given groups P, K, N and H When a shape is proposed Then it is written for the situation by the Sandvik page of its turning family', () => {
+    expect(
+      proposalsOf(RECOMMENDATIONS)
+        .filter(({ group }) => group === 'P' || group === 'K' || group === 'N' || group === 'H')
+        .filter(({ entry, proposal }) => {
+          const cite = shapeCitation(proposal);
+          return cite?.basis !== 'stated' || cite.source !== FAMILY_PAGE[familyOf(entry)];
+        })
+        .map(label),
+    ).toEqual([]);
+  });
+
+  it('Given groups M and S When a code is proposed Then its shape keeps the entering angle the group asks for, and its choice says so with the advice of the group', () => {
+    expect(
+      proposalsOf(RECOMMENDATIONS)
+        .filter(({ group }) => group === 'M' || group === 'S')
+        .filter(
+          ({ group, proposal }) =>
+            !(group === 'S' ? ['R'] : ['R', 'S']).includes(proposal.fields[0].value.code) ||
+            !proposal.choice.some(
+              ({ source, scope, locator }) =>
+                source === 'sandvik-turning-materials' &&
+                scope === 'group' &&
+                /angle d'attaque|ronde/u.test(locator),
+            ),
+        )
+        .map(label),
+    ).toEqual([]);
+  });
+
+  it('Given group N When a code is proposed Then it is positive with a sharp edge in every situation', () => {
+    expect(
+      proposalsOf(RECOMMENDATIONS)
+        .filter(({ group }) => group === 'N')
+        .filter(
+          ({ proposal }) =>
+            proposal.fields[1].value.code === 'N' || proposal.fields[2].value.code !== 'G',
+        )
+        .map(label),
+    ).toEqual([]);
+  });
+
+  it('Given aluminium finishing When a code is proposed Then the source writes it whole, so nothing in its choice is deduced', () => {
+    expect(
+      proposalsOf(RECOMMENDATIONS)
+        .filter(
+          ({ group, entry }) =>
+            group === 'N' &&
+            (entry.operation === 'external-finishing' || entry.operation === 'internal-finishing'),
+        )
+        .filter(
+          ({ proposal }) =>
+            !proposal.choice.some(({ source }) => source === 'kyocera-aluminium-finishing') ||
+            proposal.choice.some(({ basis }) => basis === 'deduced'),
+        )
+        .map(label),
+    ).toEqual([]);
+  });
+
+  it('Given group H When a code is proposed Then its choice cites hard turning: CBN, small depth of cut and wiper', () => {
+    expect(
+      proposalsOf(RECOMMENDATIONS)
+        .filter(({ group }) => group === 'H')
+        .filter(
+          ({ proposal }) =>
+            !proposal.choice.some(
+              ({ source, locator }) =>
+                source === 'sandvik-turning-materials' &&
+                ['CBN', 'profondeur', 'wiper'].every((word) => locator.includes(word)),
+            ),
+        )
+        .map(label),
+    ).toEqual([]);
+  });
+
+  it('Given each proposal When its clearance, tolerance and fixing are chosen Then they are deduced from a principle unless a source writes the whole code', () => {
+    expect(
+      proposalsOf(RECOMMENDATIONS)
+        .filter(({ proposal }) => {
+          const others = proposal.choice.filter(({ locator }) => !NAMES_A_SHAPE.test(locator));
+          const wholeCode = others.some(({ source }) => source === 'kyocera-aluminium-finishing');
+          return (
+            !wholeCode && others.some(({ basis, scope }) => basis === 'stated' && scope !== 'group')
+          );
+        })
+        .map(label),
     ).toEqual([]);
   });
 });

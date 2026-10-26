@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { Material } from '../domain/models/material.model';
 import type { Operation, OperationFamily } from '../domain/models/operation.model';
 import type {
-  IsoInsertDesignation,
+  ExternalSituation,
+  InternalSituation,
   RecommendationEntry,
 } from '../domain/models/recommendation.model';
 import {
   aMaterialCatalogue,
-  aCitation,
+  anIsoInsert,
   anIsoInsertField,
+  anIsoInsertProposal,
   anOperation,
   anOperationFamily,
   aRecommendation,
@@ -54,33 +56,55 @@ describe('insertGuideStatus', () => {
     },
   );
 
-  const ZQ_INSERT: IsoInsertDesignation = {
-    kind: 'iso-1832',
-    choice: [aCitation()],
-    fields: [
-      anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
-      anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif'),
-    ],
-  };
+  const shape = (code: string): ReturnType<typeof anIsoInsertField> =>
+    anIsoInsertField('Forme fictive', code, 'Forme fictive');
+  const clearance = anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif');
 
   it.each<[Material, Operation, RecommendationEntry, string]>([
     [
       ALPHA,
       OUTER_FINISHING,
-      aRecommendation('external-finishing', { materials: [ALPHA.slug], insert: ZQ_INSERT }),
-      'Alliage essai Alpha, Finition fictive (Extérieur fictif).',
+      aRecommendation('external-finishing', {
+        materials: [ALPHA.slug],
+        insert: anIsoInsert(
+          anIsoInsertProposal({ situation: 'external-shoulder', fields: [shape('Z'), clearance] }),
+        ),
+      }),
+      'Alliage essai Alpha, Finition fictive (Extérieur fictif). Plaquette proposée\u00a0: ZQ (chariotage avec épaulement).',
+    ],
+    [
+      ALPHA,
+      OUTER_FINISHING,
+      aRecommendation('external-finishing', {
+        materials: [ALPHA.slug],
+        insert: anIsoInsert<ExternalSituation>(
+          anIsoInsertProposal({ situation: 'external-shoulder', fields: [shape('Z'), clearance] }),
+          anIsoInsertProposal({ situation: 'external-profiling', fields: [shape('Y'), clearance] }),
+          anIsoInsertProposal({ situation: 'external-facing', fields: [shape('W'), clearance] }),
+        ),
+      }),
+      'Alliage essai Alpha, Finition fictive (Extérieur fictif). Plaquettes proposées\u00a0: ZQ (chariotage avec épaulement), YQ (profilage), WQ (dressage).',
     ],
     [
       BETA,
       INNER_FINISHING,
-      aRecommendation('internal-finishing', { materials: [BETA.slug], insert: ZQ_INSERT }),
-      'Alliage essai Bêta, Finition fictive (Intérieur fictif).',
+      aRecommendation('internal-finishing', {
+        materials: [BETA.slug],
+        insert: anIsoInsert<InternalSituation>(
+          anIsoInsertProposal({ situation: 'internal-shoulder', fields: [shape('Z'), clearance] }),
+          anIsoInsertProposal({
+            situation: 'internal-stronger-edge',
+            fields: [shape('Y'), clearance],
+          }),
+        ),
+      }),
+      'Alliage essai Bêta, Finition fictive (Intérieur fictif). Plaquettes proposées\u00a0: ZQ (chariotage avec épaulement), YQ (avec épaulement, arête plus résistante).',
     ],
   ])(
-    'Given %#: an available recommendation When the status is derived Then it names the material and the operation, then the proposed insert code',
-    (material, operation, entry, named) => {
+    'Given %#: an available recommendation When the status is derived Then it names the material and the operation, then each proposed code with its situation',
+    (material, operation, entry, status) => {
       expect(insertGuideStatus({ status: 'available', material, operation, entry }, FAMILIES)).toBe(
-        `${named} Plaquette proposée\u00a0: ZQ.`,
+        status,
       );
     },
   );

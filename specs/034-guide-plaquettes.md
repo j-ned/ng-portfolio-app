@@ -1559,6 +1559,77 @@ rendue) : 8 failed / 4960 total (Test Files 5 failed | 247 passed), code de sort
 Les autres invariants de contenu étaient verts sur un référentiel vide (vrais par construction) : ils
 jugent depuis la saisie.
 
+### Codes par situation (décisions 14 à 16)
+
+Joué dans la même session, RED puis GREEN par le même agent (exception validée le 2026-10-25). Table
+récapitulative : `specs/assets/034/donnees-tournage.md`. Builders ajoutés : `anIsoInsertProposal()`,
+`anIsoInsert(...proposals)`.
+
+`domain/reference-types.spec.ts` (8 tests ajoutés ou déplacés) : `InsertFor` donne une désignation aux
+situations extérieures pour l'extérieur, intérieures pour l'intérieur ; une situation de l'autre famille,
+hors liste ou absente ne compile pas ; une désignation sans proposition ne compile pas ; le choix vide
+ou absent ne compile pas, au niveau de la proposition ; une source sans URL compile. Satisfaits dès le
+modèle, posé avec les stubs (vrais par construction, ils jugent depuis).
+
+`domain/iso-insert-code.spec.ts` : le code se lit sur une proposition. Vert par construction (la
+fonction ne change que de type d'entrée).
+
+`domain/reference-integrity.spec.ts`, sur les **données réelles** : seule la liste de travail est sans
+URL, rien ne pointe vers le site ; une source sans URL n'a pas de défaut ; une à trois situations
+distinctes par entrée, moins de deux seulement en M et S ; chaque proposition cite sa lettre de forme ;
+en P, K, N et H cette citation est écrite par la page de la famille (S2, S3) ; en M et S la forme est
+R ou S (M), R (S), et le choix le dit par une citation de groupe (« angle d'attaque » ou « ronde ») ;
+N toujours positive à arête vive (dépouille ≠ N, tolérance G) ; l'alu en finition est écrit en entier
+par Kyocera, rien de déduit ; H cite CBN, profondeur de coupe et wiper ; hors forme et hors code écrit
+en entier, toute citation de choix propre à la matière est déduite ; Stellite 6 en H et X20Cr13 en M
+(décision 16, verts par construction).
+
+`application/insert-guide-copy.spec.ts` (golden) : `proposedInserts` et les neuf libellés de situation.
+
+`application/iso-insert-designation.spec.ts` (réécrit, 4 tests) : une liste, un `li` par situation dans
+l'ordre, `h4` du libellé puis le code ; un `dl` par code ; la mention « déduit » sur le seul champ
+déduit ; les citations du choix de chaque code entre son code et son `dl`.
+
+`application/recommendation-panel.spec.ts`, `application/insert-guide-status.spec.ts`,
+`pages/insert-guide/insert-guide.spec.ts` : deux ou trois propositions ; statut « Plaquettes
+proposées : ZQ (chariotage avec épaulement), YQ (profilage). », singulier pour une seule.
+
+`application/source-citation.spec.ts` (1 test) : une source sans URL → titre en texte simple, aucun
+lien, aucune mention « nouvel onglet ».
+
+**RED** (`pnpm test`, cache invalidé, stubs typés : modèle complet, données d'avant enveloppées en une
+proposition par entrée, copie à chaînes vides, composant et statut lisant la seule première
+proposition, `SourceCitation` inchangé, URL de la liste encore présente) : 19 failed / 4981 total
+(Test Files 7 failed | 245 passed), code de sortie 1, que des `AssertionError` :
+
+```
+× Given the catalogue When URLs are read Then only the working list has none, and nothing points to the site itself
+× Given the turning entries When their situations are counted Then each proposes one to three distinct situations, …
+× Given each proposal When its choice is read Then one citation names its shape letter for its situation
+× Given groups P, K, N and H When a shape is proposed Then it is written for the situation by the Sandvik page of its turning family
+× Given groups M and S When a code is proposed Then its shape keeps the entering angle the group asks for, and its choice says so …
+× Given aluminium finishing When a code is proposed Then the source writes it whole, so nothing in its choice is deduced
+× Given group H When a code is proposed Then its choice cites hard turning: CBN, small depth of cut and wiper
+× Given several situations When the designation renders Then each one is an item of a list, in order, headed by its h4 label then its code
+× Given several situations When the designation renders Then each code is read in its own dl, field by field, …
+× Given several situations When the designation renders Then each code is followed by the citations of its own choice, …
+× Given a field deduced from the maker principles When the designation renders Then only that field says it is deduced
+× Given an available recommendation When the panel renders Then every value is followed by its citation, each insert code under its situation, …
+× Given 0 / 1 / 2: an available recommendation When the status is derived Then it names … each proposed code with its situation
+× Given a source without public URL When its citation renders Then the title is plain text, with no link nor new-tab notice
+× Given a covered material and operation in the URL When the guide renders Then the panel shows each proposed insert under its situation, …
+× Given a chosen material When a covered operation is chosen after an uncovered one Then the status moves …
+× Given the guide copy When it is read Then every interface text is the proposed one
+```
+
+Les gardes « hors forme, déduit » et « N positive à arête vive » étaient vertes sur les données
+d'avant : elles jugent depuis la saisie. Corrigé au GREEN dans deux tests de ce RED (signalé) : le
+filtre « alu en finition » prenait la semi-finition (`endsWith('-finishing')`, remplacé par les deux
+opérations nommées), et la garde « hors forme, déduit » ne retirait que la citation de la forme
+proposée : elle retire désormais toute citation qui nomme une forme, pour laisser la page de la
+situation citée quand la matière impose une autre forme (M ronde, S ronde). Même exigence sur
+dépouille, tolérance et fixation.
+
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
@@ -1574,6 +1645,7 @@ jugent depuis la saisie.
 - **Tranche 10 — une recommandation s'affiche, et dit si elle est déduite** : GREEN 4901 passed / 4901 total (au deuxième cycle), puis 4902 / 4902 avec le test de la plaquette décrite, code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : aucun (diff relu ; le couple « valeur puis citation » revient trois fois dans le panneau et une fois dans la fiche matière, l'extraire toucherait la fiche de la tranche 8 : à faire avec la tranche 12, qui ajoute `DescribedInsert` et un quatrième site). Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, change de fiche (intitulé « Correspondances indicatives ») et de panneau. Écarts : le cycle 1 a fait tomber la garde « aucune capitale » (`first-letter:uppercase` sur la mention) ; la mention reste en minuscules, mot pour mot de la décision 10, sur sa propre ligne (à valider en revue UI) ; `scope?: 'group'` optionnel plutôt qu'un `scope: 'material' | 'group'` obligatoire, pour ne pas imposer un champ aux citations propres à la matière, majoritaires ; `cuttingSpeed` reste dans le modèle (V3, plan) mais n'est pas affiché (décision 13) ; le code ISO est une fonction pure du domaine, `isoInsertCode`, lue par le composant et par l'annonce ; l'intitulé des correspondances est un `h4` sous le `h3` de la matière ; `insertGuideStatus` annonce « Plaquette proposée : <code>. » (copie à valider), et seulement la matière et l'opération pour une plaquette décrite ; une plaquette décrite n'a pas encore de rendu (tranche 12). Scénario axe « choix fait » non ajouté : aucun état `available` n'est atteignable sans donnée réelle ; il rejoint la tranche de données. Joué en vérification sur l'image fixture (non commité) : 6 passed.
 
 - **Tranches 10 et 11, données — tournage extérieur et intérieur** : GREEN 4960 passed / 4960 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : les espaces insécables littérales des gabarits de locator passées en `\u00a0` (lint `no-irregular-whitespace`), `letter` retiré d'un type de saisie où il n'était lu nulle part ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, atteignable, affiche désormais de vraies fiches et recommandations. Le cycle 1 a fait tomber quatre tests : espace absente entre lettre et nom du badge (`&ngsp;`), la garde des noms commerciaux lisait les identifiants de source des citations de choix (exemption étendue de `.cite.source` à `.choice[n].source`, même règle : un identifiant de source n'est pas du texte affiché), et le test « référentiel réel encore sans matière » de la page, dont la prémisse a disparu (repointé sur une fixture sans matière ; l'option `null` d'`openGuide` retirée). Décisions de saisie : une ligne de la liste qui accole deux alliages devient deux matières quand chaque système leur donne une valeur distincte (304 et 304L, 625 et C276…), une seule quand une valeur est partagée (X20Cr13 / X30Cr13 partagent AISI 420, EN AW-2011 / 2030 partagent AU5PbBi) ; **100Cr6** : la matière recuite (P) garde toutes les désignations normalisées, la trempée (H) n'a que le nom courant « 100Cr6 trempé » (idem « 16MnCr5 trempé »), la recherche « 100cr6 » propose les deux ; **Stellite 6 en H** (S5 range les stellites en H, la liste la mettait en S), Haynes 25 reste en S (base cobalt) ; X20Cr13 en M d'après S5, alors que S4 range les martensitiques en P5 ; F51 (duplex) omis, ni AISI ni UNS ; « US (AISI) » de la liste repris en `aisi` même pour A36 et A572 Gr.50 (ASTM). La liste de travail n'a pas d'URL publique : sa source pointe `https://nedellec-julien.fr/atelier` (à confirmer par Julien). Cases vides : H ébauche et semi-finition extérieures, H intérieur, S intérieur (S3 « jamais moins de 75° » contre S4 « moins de 45° »).
+- **Codes par situation (décisions 14 à 16)** : GREEN 4981 passed / 4981 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : `satisfies` redondant retiré du constructeur de proposition (le type de retour le garantit déjà), type `Principle` devenu inutile supprimé ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, atteignable, change de panneau et de statut. **Modèle** : `IsoInsertDesignation` porte une liste non vide de `proposals`, chacune `{ situation, choice, fields }` : la citation de choix existante reste l'endroit où une lettre se justifie, la forme y entre écrite (page de la situation) et les autres lettres déduites ; retenu contre une citation de choix par champ, qui aurait doublé les citations du `dl` et fait lire le sens comme « déduit ». `InsertFor<O>` donne `IsoInsertDesignation<ExternalSituation>` à l'extérieur et `IsoInsertDesignation<InternalSituation>` à l'intérieur : une situation de l'autre famille ne compile pas. **Situations** ajustées aux pages `fr-fr` relues ce jour : « Profilage » (Sandvik n'écrit pas « copiage »), « Profilage à forte rampe » (« angle de ramping plus grand », forme V), « Dressage » avec la forme W (la page écrit « trigone », la table MMC donne W = trigone) ; à l'intérieur, « Chariotage sans épaulement » (carrée à 75°) ajouté, seule situation compatible avec l'inox à l'intérieur. **Source sans lien** : `url` optionnel plutôt qu'une variante de `Source` ; la sûreté tient par la garde « seule la liste de travail est sans URL, rien ne pointe vers le site » et par `https` vérifié quand l'URL existe. **Classement** : le classement de Sandvik (S5, « Matériaux de pièce ») l'emporte sur la liste de travail : Stellite 6 en H, X20Cr13 en M, gardés par un test. **Situations omises** : M extérieur, tout ce qui travaille à 91–95° ou 93° (épaulement, profilage D et V, dressage) ; M intérieur, tout sauf la carrée à 75° (la ronde passe sous 75°, que S3 interdit) ; S extérieur, tout sauf la ronde (S4 : moins de 45°), le chariotage sans épaulement et le profilage passant à la ronde en le disant. Écarts : une seule situation en M intérieur ; RCGT proposé deux fois en S (deux situations, même code) ; la forme R du groupe S reste déduite (S4 écrit « moins de 45° », pas « ronde ») ; wiper cité dans la citation du tournage dur sans lettre ISO (aucune position 1 à 4 ne le porte) ; `DESIGN.md` § 5 : géométrie en liste, désignation par situation, citations du choix, citation sans lien (écart 7 de la saisie précédente soldé).
 ## Verify
 
 Tranche 1, 2026-10-25, worktree `034-pr3`.
@@ -1785,6 +1857,38 @@ Tranches 10 et 11, données, 2026-10-26, worktree `034-pr5`.
   citation de choix **sans** mention (Kyocera, code écrit), seconde « déduit » (S2, forme C).
 - Captures : panneau « Plaquette » CNMG (42CrMo4) et CCGT (EN AW-2017A), clair (prises dans la
   session, non versionnées).
+- Console : aucune erreur de l'application ni d'hydratation ; seule erreur, `GET /api/config` 404
+  (absent de la doublure).
+- Axe : `pnpm a11y -g atelier`, 6 passed (`/atelier`, `/atelier/plaquettes`, et le choix fait
+  `?matiere=42crmo4&operation=ebauche-exterieure`, clair et sombre), code 0.
+- Verdict : **PASS**.
+
+Codes par situation, 2026-10-26, worktree `034-pr5`.
+
+- Steps (image réelle) : `pnpm run build --configuration production` (code 0, « Prerendered 3 static
+  routes ») ; `docker build -t ng-portfolio-app:a11y .` (code 0) ; `ci/a11y-stack.sh up`.
+- Rendu serveur, sans JavaScript (`curl`, URL partagées) : toutes en 200, aucun `'unsafe-inline'`,
+  aucune occurrence de `m/min` :
+  - `?matiere=42crmo4&operation=ebauche-exterieure` : Chariotage avec épaulement **CNMG**, Chariotage
+    sans épaulement **SNMG**, Dressage **WNMG** ; statut « 42CrMo4, Ébauche (Tournage extérieur).
+    Plaquettes proposées : CNMG (chariotage avec épaulement), SNMG (chariotage sans épaulement), WNMG
+    (dressage). » ; la forme de chaque code citée sans mention, les autres lettres « déduit » ;
+  - inox `?matiere=x2crnimo17-12-2&operation=finition-exterieure` : **SCMT** (chariotage sans
+    épaulement), **RCMT** (profilage), rien à 91–95° ; `?matiere=x5crni18-10&operation=finition-interieure` :
+    « Plaquette proposée : SCMT (chariotage sans épaulement). » ;
+  - Inconel `?matiere=inconel-718&operation=ebauche-exterieure` : **RCGT** en chariotage sans
+    épaulement et en profilage, aucune autre forme ;
+  - alu `?matiere=en-aw-2017a&operation=finition-exterieure` : **CCGT**, **DCGT**, **VCGT**, **zéro**
+    « déduit des principes du fabricant » sur la page (codes écrits par Kyocera, formes par S2) ;
+  - liste de Julien : `Source : <span data-testid="source-citation-title">Liste de travail de Julien —
+    correspondances indicatives</span>`, aucun lien, aucun `href` vers `nedellec-julien.fr/atelier`.
+- Navigateur, après hydratation : `?matiere=42crmo4&operation=ebauche-exterieure`, clic réel sur
+  « Finition » (tournage extérieur) → URL `?matiere=42crmo4&operation=finition-exterieure`, même document
+  (marqueur `window` conservé), `history.length` inchangé (8), propositions « Chariotage avec épaulement
+  CNMG », « Profilage DNMG », « Profilage à forte rampe VNMG », statut mis à jour.
+- Capture : panneau « Plaquette », `h4` « Chariotage avec épaulement », `CNMG`, citation de la forme
+  (« Tournage extérieur », « Chariotage », forme C en priorité) sans mention, puis deux citations
+  « déduit des principes du fabricant » (prise dans la session, non versionnée).
 - Console : aucune erreur de l'application ni d'hydratation ; seule erreur, `GET /api/config` 404
   (absent de la doublure).
 - Axe : `pnpm a11y -g atelier`, 6 passed (`/atelier`, `/atelier/plaquettes`, et le choix fait

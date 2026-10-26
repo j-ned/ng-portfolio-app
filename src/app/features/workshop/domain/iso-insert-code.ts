@@ -1,5 +1,5 @@
-import type { IsoInsertDesignation } from './models/recommendation.model';
+import type { IsoInsertProposal } from './models/recommendation.model';
 
-export function isoInsertCode(insert: IsoInsertDesignation): string {
-  return insert.fields.map(({ value }) => value.code).join('');
+export function isoInsertCode(proposal: IsoInsertProposal): string {
+  return proposal.fields.map(({ value }) => value.code).join('');
 }

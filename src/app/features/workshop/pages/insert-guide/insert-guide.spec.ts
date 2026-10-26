@@ -8,11 +8,14 @@ import { INSERT_GUIDE_COPY } from '../../application/insert-guide-copy';
 import { INSERT_GUIDE_REFERENCE } from '../../application/insert-guide-reference';
 import type { InsertGuideReference } from '../../domain/models/insert-guide-reference.model';
 import type { Material } from '../../domain/models/material.model';
+import type { ExternalSituation } from '../../domain/models/recommendation.model';
 import { OPERATION_FAMILIES } from '../../domain/operations.static-data';
 import {
   aCitation,
   aMaterialCatalogue,
+  anIsoInsert,
   anIsoInsertField,
+  anIsoInsertProposal,
   aRecommendation,
   aReference,
   aSourced,
@@ -411,14 +414,22 @@ describe('InsertGuide: choosing the operation', () => {
 describe('InsertGuide: an available recommendation', () => {
   const FINISHING_FOR_ALPHA = aRecommendation('external-finishing', {
     materials: [ALPHA.slug],
-    insert: {
-      kind: 'iso-1832',
-      choice: [aCitation()],
-      fields: [
-        anIsoInsertField('Forme fictive', 'Z', 'Losange fictif', aCitation({ basis: 'deduced' })),
-        anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif'),
-      ],
-    },
+    insert: anIsoInsert<ExternalSituation>(
+      anIsoInsertProposal({
+        situation: 'external-shoulder',
+        fields: [
+          anIsoInsertField('Forme fictive', 'Z', 'Losange fictif', aCitation({ basis: 'deduced' })),
+          anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif'),
+        ],
+      }),
+      anIsoInsertProposal({
+        situation: 'external-profiling',
+        fields: [
+          anIsoInsertField('Forme fictive', 'Y', 'Losange fictif étroit'),
+          anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif'),
+        ],
+      }),
+    ),
     cuttingSpeed: aSourced({ min: 123, max: 456, unit: 'm/min' }),
   });
 
@@ -428,9 +439,9 @@ describe('InsertGuide: an available recommendation', () => {
     recommendations: [FINISHING_FOR_ALPHA],
   });
 
-  const availableStatus = `${nameOf(ALPHA)}, Finition (Tournage extérieur). Plaquette proposée\u00a0: ZQ.`;
+  const availableStatus = `${nameOf(ALPHA)}, Finition (Tournage extérieur). Plaquettes proposées\u00a0: ZQ (chariotage avec épaulement), YQ (profilage).`;
 
-  it('Given a covered material and operation in the URL When the guide renders Then the panel shows the proposed insert, its deduced field said so, without any speed, and the status announces it', async () => {
+  it('Given a covered material and operation in the URL When the guide renders Then the panel shows each proposed insert under its situation, its deduced field said so, without any speed, and the status announces it', async () => {
     const { page, navigations } = await openGuide(
       `${GUIDE_PATH}?matiere=${ALPHA.slug}&operation=finition-exterieure`,
       withRecommendation,
@@ -438,14 +449,16 @@ describe('InsertGuide: an available recommendation', () => {
     const panel = page.one('insert-guide-recommendation');
 
     expect({
-      code: page.text('iso-insert-code'),
+      codes: page.texts('iso-insert-code'),
+      situations: page.texts('iso-insert-situation'),
       deduced: page.texts('source-citation-mention', panel),
       speed: ['123', '456', 'm/min'].filter((text) => panel?.textContent?.includes(text)),
       unavailable: page.one('insert-guide-unavailable'),
       status: page.text('insert-guide-status'),
       navigations: navigations(),
     }).toEqual({
-      code: 'ZQ',
+      codes: ['ZQ', 'YQ'],
+      situations: ['Chariotage avec épaulement', 'Profilage'],
       deduced: ['déduit des principes du fabricant'],
       speed: [],
       unavailable: null,

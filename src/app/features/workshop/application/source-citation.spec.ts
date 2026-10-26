@@ -1,19 +1,22 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import { settle } from '@shared/testing/settle';
-import type { SourceCitation as Citation } from '../domain/models/source.model';
+import type { Source, SourceCitation as Citation } from '../domain/models/source.model';
 import { aCitation, aSource } from '../testing/insert-guide-builders';
 import { InsertGuidePage } from '../testing/insert-guide.page-model';
 import { SourceCitation } from './source-citation';
 
 describe('SourceCitation', () => {
-  async function render(overrides: Partial<Citation> = {}): Promise<InsertGuidePage> {
+  async function render(
+    overrides: Partial<Citation> = {},
+    source: Source = aSource(),
+  ): Promise<InsertGuidePage> {
     const fixture = TestBed.createComponent(SourceCitation);
     fixture.componentRef.setInput(
       'citation',
       aCitation({ locator: 'Tableau fictif 3', ...overrides }),
     );
-    fixture.componentRef.setInput('source', aSource());
+    fixture.componentRef.setInput('source', source);
     await settle(fixture);
     return new InsertGuidePage(fixture);
   }
@@ -84,6 +87,23 @@ describe('SourceCitation', () => {
       target: '_blank',
       rel: 'noopener noreferrer',
       newTab: '(nouvel onglet)',
+    });
+  });
+
+  it('Given a source without public URL When its citation renders Then the title is plain text, with no link nor new-tab notice', async () => {
+    const { url: _dropped, ...unlinked } = aSource({ title: 'Liste fictive sans lien' });
+    const page = await render({ basis: 'deduced' }, unlinked);
+
+    expect({
+      link: page.one('source-citation-link'),
+      anchors: page.host.querySelectorAll('a').length,
+      title: page.text('source-citation-title'),
+      whole: page.host.textContent?.replace(/\s+/g, ' ').trim(),
+    }).toEqual({
+      link: null,
+      anchors: 0,
+      title: 'Liste fictive sans lien',
+      whole: 'déduit des principes du fabricant Source : Liste fictive sans lien, Tableau fictif 3',
     });
   });
 });

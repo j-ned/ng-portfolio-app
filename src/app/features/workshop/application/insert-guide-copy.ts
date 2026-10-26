@@ -28,6 +28,18 @@ export const INSERT_GUIDE_COPY = {
   gradeHeading: 'Nuance',
   pitfallsHeading: 'Pièges',
   proposedInsert: 'Plaquette proposée :',
+  proposedInserts: 'Plaquettes proposées :',
+  situations: {
+    'external-shoulder': 'Chariotage avec épaulement',
+    'external-no-shoulder': 'Chariotage sans épaulement',
+    'external-profiling': 'Profilage',
+    'external-steep-profiling': 'Profilage à forte rampe',
+    'external-facing': 'Dressage',
+    'internal-shoulder': 'Chariotage avec épaulement',
+    'internal-stronger-edge': 'Avec épaulement, arête plus résistante',
+    'internal-no-shoulder': 'Chariotage sans épaulement',
+    'internal-profiling': 'Profilage',
+  },
   designationSystems: {
     'en-symbol': 'Symbole EN',
     'material-number': 'Numéro matière',

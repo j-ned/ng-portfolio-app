@@ -11,6 +11,7 @@ import {
   aDesignation,
   aMaterial,
   anIsoInsert,
+  anIsoInsertProposal,
   anOperation,
   anOperationFamily,
   aRecommendation,
@@ -92,14 +93,15 @@ describe('workshop confidentiality', () => {
       [
         'the meaning of an ISO field',
         aRecommendation('external-finishing', {
-          insert: {
-            ...anIsoInsert(),
-            fields: [
-              aSourced({ field: 'Champ fictif', code: 'Z', meaning: 'Repris de PN: 88-123.' }),
-            ],
-          },
+          insert: anIsoInsert(
+            anIsoInsertProposal({
+              fields: [
+                aSourced({ field: 'Champ fictif', code: 'Z', meaning: 'Repris de PN: 88-123.' }),
+              ],
+            }),
+          ),
         }),
-        ['sample.insert.fields[0].value.meaning'],
+        ['sample.insert.proposals[0].fields[0].value.meaning'],
       ],
       [
         'the locator of a citation',

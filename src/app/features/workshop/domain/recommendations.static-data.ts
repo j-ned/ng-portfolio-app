@@ -1,10 +1,18 @@
 import type { OperationId } from './models/operation.model';
-import type { IsoInsertDesignation, RecommendationEntry } from './models/recommendation.model';
+import type {
+  ExternalSituation,
+  InsertSituation,
+  InternalSituation,
+  IsoInsertDesignation,
+  IsoInsertProposal,
+  RecommendationEntry,
+} from './models/recommendation.model';
 import type { SourceCitation, SourceId, Sourced } from './models/source.model';
 
-type TurningOperation = Extract<OperationId, `external-${string}` | `internal-${string}`>;
-type Field = IsoInsertDesignation['fields'][number];
-type Principle = readonly [SourceCitation, ...SourceCitation[]];
+type ExternalOperation = Extract<OperationId, `external-${string}`>;
+type InternalOperation = Extract<OperationId, `internal-${string}`>;
+type TurningOperation = ExternalOperation | InternalOperation;
+type Field = IsoInsertProposal['fields'][number];
 
 const cite = (
   source: SourceId,
@@ -41,7 +49,12 @@ const SHAPE = {
   C: field('Forme', 'C', 'Losange à 80°', SHAPE_TABLE),
   D: field('Forme', 'D', 'Losange à 55°', SHAPE_TABLE),
   R: field('Forme', 'R', 'Ronde', SHAPE_TABLE),
+  S: field('Forme', 'S', 'Carrée', SHAPE_TABLE),
+  T: field('Forme', 'T', 'Triangle', SHAPE_TABLE),
+  V: field('Forme', 'V', 'Losange à 35°', SHAPE_TABLE),
+  W: field('Forme', 'W', 'Trigone', SHAPE_TABLE),
 };
+type ShapeLetter = keyof typeof SHAPE;
 const CLEARANCE = {
   N: field('Dépouille', 'N', 'Dépouille de 0°', CLEARANCE_TABLE),
   C: field('Dépouille', 'C', 'Dépouille de 7°', CLEARANCE_TABLE),
@@ -66,17 +79,91 @@ const FIXING = {
   A: field('Fixation et brise-copeaux', 'A', 'Trou cylindrique, sans brise-copeaux', FIXING_TABLE),
 };
 
-const iso = (
-  choice: Principle,
-  fields: readonly [Field, Field, Field, Field],
-): IsoInsertDesignation => ({
-  kind: 'iso-1832',
-  choice,
-  fields,
-});
-
 const deduced = (source: SourceId, locator: string): SourceCitation =>
   cite(source, locator, 'deduced');
+
+const writtenShape = (source: SourceId, name: string, detail: string): SourceCitation =>
+  cite(source, section(name, detail), 'stated');
+
+type Placed<S extends InsertSituation> = { readonly situation: S; readonly shape: SourceCitation };
+
+const EXTERNAL = {
+  shoulder: {
+    situation: 'external-shoulder',
+    shape: writtenShape(
+      'sandvik-external-turning',
+      'Chariotage',
+      'forme C en priorité, épaulement à 91–95°',
+    ),
+  },
+  noShoulder: {
+    situation: 'external-no-shoulder',
+    shape: writtenShape(
+      'sandvik-external-turning',
+      'Chariotage',
+      "forme S, plaquette carrée à 75° d'angle d'attaque, sans épaulement",
+    ),
+  },
+  profiling: {
+    situation: 'external-profiling',
+    shape: writtenShape(
+      'sandvik-external-turning',
+      'Profilage',
+      "forme D en premier choix, angle d'attaque de 93°",
+    ),
+  },
+  steepProfiling: {
+    situation: 'external-steep-profiling',
+    shape: writtenShape(
+      'sandvik-external-turning',
+      'Profilage',
+      'forme V pour un angle de rampe plus grand',
+    ),
+  },
+  facing: {
+    situation: 'external-facing',
+    shape: writtenShape(
+      'sandvik-external-turning',
+      'Dressage',
+      "forme W, plaquette trigone à 95° d'angle d'attaque, pour la polyvalence",
+    ),
+  },
+} as const satisfies Readonly<Record<string, Placed<ExternalSituation>>>;
+
+const INTERNAL = {
+  shoulder: {
+    situation: 'internal-shoulder',
+    shape: writtenShape(
+      'sandvik-internal-turning',
+      'Chariotage',
+      'forme T, plaquette triangulaire, épaulement à 91–95°',
+    ),
+  },
+  strongerEdge: {
+    situation: 'internal-stronger-edge',
+    shape: writtenShape(
+      'sandvik-internal-turning',
+      'Chariotage',
+      'forme C pour une arête plus résistante',
+    ),
+  },
+  noShoulder: {
+    situation: 'internal-no-shoulder',
+    shape: writtenShape(
+      'sandvik-internal-turning',
+      'Chariotage',
+      "forme S, plaquette carrée à 75° d'angle d'attaque, sans épaulement",
+    ),
+  },
+  profiling: {
+    situation: 'internal-profiling',
+    shape: writtenShape(
+      'sandvik-internal-turning',
+      'Profilage',
+      "forme D en premier choix, angle d'attaque de 93°",
+    ),
+  },
+} as const satisfies Readonly<Record<string, Placed<InternalSituation>>>;
 
 const NEGATIVE = deduced(
   'sandvik-choose-insert',
@@ -94,18 +181,6 @@ const ONE_SIDED = deduced(
   'sandvik-choose-insert',
   section('Plaquette de tournage positive', 'brise-copeaux sur une face T'),
 );
-const EXTERNAL_SHAPE = deduced(
-  'sandvik-external-turning',
-  section('Chariotage', 'type de plaquette, forme C'),
-);
-const INTERNAL_STRONG_SHAPE = deduced(
-  'sandvik-internal-turning',
-  section('Chariotage', 'type de plaquette, forme C pour une arête plus résistante'),
-);
-const INTERNAL_SHOULDER_SHAPE = deduced(
-  'sandvik-internal-turning',
-  section('Chariotage', 'type de plaquette, forme D avec épaulement'),
-);
 const ROUGHING_TOLERANCE = deduced('sandvik-choose-insert', section('Ebauche', 'classe M'));
 const SEMI_FINISHING_TOLERANCE = deduced(
   'sandvik-choose-insert',
@@ -116,16 +191,32 @@ const CAST_IRON_FIXING = deduced(
   'sandvik-turning-materials',
   section('Tournage des fontes', 'copeau court, sans brise-copeaux A'),
 );
-const STAINLESS_SHAPE = deduced(
-  'sandvik-turning-materials',
-  section(
-    'Tournage des aciers inoxydables austénitiques',
-    'plaquette ronde R, dépouille positive C',
-  ),
+
+const groupRule = (
+  name: string,
+  detail: string,
+  basis: SourceCitation['basis'],
+): SourceCitation => ({
+  source: 'sandvik-turning-materials',
+  locator: section(name, detail),
+  basis,
+  scope: 'group',
+});
+
+const STAINLESS_SECTION = 'Tournage des aciers inoxydables austénitiques';
+const STAINLESS_ROUND = groupRule(
+  STAINLESS_SECTION,
+  "forme R, plaquette ronde contre l'usure en entaille, à la place de la forme D du profilage",
+  'stated',
+);
+const STAINLESS_LOW_ANGLE = groupRule(
+  STAINLESS_SECTION,
+  "angle d'attaque faible contre l'usure en entaille, d'où 75° sans épaulement plutôt que 91–95°",
+  'stated',
 );
 const STAINLESS_CLEARANCE = deduced(
   'sandvik-turning-materials',
-  section('Tournage des aciers inoxydables austénitiques', 'dépouille positive C'),
+  section(STAINLESS_SECTION, 'dépouille positive C'),
 );
 const ALUMINIUM_EDGE = deduced(
   'sandvik-turning-materials',
@@ -136,19 +227,21 @@ const ALUMINIUM_FINISHING = cite(
   "gamme CCGT, DCGT, TPGT et VCGT pour la finition de l'aluminium",
   'stated',
 );
-const SUPERALLOY_SHAPE = deduced(
-  'sandvik-turning-materials',
-  section('Tournage des superalliages réfractaires', "angle d'attaque inférieur à 45°, forme R"),
+const SUPERALLOY_SECTION = 'Tournage des superalliages réfractaires';
+const SUPERALLOY_ROUND = groupRule(
+  SUPERALLOY_SECTION,
+  "forme R, plaquette ronde, seule à garder l'angle d'attaque sous 45° à la place de la forme de la situation",
+  'deduced',
 );
 const SUPERALLOY_EDGE = deduced(
   'sandvik-turning-materials',
-  section('Tournage des superalliages réfractaires', 'arêtes vives, dépouille C et classe G'),
+  section(SUPERALLOY_SECTION, 'arêtes vives, dépouille C et classe G'),
 );
 const HARD_TURNING_EDGE = deduced(
   'sandvik-turning-materials',
   section(
     'Tournage des aciers trempés',
-    "CBN et préparation d'arête, classe G sans brise-copeaux A",
+    'CBN, profondeur de coupe aussi petite que possible et arête wiper, classe G sans brise-copeaux A',
   ),
 );
 
@@ -360,97 +453,225 @@ const STAGE_OF: Readonly<Record<TurningOperation, Sourced<string>>> = {
   'internal-finishing': STAGE_GEOMETRY.finishing,
 };
 
-const recommend = (
+const external = (
   group: GroupAdvice,
-  operation: TurningOperation,
-  insert: IsoInsertDesignation,
-): RecommendationEntry => {
-  const internal = operation.startsWith('internal-');
-  return {
-    operation,
-    materials: group.materials,
-    insert,
-    geometry: internal
-      ? [STAGE_OF[operation], INTERNAL_GEOMETRY, group.geometry]
-      : [STAGE_OF[operation], group.geometry],
-    grade: group.grade,
-    pitfalls: internal ? [...group.pitfalls, INTERNAL_PITFALL] : group.pitfalls,
-  };
-};
+  operation: ExternalOperation,
+  insert: IsoInsertDesignation<ExternalSituation>,
+): RecommendationEntry => ({
+  operation,
+  materials: group.materials,
+  insert,
+  geometry: [STAGE_OF[operation], group.geometry],
+  grade: group.grade,
+  pitfalls: group.pitfalls,
+});
 
-const CNMG = (stage: SourceCitation): IsoInsertDesignation =>
-  iso([NEGATIVE, EXTERNAL_SHAPE, stage], [SHAPE.C, CLEARANCE.N, TOLERANCE.M, FIXING.G]);
-const CNMA = (stage: SourceCitation): IsoInsertDesignation =>
-  iso(
-    [NEGATIVE_CLEARANCE, EXTERNAL_SHAPE, stage, CAST_IRON_FIXING],
-    [SHAPE.C, CLEARANCE.N, TOLERANCE.M, FIXING.A],
+const internal = (
+  group: GroupAdvice,
+  operation: InternalOperation,
+  insert: IsoInsertDesignation<InternalSituation>,
+): RecommendationEntry => ({
+  operation,
+  materials: group.materials,
+  insert,
+  geometry: [STAGE_OF[operation], INTERNAL_GEOMETRY, group.geometry],
+  grade: group.grade,
+  pitfalls: [...group.pitfalls, INTERNAL_PITFALL],
+});
+
+const propose = <S extends InsertSituation>(
+  { situation, shape }: Placed<S>,
+  letter: ShapeLetter,
+  rest: readonly [Field, Field, Field],
+  ...principles: readonly SourceCitation[]
+): IsoInsertProposal<S> => ({
+  situation,
+  choice: [shape, ...principles],
+  fields: [SHAPE[letter], ...rest],
+});
+
+const iso = <S extends InsertSituation>(
+  ...proposals: readonly [IsoInsertProposal<S>, ...IsoInsertProposal<S>[]]
+): IsoInsertDesignation<S> => ({ kind: 'iso-1832', proposals });
+
+const NMG = [CLEARANCE.N, TOLERANCE.M, FIXING.G] as const;
+const NMA = [CLEARANCE.N, TOLERANCE.M, FIXING.A] as const;
+const CMT = [CLEARANCE.C, TOLERANCE.M, FIXING.T] as const;
+const CGT = [CLEARANCE.C, TOLERANCE.G, FIXING.T] as const;
+const NGA = [CLEARANCE.N, TOLERANCE.G, FIXING.A] as const;
+
+const steel = (stage: SourceCitation) =>
+  ({
+    shoulder: propose(EXTERNAL.shoulder, 'C', NMG, NEGATIVE, stage),
+    noShoulder: propose(EXTERNAL.noShoulder, 'S', NMG, NEGATIVE, stage),
+    profiling: propose(EXTERNAL.profiling, 'D', NMG, NEGATIVE, stage),
+    steepProfiling: propose(EXTERNAL.steepProfiling, 'V', NMG, NEGATIVE, stage),
+    facing: propose(EXTERNAL.facing, 'W', NMG, NEGATIVE, stage),
+  }) as const;
+
+const castIron = (stage: SourceCitation) =>
+  ({
+    shoulder: propose(EXTERNAL.shoulder, 'C', NMA, NEGATIVE_CLEARANCE, stage, CAST_IRON_FIXING),
+    noShoulder: propose(EXTERNAL.noShoulder, 'S', NMA, NEGATIVE_CLEARANCE, stage, CAST_IRON_FIXING),
+    profiling: propose(EXTERNAL.profiling, 'D', NMA, NEGATIVE_CLEARANCE, stage, CAST_IRON_FIXING),
+  }) as const;
+
+const positiveInside = (stage: SourceCitation) =>
+  ({
+    shoulder: propose(INTERNAL.shoulder, 'T', CMT, POSITIVE, stage),
+    strongerEdge: propose(INTERNAL.strongerEdge, 'C', CMT, POSITIVE, stage),
+    profiling: propose(INTERNAL.profiling, 'D', CMT, POSITIVE, stage),
+  }) as const;
+
+const stainlessOutside = (stage: SourceCitation): IsoInsertDesignation<ExternalSituation> =>
+  iso<ExternalSituation>(
+    propose(
+      EXTERNAL.noShoulder,
+      'S',
+      CMT,
+      STAINLESS_LOW_ANGLE,
+      STAINLESS_CLEARANCE,
+      stage,
+      ONE_SIDED,
+    ),
+    propose(EXTERNAL.profiling, 'R', CMT, STAINLESS_ROUND, STAINLESS_CLEARANCE, stage, ONE_SIDED),
   );
-const CCMT_INTERNAL = iso(
-  [POSITIVE, INTERNAL_STRONG_SHAPE, ROUGHING_TOLERANCE],
-  [SHAPE.C, CLEARANCE.C, TOLERANCE.M, FIXING.T],
+
+const stainlessInside = (stage: SourceCitation): IsoInsertDesignation<InternalSituation> =>
+  iso<InternalSituation>(
+    propose(
+      INTERNAL.noShoulder,
+      'S',
+      CMT,
+      STAINLESS_LOW_ANGLE,
+      STAINLESS_CLEARANCE,
+      stage,
+      ONE_SIDED,
+    ),
+  );
+
+const aluminiumOutside = {
+  shoulder: propose(EXTERNAL.shoulder, 'C', CGT, ALUMINIUM_EDGE, ONE_SIDED),
+  noShoulder: propose(EXTERNAL.noShoulder, 'S', CGT, ALUMINIUM_EDGE, ONE_SIDED),
+  profiling: propose(EXTERNAL.profiling, 'D', CGT, ALUMINIUM_EDGE, ONE_SIDED),
+} as const;
+
+const aluminiumFinishingOutside = iso<ExternalSituation>(
+  propose(EXTERNAL.shoulder, 'C', CGT, ALUMINIUM_FINISHING),
+  propose(EXTERNAL.profiling, 'D', CGT, ALUMINIUM_FINISHING),
+  propose(EXTERNAL.steepProfiling, 'V', CGT, ALUMINIUM_FINISHING),
 );
-const DCMT_INTERNAL = iso(
-  [POSITIVE, INTERNAL_SHOULDER_SHAPE, FINISHING_TOLERANCE],
-  [SHAPE.D, CLEARANCE.C, TOLERANCE.M, FIXING.T],
+
+const superalloyOutside = iso<ExternalSituation>(
+  propose(EXTERNAL.noShoulder, 'R', CGT, SUPERALLOY_ROUND, SUPERALLOY_EDGE, ONE_SIDED),
+  propose(EXTERNAL.profiling, 'R', CGT, SUPERALLOY_ROUND, SUPERALLOY_EDGE, ONE_SIDED),
 );
-const RCMT_STAINLESS = (stage: SourceCitation): IsoInsertDesignation =>
-  iso([STAINLESS_SHAPE, stage, ONE_SIDED], [SHAPE.R, CLEARANCE.C, TOLERANCE.M, FIXING.T]);
-const CCMT_STAINLESS_INTERNAL = iso(
-  [POSITIVE, STAINLESS_CLEARANCE, INTERNAL_STRONG_SHAPE, ROUGHING_TOLERANCE],
-  [SHAPE.C, CLEARANCE.C, TOLERANCE.M, FIXING.T],
+
+const hardFinishing = iso<ExternalSituation>(
+  propose(EXTERNAL.shoulder, 'C', NGA, NEGATIVE_CLEARANCE, HARD_TURNING_EDGE),
+  propose(EXTERNAL.facing, 'W', NGA, NEGATIVE_CLEARANCE, HARD_TURNING_EDGE),
 );
-const DCMT_STAINLESS_INTERNAL = iso(
-  [POSITIVE, STAINLESS_CLEARANCE, INTERNAL_SHOULDER_SHAPE, FINISHING_TOLERANCE],
-  [SHAPE.D, CLEARANCE.C, TOLERANCE.M, FIXING.T],
+
+const steelRoughing = steel(ROUGHING_TOLERANCE);
+const steelSemiFinishing = steel(SEMI_FINISHING_TOLERANCE);
+const steelFinishing = steel(FINISHING_TOLERANCE);
+const castIronRoughing = castIron(ROUGHING_TOLERANCE);
+const castIronSemiFinishing = castIron(SEMI_FINISHING_TOLERANCE);
+const castIronFinishing = castIron(FINISHING_TOLERANCE);
+const insideRoughing = positiveInside(ROUGHING_TOLERANCE);
+const insideFinishing = positiveInside(FINISHING_TOLERANCE);
+
+const STEEL_INSIDE_ROUGHING = iso<InternalSituation>(
+  insideRoughing.strongerEdge,
+  insideRoughing.shoulder,
 );
-const CCGT_ALUMINIUM = iso(
-  [ALUMINIUM_EDGE, EXTERNAL_SHAPE, ONE_SIDED],
-  [SHAPE.C, CLEARANCE.C, TOLERANCE.G, FIXING.T],
-);
-const CCGT_ALUMINIUM_FINISHING = iso(
-  [ALUMINIUM_FINISHING, EXTERNAL_SHAPE],
-  [SHAPE.C, CLEARANCE.C, TOLERANCE.G, FIXING.T],
-);
-const CCGT_ALUMINIUM_INTERNAL = iso(
-  [ALUMINIUM_EDGE, POSITIVE, INTERNAL_STRONG_SHAPE],
-  [SHAPE.C, CLEARANCE.C, TOLERANCE.G, FIXING.T],
-);
-const DCGT_ALUMINIUM_INTERNAL = iso(
-  [ALUMINIUM_FINISHING, INTERNAL_SHOULDER_SHAPE],
-  [SHAPE.D, CLEARANCE.C, TOLERANCE.G, FIXING.T],
-);
-const RCGT_SUPERALLOY = iso(
-  [SUPERALLOY_SHAPE, SUPERALLOY_EDGE, ONE_SIDED],
-  [SHAPE.R, CLEARANCE.C, TOLERANCE.G, FIXING.T],
-);
-const CNGA_HARD = iso(
-  [NEGATIVE_CLEARANCE, EXTERNAL_SHAPE, HARD_TURNING_EDGE],
-  [SHAPE.C, CLEARANCE.N, TOLERANCE.G, FIXING.A],
+const STEEL_INSIDE_FINISHING = iso<InternalSituation>(
+  insideFinishing.shoulder,
+  insideFinishing.profiling,
 );
 
 export const RECOMMENDATIONS: readonly RecommendationEntry[] = [
-  recommend(STEEL, 'external-roughing', CNMG(ROUGHING_TOLERANCE)),
-  recommend(STEEL, 'external-semi-finishing', CNMG(SEMI_FINISHING_TOLERANCE)),
-  recommend(STEEL, 'external-finishing', CNMG(FINISHING_TOLERANCE)),
-  recommend(STEEL, 'internal-roughing', CCMT_INTERNAL),
-  recommend(STEEL, 'internal-finishing', DCMT_INTERNAL),
-  recommend(STAINLESS, 'external-roughing', RCMT_STAINLESS(ROUGHING_TOLERANCE)),
-  recommend(STAINLESS, 'external-semi-finishing', RCMT_STAINLESS(SEMI_FINISHING_TOLERANCE)),
-  recommend(STAINLESS, 'external-finishing', RCMT_STAINLESS(FINISHING_TOLERANCE)),
-  recommend(STAINLESS, 'internal-roughing', CCMT_STAINLESS_INTERNAL),
-  recommend(STAINLESS, 'internal-finishing', DCMT_STAINLESS_INTERNAL),
-  recommend(CAST_IRON, 'external-roughing', CNMA(ROUGHING_TOLERANCE)),
-  recommend(CAST_IRON, 'external-semi-finishing', CNMA(SEMI_FINISHING_TOLERANCE)),
-  recommend(CAST_IRON, 'external-finishing', CNMA(FINISHING_TOLERANCE)),
-  recommend(CAST_IRON, 'internal-roughing', CCMT_INTERNAL),
-  recommend(CAST_IRON, 'internal-finishing', DCMT_INTERNAL),
-  recommend(ALUMINIUM, 'external-roughing', CCGT_ALUMINIUM),
-  recommend(ALUMINIUM, 'external-semi-finishing', CCGT_ALUMINIUM),
-  recommend(ALUMINIUM, 'external-finishing', CCGT_ALUMINIUM_FINISHING),
-  recommend(ALUMINIUM, 'internal-roughing', CCGT_ALUMINIUM_INTERNAL),
-  recommend(ALUMINIUM, 'internal-finishing', DCGT_ALUMINIUM_INTERNAL),
-  recommend(SUPERALLOY, 'external-roughing', RCGT_SUPERALLOY),
-  recommend(SUPERALLOY, 'external-semi-finishing', RCGT_SUPERALLOY),
-  recommend(SUPERALLOY, 'external-finishing', RCGT_SUPERALLOY),
-  recommend(HARD, 'external-finishing', CNGA_HARD),
+  external(
+    STEEL,
+    'external-roughing',
+    iso<ExternalSituation>(steelRoughing.shoulder, steelRoughing.noShoulder, steelRoughing.facing),
+  ),
+  external(
+    STEEL,
+    'external-semi-finishing',
+    iso<ExternalSituation>(
+      steelSemiFinishing.shoulder,
+      steelSemiFinishing.profiling,
+      steelSemiFinishing.facing,
+    ),
+  ),
+  external(
+    STEEL,
+    'external-finishing',
+    iso<ExternalSituation>(
+      steelFinishing.shoulder,
+      steelFinishing.profiling,
+      steelFinishing.steepProfiling,
+    ),
+  ),
+  internal(STEEL, 'internal-roughing', STEEL_INSIDE_ROUGHING),
+  internal(STEEL, 'internal-finishing', STEEL_INSIDE_FINISHING),
+  external(STAINLESS, 'external-roughing', stainlessOutside(ROUGHING_TOLERANCE)),
+  external(STAINLESS, 'external-semi-finishing', stainlessOutside(SEMI_FINISHING_TOLERANCE)),
+  external(STAINLESS, 'external-finishing', stainlessOutside(FINISHING_TOLERANCE)),
+  internal(STAINLESS, 'internal-roughing', stainlessInside(ROUGHING_TOLERANCE)),
+  internal(STAINLESS, 'internal-finishing', stainlessInside(FINISHING_TOLERANCE)),
+  external(
+    CAST_IRON,
+    'external-roughing',
+    iso<ExternalSituation>(castIronRoughing.shoulder, castIronRoughing.noShoulder),
+  ),
+  external(
+    CAST_IRON,
+    'external-semi-finishing',
+    iso<ExternalSituation>(castIronSemiFinishing.shoulder, castIronSemiFinishing.profiling),
+  ),
+  external(
+    CAST_IRON,
+    'external-finishing',
+    iso<ExternalSituation>(castIronFinishing.shoulder, castIronFinishing.profiling),
+  ),
+  internal(CAST_IRON, 'internal-roughing', STEEL_INSIDE_ROUGHING),
+  internal(CAST_IRON, 'internal-finishing', STEEL_INSIDE_FINISHING),
+  external(
+    ALUMINIUM,
+    'external-roughing',
+    iso<ExternalSituation>(
+      aluminiumOutside.shoulder,
+      aluminiumOutside.noShoulder,
+      aluminiumOutside.profiling,
+    ),
+  ),
+  external(
+    ALUMINIUM,
+    'external-semi-finishing',
+    iso<ExternalSituation>(aluminiumOutside.shoulder, aluminiumOutside.profiling),
+  ),
+  external(ALUMINIUM, 'external-finishing', aluminiumFinishingOutside),
+  internal(
+    ALUMINIUM,
+    'internal-roughing',
+    iso<InternalSituation>(
+      propose(INTERNAL.strongerEdge, 'C', CGT, ALUMINIUM_EDGE, ONE_SIDED),
+      propose(INTERNAL.shoulder, 'T', CGT, ALUMINIUM_EDGE, ONE_SIDED),
+      propose(INTERNAL.profiling, 'D', CGT, ALUMINIUM_EDGE, ONE_SIDED),
+    ),
+  ),
+  internal(
+    ALUMINIUM,
+    'internal-finishing',
+    iso<InternalSituation>(
+      propose(INTERNAL.profiling, 'D', CGT, ALUMINIUM_FINISHING),
+      propose(INTERNAL.strongerEdge, 'C', CGT, ALUMINIUM_FINISHING),
+    ),
+  ),
+  external(SUPERALLOY, 'external-roughing', superalloyOutside),
+  external(SUPERALLOY, 'external-semi-finishing', superalloyOutside),
+  external(SUPERALLOY, 'external-finishing', superalloyOutside),
+  external(HARD, 'external-finishing', hardFinishing),
 ];

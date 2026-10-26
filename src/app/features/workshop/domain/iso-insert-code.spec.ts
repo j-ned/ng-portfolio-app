@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { aCitation, anIsoInsertField, anIsoInsert } from '../testing/insert-guide-builders';
+import { aCitation, anIsoInsertField, anIsoInsertProposal } from '../testing/insert-guide-builders';
 import { isoInsertCode } from './iso-insert-code';
-import type { IsoInsertDesignation } from './models/recommendation.model';
+import type { IsoInsertProposal } from './models/recommendation.model';
 
 describe('isoInsertCode', () => {
-  it.each<[string, IsoInsertDesignation, string]>([
-    ['a single field', anIsoInsert(), 'Z'],
+  it.each<[string, IsoInsertProposal, string]>([
+    ['a single field', anIsoInsertProposal(), 'Z'],
     [
       'four fields',
       {
-        kind: 'iso-1832',
+        situation: 'external-shoulder',
         choice: [aCitation()],
         fields: [
           anIsoInsertField('Champ fictif 1', 'Q', 'Sens fictif 1'),
@@ -23,7 +23,7 @@ describe('isoInsertCode', () => {
     [
       'a field coded on two characters',
       {
-        kind: 'iso-1832',
+        situation: 'external-shoulder',
         choice: [aCitation()],
         fields: [
           anIsoInsertField('Champ fictif 1', 'Q', 'Sens fictif 1'),
@@ -33,9 +33,9 @@ describe('isoInsertCode', () => {
       'Q09',
     ],
   ])(
-    'Given an ISO designation with %s When its code is read Then it is the field codes joined in order',
-    (_, insert, code) => {
-      expect(isoInsertCode(insert)).toBe(code);
+    'Given a proposal with %s When its code is read Then it is the field codes joined in order',
+    (_, proposal, code) => {
+      expect(isoInsertCode(proposal)).toBe(code);
     },
   );
 });
