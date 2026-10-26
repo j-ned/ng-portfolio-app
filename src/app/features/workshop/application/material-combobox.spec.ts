@@ -276,6 +276,44 @@ describe('MaterialCombobox', () => {
     });
   });
 
+  describe('clearing the field', () => {
+    it('Given a chosen material When its text is cleared and the field loses focus Then nothing is chosen any more', async () => {
+      const { fixture, page } = await render(undefined, ALPHA.slug);
+
+      await page.typeMaterial('');
+      await page.leaveMaterial();
+
+      expect([
+        fixture.componentInstance.value(),
+        page.materialInput.value,
+        page.expanded(),
+      ]).toEqual(['', '', 'false']);
+    });
+
+    it('Given a chosen material When its text is cleared and Escape is pressed Then nothing is chosen any more and the field stays empty', async () => {
+      const { fixture, page } = await render(undefined, ALPHA.slug);
+
+      await page.typeMaterial('');
+      const event = await page.press('Escape');
+
+      expect({
+        value: fixture.componentInstance.value(),
+        text: page.materialInput.value,
+        expanded: page.expanded(),
+        prevented: event.defaultPrevented,
+      }).toEqual({ value: '', text: '', expanded: 'false', prevented: true });
+    });
+
+    it('Given a chosen material When a partial text is left by losing focus Then the material stays chosen', async () => {
+      const { fixture, page } = await render(undefined, ALPHA.slug);
+
+      await page.typeMaterial('zz');
+      await page.leaveMaterial();
+
+      expect(fixture.componentInstance.value()).toBe(ALPHA.slug);
+    });
+  });
+
   describe('pointer', () => {
     it('Given an open list When an option is clicked Then the field keeps the focus and the option is chosen', async () => {
       const { fixture, page } = await render();

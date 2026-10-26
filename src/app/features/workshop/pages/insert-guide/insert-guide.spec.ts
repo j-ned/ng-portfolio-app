@@ -8,6 +8,7 @@ import { INSERT_GUIDE_COPY } from '../../application/insert-guide-copy';
 import { INSERT_GUIDE_REFERENCE } from '../../application/insert-guide-reference';
 import type { InsertGuideReference } from '../../domain/models/insert-guide-reference.model';
 import type { Material } from '../../domain/models/material.model';
+import { OPERATION_FAMILIES } from '../../domain/operations.static-data';
 import { aMaterialCatalogue, aReference } from '../../testing/insert-guide-builders';
 import { InsertGuidePage } from '../../testing/insert-guide.page-model';
 import { InsertGuide } from './insert-guide';
@@ -75,7 +76,10 @@ type OpenedGuide = {
 
 async function openGuide(
   url: string,
-  reference: InsertGuideReference | null = aReference({ materials: [ALPHA, BETA, GAMMA] }),
+  reference: InsertGuideReference | null = aReference({
+    materials: [ALPHA, BETA, GAMMA],
+    families: OPERATION_FAMILIES,
+  }),
 ): Promise<OpenedGuide> {
   TestBed.configureTestingModule({
     providers: [
@@ -172,12 +176,12 @@ describe('InsertGuide: choosing the material', () => {
   });
 
   it('Given another query parameter When a material is chosen Then that parameter is kept', async () => {
-    const { page, router } = await openGuide(`${GUIDE_PATH}?operation=operation-fictive-zz`);
+    const { page, router } = await openGuide(`${GUIDE_PATH}?operation=gorge`);
 
     await page.press('ArrowDown');
     await page.press('Enter');
 
-    expect(router.url).toBe(`${GUIDE_PATH}?operation=operation-fictive-zz&matiere=${ALPHA.slug}`);
+    expect(router.url).toBe(`${GUIDE_PATH}?operation=gorge&matiere=${ALPHA.slug}`);
   });
 
   it('Given a material chosen after another When the user goes back Then the field and the sheet follow the URL without a new navigation', async () => {
@@ -221,5 +225,175 @@ describe('InsertGuide: choosing the material', () => {
       sheet: null,
       url: GUIDE_PATH,
     });
+  });
+});
+
+const unavailableStatus = (material: Material, operationLabel: string): string =>
+  `${nameOf(material)}, ${operationLabel}. ${INSERT_GUIDE_COPY.unavailable}`;
+
+describe('InsertGuide: choosing the operation', () => {
+  it('Given the guide When it renders Then the operation and the insert each have a section named by its h2, after the material', async () => {
+    const { page } = await openGuide(GUIDE_PATH);
+    const named = (testId: string): (string | undefined)[] => {
+      const section = page.one(testId);
+      const heading = section?.querySelector(`[id="${section.getAttribute('aria-labelledby')}"]`);
+      return [section?.tagName, heading?.tagName, heading?.textContent?.trim()];
+    };
+
+    expect({
+      operation: named('insert-guide-operation'),
+      recommendation: named('insert-guide-recommendation'),
+      picker: page.one('insert-guide-operation')?.contains(page.one('operation-picker')),
+      panel: page
+        .one('insert-guide-recommendation')
+        ?.contains(page.one('recommendation-incomplete')),
+      headings: [...page.host.querySelectorAll('h2')].map((h2) => h2.textContent?.trim()),
+    }).toEqual({
+      operation: ['SECTION', 'H2', INSERT_GUIDE_COPY.operationHeading],
+      recommendation: ['SECTION', 'H2', INSERT_GUIDE_COPY.recommendationHeading],
+      picker: true,
+      panel: true,
+      headings: [
+        INSERT_GUIDE_COPY.materialHeading,
+        INSERT_GUIDE_COPY.operationHeading,
+        INSERT_GUIDE_COPY.recommendationHeading,
+      ],
+    });
+  });
+
+  it('Given a known operation in the URL When the guide renders Then its radio is checked and it does not navigate', async () => {
+    const { page, router, navigations } = await openGuide(`${GUIDE_PATH}?operation=gorge`);
+
+    expect([page.checkedOperations(), navigations(), router.url]).toEqual([
+      ['gorge'],
+      1,
+      `${GUIDE_PATH}?operation=gorge`,
+    ]);
+  });
+
+  it('Given an unknown operation in the URL When the guide renders Then no radio is checked, the slug is shown nowhere and the URL is left as is', async () => {
+    const { page, router, navigations } = await openGuide(
+      `${GUIDE_PATH}?operation=operation-inconnue-zz`,
+    );
+
+    expect({
+      radios: page.operationRadios().length,
+      checked: page.checkedOperations(),
+      echoed: page.host.innerHTML.includes('operation-inconnue-zz'),
+      url: router.url,
+      navigations: navigations(),
+    }).toEqual({
+      radios: 9,
+      checked: [],
+      echoed: false,
+      url: `${GUIDE_PATH}?operation=operation-inconnue-zz`,
+      navigations: 1,
+    });
+  });
+
+  it('Given no operation in the URL When one is chosen Then the URL keeps it in one navigation, replacing the history entry', async () => {
+    const { page, router, navigations } = await openGuide(GUIDE_PATH);
+
+    await page.chooseOperation('filetage');
+
+    expect({
+      url: router.url,
+      replaceUrl: router.lastSuccessfulNavigation()?.extras.replaceUrl,
+      navigations: navigations(),
+    }).toEqual({ url: `${GUIDE_PATH}?operation=filetage`, replaceUrl: true, navigations: 2 });
+  });
+
+  it('Given an unknown operation in the URL When a material is chosen Then both keys are written in a single navigation, the unknown one removed', async () => {
+    const { page, router, navigations } = await openGuide(
+      `${GUIDE_PATH}?operation=operation-inconnue-zz`,
+    );
+
+    await page.press('ArrowDown');
+    await page.press('Enter');
+
+    expect([router.url, navigations()]).toEqual([`${GUIDE_PATH}?matiere=${ALPHA.slug}`, 2]);
+  });
+
+  it('Given a material and an operation without recommendation in the URL When the guide renders Then the panel says so plainly and the status names the case', async () => {
+    const { page, navigations } = await openGuide(
+      `${GUIDE_PATH}?matiere=${BETA.slug}&operation=gorge`,
+    );
+
+    expect({
+      unavailable: page.text('insert-guide-unavailable'),
+      incomplete: page.one('recommendation-incomplete'),
+      status: page.text('insert-guide-status'),
+      navigations: navigations(),
+    }).toEqual({
+      unavailable: INSERT_GUIDE_COPY.unavailable,
+      incomplete: null,
+      status: unavailableStatus(BETA, 'Gorge'),
+      navigations: 1,
+    });
+  });
+
+  it('Given the guide When the material then two operations are chosen Then the status is silent until the case is complete, then follows each change', async () => {
+    const { page } = await openGuide(GUIDE_PATH);
+    const statuses: string[] = [page.text('insert-guide-status')];
+
+    await page.press('ArrowDown');
+    await page.press('Enter');
+    statuses.push(page.text('insert-guide-status'));
+    await page.chooseOperation('tronconnage');
+    statuses.push(page.text('insert-guide-status'));
+    await page.chooseOperation('filetage');
+    statuses.push(page.text('insert-guide-status'));
+
+    expect(statuses).toEqual([
+      '',
+      '',
+      unavailableStatus(ALPHA, 'Tronçonnage'),
+      unavailableStatus(ALPHA, 'Filetage'),
+    ]);
+  });
+
+  it.each<[string, (page: InsertGuidePage) => Promise<unknown>]>([
+    ['the field loses focus', (page): Promise<unknown> => page.leaveMaterial()],
+    ['Escape is pressed', (page): Promise<unknown> => page.press('Escape')],
+  ])(
+    'Given a chosen material When its text is cleared and %s Then the material is unselected and the URL loses it',
+    async (_, leave) => {
+      const { page, router } = await openGuide(
+        `${GUIDE_PATH}?matiere=${BETA.slug}&operation=gorge`,
+      );
+
+      await page.typeMaterial('');
+      await leave(page);
+
+      expect({
+        url: router.url,
+        sheet: page.one('material-sheet'),
+        incomplete: page.text('recommendation-incomplete'),
+        status: page.text('insert-guide-status'),
+      }).toEqual({
+        url: `${GUIDE_PATH}?operation=gorge`,
+        sheet: null,
+        incomplete: INSERT_GUIDE_COPY.incomplete,
+        status: '',
+      });
+    },
+  );
+
+  it('Given an operation chosen after another When the user goes back Then the checked radio follows the URL without a new navigation', async () => {
+    const { page, router, navigations } = await openGuide(`${GUIDE_PATH}?operation=gorge`);
+    await router.navigateByUrl(`${GUIDE_PATH}?operation=filetage`);
+    await settle(page.fixture);
+    const before = navigations();
+
+    TestBed.inject(Location).back();
+    // Le routeur ne rejoue un popstate qu'après une macro-tâche.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await settle(page.fixture);
+
+    expect({
+      url: router.url,
+      checked: page.checkedOperations(),
+      navigations: navigations() - before,
+    }).toEqual({ url: `${GUIDE_PATH}?operation=gorge`, checked: ['gorge'], navigations: 1 });
   });
 });

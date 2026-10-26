@@ -64,6 +64,25 @@ export class InsertGuidePage {
     return this.text('material-sheet-name');
   }
 
+  operationRadios(): HTMLInputElement[] {
+    return this.all('operation-radio').filter(
+      (element): element is HTMLInputElement => element instanceof HTMLInputElement,
+    );
+  }
+
+  checkedOperations(): string[] {
+    return this.operationRadios()
+      .filter((radio) => radio.checked)
+      .map((radio) => radio.value);
+  }
+
+  async chooseOperation(slug: string): Promise<void> {
+    const radio = this.operationRadios().find((element) => element.value === slug);
+    expect(radio, `the operation radio ${slug}`).toBeInstanceOf(HTMLInputElement);
+    radio?.click();
+    await settle(this.fixture);
+  }
+
   async typeMaterial(value: string): Promise<void> {
     const input = this.materialInput;
     input.focus();

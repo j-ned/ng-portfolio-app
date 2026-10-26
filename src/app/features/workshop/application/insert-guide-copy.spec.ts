@@ -20,6 +20,11 @@ describe('INSERT_GUIDE_COPY', () => {
       isoGroup: 'Groupe ISO',
       source: 'Source :',
       newTab: '(nouvel onglet)',
+      operationHeading: "L'opération",
+      operationLegend: 'Opération',
+      recommendationHeading: 'La plaquette',
+      incomplete: 'Choisis une matière et une opération.',
+      unavailable: 'Pas encore de recommandation pour ce cas.',
       designationSystems: {
         'en-symbol': 'Symbole EN',
         'material-number': 'Numéro matière',

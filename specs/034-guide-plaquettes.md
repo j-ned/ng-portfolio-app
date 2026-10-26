@@ -1338,6 +1338,77 @@ changé. Mutation à la main : sans la garde « ne navigue que si le modèle dif
 inconnu tombe (l'URL perd `?matiere=`) ; le test du slug connu reste vert, la navigation vers la
 même URL étant ignorée par le routeur.
 
+### Tranche 9 — je choisis l'opération, et l'absence se dit franchement
+
+Jouée dans la même session, RED puis GREEN par le même agent (exception validée le 2026-10-25).
+Les tests de la page lisent désormais `OPERATION_FAMILIES` (structure et libellés de la spec, aucune
+donnée d'usinage) en plus de la fixture fictive des matières. PageModel étendu :
+`operationRadios()`, `checkedOperations()`, `chooseOperation(slug)` (son accès au radio est une
+assertion, pour qu'un radio absent échoue en `AssertionError`).
+
+`application/insert-guide-copy.spec.ts` (golden étendu) : « L'opération », « Opération », « La
+plaquette », « Choisis une matière et une opération. », « Pas encore de recommandation pour ce
+cas. » (mot pour mot de la spec). **RED**.
+
+`application/insert-guide-status.spec.ts` (4 tests) : `incomplete` → chaîne vide ; `unavailable`
+(`it.each`, 3 couples) → « <nom affiché>, <opération>. Pas encore de recommandation pour ce cas. ».
+**RED** (3), le cas `incomplete` vert face au stub par construction.
+
+`application/recommendation-panel.spec.ts` (2 tests) : `incomplete` → un `P`
+`recommendation-incomplete` avec l'invitation, aucun `insert-guide-unavailable` ; `unavailable` →
+un `P` `insert-guide-unavailable`, et le texte entier du panneau est **exactement** la phrase
+d'absence (ni nom de matière, ni opération, ni citation). **RED** (2).
+
+`application/operation-picker.spec.ts` (10 tests)
+- Un `fieldset` `operation-picker` dont la `legend` « Opération » est `sr-only`, contenant un
+  `fieldset` par famille, dans l'ordre, nommé par sa `legend` visible. **RED**.
+- Un radio natif par opération, dans l'ordre, `value` = slug, `label for` = libellé, **un seul
+  `name`** non vide pour tous. **RED**.
+- Rien de choisi → 9 radios, aucun coché. **RED**.
+- Choix (`it.each` : `gorge`, `percage-plaquettes`, `finition-interieure`) → `value` = slug, seul
+  radio coché. **RED** (3).
+- Valeur posée de l'extérieur → radio coché, puis aucun une fois vidée. **RED**.
+- Lié par `[formField]` : modèle → radio coché ; choix → modèle ; modèle remplacé → radio. **RED** (3).
+
+`application/material-combobox.spec.ts` (3 tests ajoutés, décision 5 du brief)
+- Matière choisie, texte vidé puis perte du focus → `value` vide, champ vide, liste fermée. **RED**.
+- Matière choisie, texte vidé puis Échap → `value` vide, champ vide, liste fermée, `preventDefault`.
+  **RED**.
+- Matière choisie, texte partiel puis perte du focus → la matière reste choisie. Vert par
+  construction (garde du comportement de la tranche 8).
+
+`pages/insert-guide/insert-guide.spec.ts` (10 tests ajoutés)
+- Sections « L'opération » et « La plaquette », chacune nommée par son `h2`, qui contiennent le
+  sélecteur et le panneau ; `h2` dans l'ordre matière, opération, plaquette. **RED**.
+- `?operation=gorge` → radio coché, aucune navigation. **RED**.
+- `?operation=<inconnue>` → 9 radios, aucun coché, slug absent du HTML, URL inchangée, aucune
+  navigation. **RED**.
+- Choix d'une opération → `?operation=filetage`, `replaceUrl: true`, une seule navigation. **RED**.
+- `?operation=<inconnue>` puis choix d'une matière → `?matiere=<slug>` en **une** navigation : les
+  deux clés écrites ensemble, l'inconnue retirée. **RED**.
+- `?matiere=<Bêta>&operation=gorge` → panneau « Pas encore de recommandation pour ce cas. », statut
+  « Alliage essai Bêta, Gorge. Pas encore… », aucune navigation. **RED**.
+- Statut : muet tant que le couple est incomplet, puis suit chaque changement d'opération. **RED**.
+- Texte de la matière vidé puis perte du focus / Échap (`it.each`) → URL `?operation=gorge`, plus
+  de fiche, panneau `incomplete`, statut muet. **RED** (2).
+- Retour arrière après deux opérations → radio de l'URL coché, une seule navigation. **RED**.
+
+Suite adaptée **avant le RED** : le test de la tranche 8 « un autre paramètre est gardé » partait de
+`?operation=operation-fictive-zz`, slug inconnu ; l'effet écrivant désormais les deux clés, une clé
+inconnue est retirée (brief : « une clé vide est retirée de l'URL »). Il part de `?operation=gorge`,
+slug connu, et attend `?operation=gorge&matiere=<slug>` : même exigence (l'opération est gardée).
+La référence par défaut d'`openGuide` reçoit `families: OPERATION_FAMILIES`.
+
+RED, `pnpm test`, cache invalidé (`.angular/cache` et `node_modules/.vite` supprimés), stubs typés
+(copie à chaînes vides, `insertGuideStatus` rendant `''`, `OperationPicker` et
+`RecommendationPanel` au gabarit vide, page et combobox inchangés) : RED confirmé le 2026-10-26,
+28 failed / 4876 total (Test Files 6 failed | 244 passed), code de sortie 1. Les 28 échecs sont des
+`AssertionError` (7 « the operation radio <slug>: expected undefined to be an instance of
+HTMLInputElement », 21 sur les valeurs attendues), aucune erreur de harnais ni de type.
+
+Retouche après le RED, signalée : `pnpm lint` a demandé le type de retour des deux fonctions du
+`it.each` de la désélection (`(page): Promise<unknown> => …`). Aucune valeur attendue n'a changé.
+
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
@@ -1348,6 +1419,7 @@ même URL étant ignorée par le routeur.
 - **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
 - **Tranche 7 — le guide existe et se trouve** : GREEN 4797 passed / 4797 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : aucun (la liste de classes du `h1` est la même que sur l'accueil de l'atelier, le blog et les réalisations ; la sortir en `@utility` toucherait trois fichiers hors de la tranche). Verify faite (§ Verify) : `/atelier` gagne sa carte et `/atelier/plaquettes` devient atteignable. Décision du 2026-10-26 (session principale, option E) : `INSERT_GUIDE_REFERENCE` n'est pas créé dans cette tranche. Sa `factory` devrait rendre un `InsertGuideReference`, dont `isoGroups` (`Record` des six lettres, chaque nom `Sourced<string>`) ne se construit pas tant que `SourceId` vaut `never` : il faudrait inventer une source ou affaiblir le type. Aucun élément de la tranche ne lit le référentiel. Le choix entre retirer `isoGroups` jusqu'à la PR de données (A) et avancer `ISO_513_GROUPS` avec une source réelle (C) se fait à la tranche 8, premier consommateur. Correction du contrat au GREEN : le test des cartes comparait le texte de la carte en une chaîne jointe par des espaces ; les trois `span` de `LinkCard` n'ont pas d'espace entre eux, il compare désormais le texte de chaque enfant (même exigence, mesure juste). Écarts : `INSERT_GUIDE_COPY` ne porte que ce que la page rend (titre, chapô, avertissement), les autres libellés arrivent avec leurs composants (tranches 8 et 9) ; le chapô reprend le résumé validé de la carte ; `WorkshopTool` gagne `summary` (réponse 6 de Julien) ; le guide entre aussi dans la boucle CSP du job `docker` ; `DESIGN.md` § 5 : « Les outils » et « Guide des plaquettes ».
 - **Tranche 8 — je choisis ma matière au clavier, et l'URL la garde** : GREEN 4844 passed / 4844 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : la constante `FIELD_ID` à un seul site est inlinée dans le champ `fieldId` du combobox ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, gagne la section « La matière ». Décision du 2026-10-26 (session principale, option A) : `isoGroups` sort d'`InsertGuideReference` et d'`aReference` jusqu'à la première PR de données ; le type décrit ce qui existe, le champ reviendra avec `ISO_513_GROUPS` et sa source. `IsoGroup` et `anIsoGroup` restent (garanties de compilation de `reference-types.spec.ts`). `INSERT_GUIDE_REFERENCE` est créé, sa `factory` rend les quatre constantes réelles sans cast ; `aReference` porte désormais la source fictive dans `sources` (cast confiné à `testing/`). Écarts : le cycle 1 a fait tomber deux tests, la garde des rayons nommés (`rounded-lg` sur la liste, remplacé par `rounded-field`) et le retour arrière (harnais, cf. Plan de test) ; la règle `@angular-eslint/no-input-rename` est désactivée sur l'input `matiere`, avec sa raison (clé figée des URL partagées, code en anglais), plutôt qu'un input nommé en français ; la navigation garde les autres paramètres (`queryParamsHandling: 'merge'`, `matiere` retiré quand le choix est vide) au lieu d'écrire `operation`, qui arrive en tranche 9 ; le scénario axe « liste ouverte » n'est pas ajouté (référentiel vide : rien à ouvrir), il rejoint la première PR de données avec « choix fait » ; `DESIGN.md` § 5 : section « La matière », champ à suggestions, badge de groupe ISO, citation. Effacer le texte du champ ne retire pas la matière choisie (Échap la réaffiche) : comportement non spécifié, laissé tel quel.
+- **Tranche 9 — je choisis l'opération, et l'absence se dit franchement** : GREEN 4876 passed / 4876 total (au premier cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : imports de la page remis dans l'ordre, diff relu (pas de presenter : la page ne fait que câbler, la phrase d'annonce est une fonction pure) ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, gagne les sections « L'opération » et « La plaquette ». Décision du brief (signalée en tranche 8) : vider le texte du champ matière puis le quitter, ou appuyer sur Échap champ vide, désélectionne la matière ; l'URL perd `matiere`. Un texte partiel laissé en quittant le champ garde la matière choisie. Écarts : l'input d'URL s'appelle `operation`, sans alias (le nom public est déjà la clé de l'URL : aucune règle `no-input-rename` à désactiver), quand celui de la matière reste `materialParam` aliasé `matiere` ; `RecommendationPanel` ne prend que `state` (`sources` arrive avec l'état `available` en tranche 10, `isoGroups` avec `ISO_513_GROUPS`) ; la phrase annoncée est « <matière>, <opération>. Pas encore de recommandation pour ce cas. », muette tant que le couple est incomplet ; une clé d'URL inconnue est retirée à la première navigation de l'utilisateur, jamais réécrite ; l'avertissement passe dans la section « La plaquette » (colonne de droite en `lg`). `DESIGN.md` § 5 : trois sections, deux colonnes, choix de l'opération, panneau. Risque : deux opérations de même libellé dans deux familles (« Ébauche », « Finition ») donnent la même phrase d'annonce ; le radio lui-même est annoncé avec la `legend` de sa famille.
 
 ## Verify
 
@@ -1452,6 +1524,53 @@ Tranche 8, 2026-10-26, worktree `034-pr5`.
 - Axe : `pnpm a11y -g atelier` sur l'image réelle, 4 passed (`/atelier` et `/atelier/plaquettes`,
   clair et sombre), code de sortie 0. Aucun axe sur l'image de vérification (liste ouverte et fiche :
   scénarios de la première PR de données).
+- Verdict : **PASS**.
+
+Tranche 9, 2026-10-26, worktree `034-pr5`.
+
+- Steps (image réelle, référentiel sans matière) : `pnpm run build --configuration production`
+  (code 0, « Prerendered 3 static routes ») ; `docker build -t ng-portfolio-app:a11y .` (code 0)
+  puis `ci/a11y-stack.sh up`.
+- `checked` dans le HTML servi (`curl`, sans JavaScript) : `?operation=gorge` → 200,
+  `X-Cache-Status: MISS`, `<input … id="operation-gorge" value="gorge" checked="" …>`, les huit
+  autres radios sans `checked`, aucun `'unsafe-inline'` ; `?operation=percage-plaquettes` →
+  `checked=""` sur ce seul radio ; `?operation=inconnue-zz` → zéro `checked`, zéro occurrence du
+  slug. `[checked]` suffit : pas de `[attr.checked]`. Après hydratation, même radio coché, même
+  document (marqueur `window`), URL inchangée : l'hydratation ne change pas le contenu.
+- Clavier réel, image réelle : clic sur « Gorge » (déjà coché), flèche bas → focus et choix sur
+  « Tronçonnage », URL `?operation=tronconnage` par **une** navigation `replace`
+  (`navigation.navigate`), `history.length` inchangé (2) ; trois flèches bas → « Filetage »,
+  « Perçage au foret à plaquettes », puis retour en tête sur « Ébauche » (tournage extérieur) :
+  les flèches traversent les familles et bouclent ; flèche haut → « Perçage au foret à
+  plaquettes ». Toujours en `replace`, `history.length` inchangé.
+- Retour arrière : menu « L'atelier » (navigation client), `history.back()` → guide avec
+  `?operation=percage-plaquettes`, même document, radio coché ; seule navigation après le
+  `traverse` : un `replace` vers la **même** URL, que le routeur émet aussi sur
+  `/atelier/plaquettes` sans query string (comparé dans la même session) : il ne vient pas de
+  l'effet.
+- Image de vérification **non commitée** (`ng-portfolio-app:verify-fixture` : `factory` du token
+  complétée par `aMaterialCatalogue()` et la source fictive le temps du `docker build`, fichier
+  restauré aussitôt, `git status` le montre identique, image supprimée ensuite) :
+  - rendu serveur de `?matiere=alliage-essai-beta&operation=gorge` (`curl`) : panneau
+    `insert-guide-unavailable` « Pas encore de recommandation pour ce cas. » et rien d'autre, statut
+    « Alliage essai Bêta, Gorge. Pas encore de recommandation pour ce cas. », radio `gorge`
+    `checked=""` ;
+  - clavier réel : flèche bas sur « Gorge » → URL `?matiere=alliage-essai-beta&operation=tronconnage`
+    en une navigation, statut « Alliage essai Bêta, Tronçonnage. Pas encore… » ;
+  - désélection : texte du champ sélectionné, Suppr, Tab → URL `?operation=tronconnage` en une
+    navigation, fiche retirée, panneau « Choisis une matière et une opération. », statut vide ;
+    saisie « gamma », flèche bas, Entrée → `?operation=tronconnage&matiere=alliage-essai-gamma` en
+    une navigation (les deux clés), statut « Alliage essai Gamma, Tronçonnage. Pas encore… » ;
+    Ctrl+A, Suppr, Échap → liste fermée, champ vide, focus gardé, URL `?operation=tronconnage`,
+    statut vide. `history.length` inchangé sur toute la séquence (3).
+- Captures : sélecteur au clavier sur l'image réelle ; panneau « Pas encore de recommandation pour
+  ce cas. » à côté de la fiche Bêta (prises dans la session, non versionnées).
+- Console : aucune erreur de l'application ni d'hydratation ; seule erreur, `GET /api/config` 404
+  (absent de la doublure), une fois par chargement.
+- Axe : `pnpm a11y -g atelier` sur l'image réelle, 4 passed (`/atelier` et `/atelier/plaquettes`,
+  clair et sombre), code de sortie 0.
+- Lecteur d'écran : non joué (Orca indisponible dans la session) ; l'annonce repose sur la région
+  `role="status"` présente dès le HTML serveur, dont le texte change à chaque couple.
 - Verdict : **PASS**.
 
 ## Review code

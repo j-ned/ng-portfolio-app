@@ -37,7 +37,7 @@ import { INSERT_GUIDE_COPY } from './insert-guide-copy';
         [attr.aria-describedby]="fieldId + '-hint'"
         (input)="typeQuery(field.value)"
         (keydown)="handleKey($event)"
-        (blur)="closeList()"
+        (blur)="leaveField()"
       />
       <ul
         [id]="fieldId + '-listbox'"
@@ -155,6 +155,10 @@ export class MaterialCombobox implements FormValueControl<string> {
       }
       case 'Escape':
         event.preventDefault();
+        if (this.text().trim() === '') {
+          this.leaveField();
+          return;
+        }
         if (this.expanded()) {
           this.closeList();
           return;
@@ -173,7 +177,12 @@ export class MaterialCombobox implements FormValueControl<string> {
     this.closeList();
   }
 
-  protected closeList(): void {
+  protected leaveField(): void {
+    if (this.text().trim() === '') this.value.set('');
+    this.closeList();
+  }
+
+  private closeList(): void {
     this._open.set(false);
     this.activeIndex.set(-1);
   }
