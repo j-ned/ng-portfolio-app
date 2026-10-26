@@ -47,7 +47,7 @@ export const SOURCES: Readonly<Record<SourceId, Source>> = {
     consultedOn: CONSULTED_ON,
   },
   'kyocera-aluminium-finishing': {
-    title: 'AP Breaker',
+    title: "Plaquettes positives pour la finition de l'aluminium",
     publisher: 'Kyocera',
     url: 'https://tool-global.kyocera.com/en/prdct/tool/product/ap.php',
     consultedOn: CONSULTED_ON,

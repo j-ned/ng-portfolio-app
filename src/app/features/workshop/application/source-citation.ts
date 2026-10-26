@@ -35,7 +35,11 @@ export class SourceCitation {
   protected readonly copy = INSERT_GUIDE_COPY;
   protected readonly mention = computed(() => {
     const { basis, scope } = this.citation();
-    return [scope === 'group' && this.copy.groupAdvice, basis === 'deduced' && this.copy.deduced]
+    return [
+      scope === 'group' && this.copy.groupAdvice,
+      scope === 'subgroup' && this.copy.subgroupAdvice,
+      basis === 'deduced' && this.copy.deduced,
+    ]
       .filter(Boolean)
       .join(', ');
   });

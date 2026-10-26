@@ -33,8 +33,9 @@ Faits (2026-10-25) :
 
 1. **La citation est obligatoire dans le type.** Toute donnée affichée est un `Sourced<T>` (`value`,
    `cite`) ; `cite` référence une source d'une union fermée `SourceId`, adossée à un catalogue
-   `Record<SourceId, Source>` (titre, éditeur, URL `https`, date de consultation). Une donnée sans
-   citation, ou citant une source hors catalogue, ne compile pas.
+   `Record<SourceId, Source>` (titre, éditeur, URL `https` quand le document a une adresse publique,
+   date de consultation). Une donnée sans citation, ou citant une source hors catalogue, ne compile
+   pas.
 2. **L'absence est un état, jamais un trou comblé.** La résolution rend `incomplete`, `unavailable`
    ou `available`. Une recommandation **liste explicitement** les matières qu'elle couvre : aucun
    repli automatique du groupe ISO vers la matière, aucune interpolation entre matières voisines.
@@ -89,7 +90,7 @@ Faits (2026-10-25) :
 
 ## Amendement (2026-10-26)
 
-Décisions de Julien 9 à 12 de la spec 034 :
+Décisions de Julien 9 à 12, 15 et 17 de la spec 034 :
 
 - **Décision 1, précisée** : une citation dit sa **base**, `stated` (la source écrit la valeur) ou
   `deduced` (la valeur est déduite d'un principe que la source écrit). Une valeur `deduced` s'affiche
@@ -100,4 +101,13 @@ Décisions de Julien 9 à 12 de la spec 034 :
 - **Correspondances indicatives** : les désignations d'une matière viennent de la liste de travail de
   Julien et s'affichent comme indicatives ; elles ne sont jamais présentées comme vérifiées sur une
   norme.
-
+- **Décision 1, URL facultative** (décision 15) : une source sans adresse publique (la liste de
+  travail de Julien) n'a pas d'URL ; son titre s'affiche sans lien. Le type rend l'URL facultative,
+  `https` si elle existe ; un test d'intégrité garde que seule la liste de travail en est privée et
+  qu'aucune source ne pointe vers le site lui-même.
+- **Conseil de sous-groupe** (décision 17) : un conseil écrit dans la section d'un sous-groupe (inox
+  austénitiques, duplex, ferritiques et martensitiques, aciers trempés…) ne couvre que les matières de
+  ce sous-groupe, jamais le groupe ISO entier. Chaque matière porte son sous-groupe ; un test garde
+  qu'une recommandation ne couvre que les matières du sous-groupe dont elle cite la section, et qu'une
+  matière dont le sous-groupe n'a pas de section reste sans recommandation. La mention affichée est
+  « conseil du sous-groupe ».

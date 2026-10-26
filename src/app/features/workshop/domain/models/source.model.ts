@@ -20,7 +20,7 @@ export type SourceCitation = {
   readonly source: SourceId;
   readonly locator: string;
   readonly basis: 'stated' | 'deduced';
-  readonly scope?: 'group';
+  readonly scope?: 'group' | 'subgroup';
 };
 
 export type Sourced<T> = { readonly value: T; readonly cite: SourceCitation };

@@ -55,6 +55,7 @@ export function aMaterial(overrides: Partial<Material> = {}): Material {
     slug: 'matiere-fictive',
     designations: [aDesignation('Matière fictive'), aDesignation('ZZ-FICTIF-0', 'en-symbol')],
     isoGroup: aSourced('P'),
+    subgroup: 'steel',
     behaviour: [aSourced('Comportement fictif à la coupe.')],
     ...overrides,
   };

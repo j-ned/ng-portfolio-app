@@ -1636,6 +1636,60 @@ proposée : elle retire désormais toute citation qui nomme une forme, pour lais
 situation citée quand la matière impose une autre forme (M ronde, S ronde). Même exigence sur
 dépouille, tolérance et fixation.
 
+### Correctifs de revue : X20Cr13 en P, conseils par sous-groupe, mots de la page (décisions 16 et 17)
+
+Joué dans la même session, RED puis GREEN par le même agent (exception validée le 2026-10-25), après la
+revue REJECTED du 2026-10-26. Pages Sandvik `fr-fr` S1 à S5 relues le 2026-10-26 (intitulés de section,
+mots de forme, sous-groupes). Table récapitulative : `specs/assets/034/donnees-tournage.md`.
+
+**Modèle** : `Material.subgroup` (union fermée `IsoSubgroup` : aciers, inox ferritiques et
+martensitiques, austénitiques, duplex, durcis par précipitation, fontes, aluminium, superalliages et
+titane, aciers trempés, stellites), obligatoire ; la citation du groupe nomme la section de S5 qui
+classe la famille. `SourceCitation.scope` accepte `'subgroup'`, affiché « conseil du sous-groupe ».
+
+`domain/reference-types.spec.ts` (2 tests ajoutés, 1 renommé) : un sous-groupe hors liste ou absent ne
+compile pas ; une portée autre que groupe ou sous-groupe ne compile pas.
+
+`domain/reference-integrity.spec.ts`, sur les **données réelles** : X20Cr13 en P (le test qui
+l'épinglait en M est ré-ancré) et rattaché aux inox ferritiques et martensitiques par la section P5 de
+S5 ; chaque sous-groupe appartient au groupe de sa matière ; **une entrée ne couvre que les matières du
+sous-groupe dont elle cite la section** (remplace « une entrée couvre tout le groupe »), doublé de cinq
+fixtures (un sous-groupe propre, deux sous-groupes, sous-groupe sans section, section d'un autre
+sous-groupe, aucune section) ; les matières sans recommandation sont exactement celles d'un sous-groupe
+sans section (17-4 PH, Stellite 6) ; toute citation écrite de S4 est un conseil de sous-groupe ; la
+garde de forme lit une **table « mot de la page → lettre »** (doublée de dix cas : chaque mot, et
+« forme S » qui ne donne rien) ; **aucune citation écrite ne porte « forme <lettre> »** ; dans les
+sous-groupes qui règlent l'angle d'attaque (austénitiques, duplex, superalliages et titane), la forme
+respecte la règle, le conseil est cité écrit, et la forme qu'il impose est citée **déduite**.
+
+`application/insert-guide-copy.spec.ts` (golden) : `subgroupAdvice`. `application/source-citation.spec.ts`
+(2 cas) : « conseil du sous-groupe », seul et avec « déduit ».
+
+**RED** (`pnpm test`, stubs typés : `IsoSubgroup`, `subgroup` saisi sur chaque matière, `scope` élargi ;
+données d'avant sinon) : 14 failed / 4996 total (Test Files 3 failed | 249 passed), code de sortie 1, que
+des `AssertionError` :
+
+```
+× INSERT_GUIDE_COPY > Given the guide copy When it is read Then every interface text is the proposed one
+× SourceCitation > Given a value given for its subgroup When its citation renders Then it says so visibly, …
+× SourceCitation > Given a value given for its subgroup and deduced When its citation renders Then …
+× Given x20cr13-x30cr13 When its group is read Then the Sandvik classification wins over the working list
+× Given X20Cr13 / X30Cr13 When its subgroup is read Then it sits with the ferritic and martensitic stainless steels, …
+× Given the reference When subgroups are read Then each material sits in a subgroup of its own ISO group
+× Given the reference When an entry is read Then it covers only materials of the subgroup whose section it cites
+× Given the reference When coverage is read Then the materials of a subgroup without section are the ones left without recommendation
+× Given the reference When the turning page is cited as written advice Then it is the advice of a subgroup
+× Given each proposal When its choice is read Then one citation names its shape letter for its situation
+× Given the reference When a citation says what the page writes Then it never writes an ISO letter the page does not
+× Given subgroups without shape rule When a shape is proposed Then it is written for the situation by the Sandvik page …
+× Given subgroups whose page rules the entering angle When a code is proposed Then its shape keeps that angle, …
+× Given each proposal When its clearance, tolerance and fixing are chosen Then they are deduced from a principle …
+```
+
+Ajusté avant le GREEN (signalé) : les aciers non alliés et faiblement alliés forment **un** sous-groupe
+« aciers » à trois sections S4 (non alliés, faiblement alliés, fortement alliés), comme la liste de la
+décision 17 ; la table des sous-groupes du test porte une liste de sections par sous-groupe.
+
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
@@ -1650,8 +1704,10 @@ dépouille, tolérance et fixation.
 - **Correctif après la tranche 9 (session principale)** : la phrase annoncée nomme la famille quand le libellé de l'opération est partagé (« Ébauche (Tournage extérieur) » / « Ébauche (Intérieur (alésage)) »), pour que le passage de l'une à l'autre change la phrase et soit réannoncé. `insertGuideStatus(state, families)` ; RED par signature (TS2554), puis GREEN 4877/4877, lint et format en code 0.
 - **Tranche 10 — une recommandation s'affiche, et dit si elle est déduite** : GREEN 4901 passed / 4901 total (au deuxième cycle), puis 4902 / 4902 avec le test de la plaquette décrite, code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : aucun (diff relu ; le couple « valeur puis citation » revient trois fois dans le panneau et une fois dans la fiche matière, l'extraire toucherait la fiche de la tranche 8 : à faire avec la tranche 12, qui ajoute `DescribedInsert` et un quatrième site). Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, change de fiche (intitulé « Correspondances indicatives ») et de panneau. Écarts : le cycle 1 a fait tomber la garde « aucune capitale » (`first-letter:uppercase` sur la mention) ; la mention reste en minuscules, mot pour mot de la décision 10, sur sa propre ligne (à valider en revue UI) ; `scope?: 'group'` optionnel plutôt qu'un `scope: 'material' | 'group'` obligatoire, pour ne pas imposer un champ aux citations propres à la matière, majoritaires ; `cuttingSpeed` reste dans le modèle (V3, plan) mais n'est pas affiché (décision 13) ; le code ISO est une fonction pure du domaine, `isoInsertCode`, lue par le composant et par l'annonce ; l'intitulé des correspondances est un `h4` sous le `h3` de la matière ; `insertGuideStatus` annonce « Plaquette proposée : <code>. » (copie à valider), et seulement la matière et l'opération pour une plaquette décrite ; une plaquette décrite n'a pas encore de rendu (tranche 12). Scénario axe « choix fait » non ajouté : aucun état `available` n'est atteignable sans donnée réelle ; il rejoint la tranche de données. Joué en vérification sur l'image fixture (non commité) : 6 passed.
 
-- **Tranches 10 et 11, données — tournage extérieur et intérieur** : GREEN 4960 passed / 4960 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : les espaces insécables littérales des gabarits de locator passées en `\u00a0` (lint `no-irregular-whitespace`), `letter` retiré d'un type de saisie où il n'était lu nulle part ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, atteignable, affiche désormais de vraies fiches et recommandations. Le cycle 1 a fait tomber quatre tests : espace absente entre lettre et nom du badge (`&ngsp;`), la garde des noms commerciaux lisait les identifiants de source des citations de choix (exemption étendue de `.cite.source` à `.choice[n].source`, même règle : un identifiant de source n'est pas du texte affiché), et le test « référentiel réel encore sans matière » de la page, dont la prémisse a disparu (repointé sur une fixture sans matière ; l'option `null` d'`openGuide` retirée). Décisions de saisie : une ligne de la liste qui accole deux alliages devient deux matières quand chaque système leur donne une valeur distincte (304 et 304L, 625 et C276…), une seule quand une valeur est partagée (X20Cr13 / X30Cr13 partagent AISI 420, EN AW-2011 / 2030 partagent AU5PbBi) ; **100Cr6** : la matière recuite (P) garde toutes les désignations normalisées, la trempée (H) n'a que le nom courant « 100Cr6 trempé » (idem « 16MnCr5 trempé »), la recherche « 100cr6 » propose les deux ; **Stellite 6 en H** (S5 range les stellites en H, la liste la mettait en S), Haynes 25 reste en S (base cobalt) ; X20Cr13 en M d'après S5, alors que S4 range les martensitiques en P5 ; F51 (duplex) omis, ni AISI ni UNS ; « US (AISI) » de la liste repris en `aisi` même pour A36 et A572 Gr.50 (ASTM). La liste de travail n'a pas d'URL publique : sa source pointe `https://nedellec-julien.fr/atelier` (à confirmer par Julien). Cases vides : H ébauche et semi-finition extérieures, H intérieur, S intérieur (S3 « jamais moins de 75° » contre S4 « moins de 45° »).
+- **Tranches 10 et 11, données — tournage extérieur et intérieur** : GREEN 4960 passed / 4960 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : les espaces insécables littérales des gabarits de locator passées en `\u00a0` (lint `no-irregular-whitespace`), `letter` retiré d'un type de saisie où il n'était lu nulle part ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, atteignable, affiche désormais de vraies fiches et recommandations. Le cycle 1 a fait tomber quatre tests : espace absente entre lettre et nom du badge (`&ngsp;`), la garde des noms commerciaux lisait les identifiants de source des citations de choix (exemption étendue de `.cite.source` à `.choice[n].source`, même règle : un identifiant de source n'est pas du texte affiché), et le test « référentiel réel encore sans matière » de la page, dont la prémisse a disparu (repointé sur une fixture sans matière ; l'option `null` d'`openGuide` retirée). Décisions de saisie : une ligne de la liste qui accole deux alliages devient deux matières quand chaque système leur donne une valeur distincte (304 et 304L, 625 et C276…), une seule quand une valeur est partagée (X20Cr13 / X30Cr13 partagent AISI 420, EN AW-2011 / 2030 partagent AU5PbBi) ; **100Cr6** : la matière recuite (P) garde toutes les désignations normalisées, la trempée (H) n'a que le nom courant « 100Cr6 trempé » (idem « 16MnCr5 trempé »), la recherche « 100cr6 » propose les deux ; **Stellite 6 en H** (S5 range les stellites en H, la liste la mettait en S), Haynes 25 reste en S (base cobalt) ; X20Cr13 en M d'après S5, alors que S4 range les martensitiques en P5 ; F51 (duplex) omis, ni AISI ni UNS ; « US (AISI) » de la liste repris en `aisi` même pour A36 et A572 Gr.50 (ASTM). La liste de travail n'a pas d'URL publique : sa source pointe `https://nedellec-julien.fr/atelier` (à confirmer par Julien). Cases vides : H ébauche et semi-finition extérieures, H intérieur, S intérieur (S3 « toujours supérieur à 75° » contre S4 « moins de 45° »).
 - **Codes par situation (décisions 14 à 16)** : GREEN 4981 passed / 4981 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : `satisfies` redondant retiré du constructeur de proposition (le type de retour le garantit déjà), type `Principle` devenu inutile supprimé ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, atteignable, change de panneau et de statut. **Modèle** : `IsoInsertDesignation` porte une liste non vide de `proposals`, chacune `{ situation, choice, fields }` : la citation de choix existante reste l'endroit où une lettre se justifie, la forme y entre écrite (page de la situation) et les autres lettres déduites ; retenu contre une citation de choix par champ, qui aurait doublé les citations du `dl` et fait lire le sens comme « déduit ». `InsertFor<O>` donne `IsoInsertDesignation<ExternalSituation>` à l'extérieur et `IsoInsertDesignation<InternalSituation>` à l'intérieur : une situation de l'autre famille ne compile pas. **Situations** ajustées aux pages `fr-fr` relues ce jour : « Profilage » (Sandvik n'écrit pas « copiage »), « Profilage à forte rampe » (« angle de ramping plus grand », forme V), « Dressage » avec la forme W (la page écrit « trigone », la table MMC donne W = trigone) ; à l'intérieur, « Chariotage sans épaulement » (carrée à 75°) ajouté, seule situation compatible avec l'inox à l'intérieur. **Source sans lien** : `url` optionnel plutôt qu'une variante de `Source` ; la sûreté tient par la garde « seule la liste de travail est sans URL, rien ne pointe vers le site » et par `https` vérifié quand l'URL existe. **Classement** : le classement de Sandvik (S5, « Matériaux de pièce ») l'emporte sur la liste de travail : Stellite 6 en H, X20Cr13 en M, gardés par un test. **Situations omises** : M extérieur, tout ce qui travaille à 91–95° ou 93° (épaulement, profilage D et V, dressage) ; M intérieur, tout sauf la carrée à 75° (la ronde passe sous 75°, que S3 interdit) ; S extérieur, tout sauf la ronde (S4 : moins de 45°), le chariotage sans épaulement et le profilage passant à la ronde en le disant. Écarts : une seule situation en M intérieur ; RCGT proposé deux fois en S (deux situations, même code) ; la forme R du groupe S reste déduite (S4 écrit « moins de 45° », pas « ronde ») ; wiper cité dans la citation du tournage dur sans lettre ISO (aucune position 1 à 4 ne le porte) ; `DESIGN.md` § 5 : géométrie en liste, désignation par situation, citations du choix, citation sans lien (écart 7 de la saisie précédente soldé).
+- **Correctifs de revue (décisions 16 et 17)** : GREEN 4996 passed / 4996 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : le constructeur de proposition `imposed` sert les deux formes imposées par un sous-groupe (ronde des austénitiques, ronde des superalliages) sans citer la plaquette de la situation ; `groupRule` et `GroupAdvice` renommés `subgroupRule` et `SubgroupAdvice` ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, atteignable, change de fiches et de panneaux. Le cycle 1 a fait tomber la garde typographique (`;` après une espace insécable normale, passée en fine). **X20Cr13 / X30Cr13 en P**, sous-groupe P5, conseils de la section S4 « Tournage des aciers inoxydables ferritiques et martensitiques » et codes de l'acier (S4 n'y règle pas la forme). **Conseils par sous-groupe** : l'entrée « inox » se scinde en austénitiques (conseils d'avant, inchangés) et **duplex**, qui reçoit sa section (petits angles d'attaque, nuances CVD et PVD, arrosage par l'intérieur, super et hyper duplex) et la seule carrée à 75° (SNMG dehors, SCMT dedans) ; les aciers trempés perdent la Stellite 6 ; **17-4 PH et Stellite 6 sans recommandation**. Mention « conseil du sous-groupe » retenue plutôt que de renommer « conseil du groupe » : les comportements de la fiche matière restent des textes de groupe (S5, « Groupes de matières usinées »), le mot doit dire lequel des deux. **Mots de la page** : chaque locator de forme reprend « type C (80°) », « carrée », « trigone », « triangulaire », « type D (55°) », « type V (35°) », « rondes » ; la carrée à 75° des austénitiques et du duplex, la ronde des austénitiques et des superalliages passent en citation **déduite** derrière le conseil écrit ; RCGT une seule fois en S (profilage), sans la carrée au-dessus. Locators corrigés : comportement inox cité à « ISO M aciers inoxydables », « Usinabilité en général » (« contrôle des copeaux correct », plus « se coupent plus facilement ») ; piège intérieur cité à l'introduction de S3. Positive des austénitiques fondée sur S1 (angle de dépouille de 7° par exemple), la face de dépouille positive de S4 citée comme principe déduit ; rayon de bec : les mots de S1 (« grandes profondeurs de coupe », « idéal pour les petites profondeurs ») sans affirmer le lien à l'étape ; « un peu plus petit » au lieu de « un peu moins ». Titre de source Kyocera : « Plaquettes positives pour la finition de l'aluminium » (le sous-titre de la page), sans nom de brise-copeaux. ADR-0033 amendé (URL facultative, conseil de sous-groupe). Écarts : 17-4 PH reste en M par la liste de travail, rattaché au groupe par la définition de S5 (chrome à 12 % minimum, base déduite) ; S5 range les PH martensitiques en P5 et les austénitiques en M sans nommer le 17-4 PH, à trancher par Julien ; les aciers non alliés de décolletage (11SMn30, 11SMnPb30, P1.4 chez S5) reçoivent le conseil « Tournage des aciers non alliés », dont S4 n'affiche que la classification P1.1 ; le duplex n'a qu'une situation (carrée à 75°), la ronde n'étant pas écrite pour lui.
+
 ## Verify
 
 Tranche 1, 2026-10-25, worktree `034-pr3`.
@@ -1899,6 +1955,34 @@ Codes par situation, 2026-10-26, worktree `034-pr5`.
   (absent de la doublure).
 - Axe : `pnpm a11y -g atelier`, 6 passed (`/atelier`, `/atelier/plaquettes`, et le choix fait
   `?matiere=42crmo4&operation=ebauche-exterieure`, clair et sombre), code 0.
+- Verdict : **PASS**.
+
+Correctifs de revue (décisions 16 et 17), 2026-10-26, worktree `034-pr5`.
+
+- Steps (image réelle) : `pnpm run build --configuration production` (code 0, « Prerendered 3 static
+  routes ») ; `docker build -t ng-portfolio-app:a11y .` (code 0) ; `ci/a11y-stack.sh up` (code 0).
+- Rendu serveur (`curl`, toutes en 200), `?operation=finition-exterieure` et :
+  - `matiere=x20cr13-x30cr13` : « Groupe ISO P Acier », citation « Matériaux de pièce, section « Aciers
+    inoxydables ferritiques et martensitiques – P5.0-5.1 » » ; statut « Plaquettes proposées : CNMG
+    (chariotage avec épaulement), DNMG (profilage), VNMG (profilage à forte rampe). » ; géométrie,
+    nuance et piège cités à « Tournage des aciers inoxydables ferritiques et martensitiques », cinq
+    mentions « conseil du sous-groupe » ;
+  - `matiere=x5crnicunb16-4` (17-4 PH) et `matiere=stellite-6` : « Pas encore de recommandation pour ce
+    cas. » ; groupes M et H affichés ;
+  - `matiere=x2crnimon22-5-3` (duplex) : « Plaquette proposée : SNMG (chariotage sans épaulement). »,
+    conseils de « Tournage des aciers inoxydables duplex (austénitiques/ferritiques) » (petits angles
+    d'attaque, nuances CVD et PVD, super et hyper duplex, arrosage) ;
+  - `matiere=inconel-718` : « Plaquette proposée : RCGT (profilage). », une seule proposition ;
+  - `matiere=en-aw-2024` : source affichée « Plaquettes positives pour la finition de l'aluminium » ;
+  - sur les six pages : zéro « AP » isolé dans le texte rendu, zéro « forme <lettre> ».
+- Navigateur (pane, image Docker) : `x5crnicunb16-4`, `x20cr13-x30cr13`, `x2crnimon22-5-3`,
+  `stellite-6` ouverts après hydratation, panneau conforme au rendu serveur.
+- Captures : panneau « La plaquette » pour 17-4 PH et Stellite 6 (« Pas encore de recommandation pour
+  ce cas. »), X20Cr13 (« Groupe ISO P Acier », CNMG), duplex (SNMG, « conseil du sous-groupe ») (prises
+  dans la session, non versionnées).
+- Console : aucune erreur de l'application ni d'hydratation ; `GET /api/config` 404 (absent de la
+  doublure) et `POST /api/analytics/track` refusé lors des redémarrages de la pile.
+- Axe : `pnpm a11y -g atelier`, 6 passed, code 0.
 - Verdict : **PASS**.
 
 ## Review code

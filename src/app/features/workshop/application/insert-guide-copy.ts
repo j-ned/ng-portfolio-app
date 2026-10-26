@@ -22,6 +22,7 @@ export const INSERT_GUIDE_COPY = {
   unavailable: 'Pas encore de recommandation pour ce cas.',
   deduced: 'déduit des principes du fabricant',
   groupAdvice: 'conseil du groupe',
+  subgroupAdvice: 'conseil du sous-groupe',
   designationsHeading: 'Correspondances indicatives',
   insertHeading: 'Plaquette',
   geometryHeading: 'Géométrie',

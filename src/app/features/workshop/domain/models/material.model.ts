@@ -7,6 +7,18 @@ export type IsoGroup = {
   readonly name: Sourced<string>;
 };
 
+export type IsoSubgroup =
+  | 'steel'
+  | 'ferritic-martensitic-stainless'
+  | 'austenitic-stainless'
+  | 'duplex-stainless'
+  | 'precipitation-hardening-stainless'
+  | 'cast-iron'
+  | 'aluminium'
+  | 'heat-resistant-and-titanium'
+  | 'hardened-steel'
+  | 'stellite';
+
 export type DesignationSystem =
   'en-symbol' | 'material-number' | 'aisi' | 'uns' | 'afnor-legacy' | 'common-name';
 
@@ -16,6 +28,7 @@ export type Material = {
   readonly slug: string;
   readonly designations: readonly [Designation, ...Designation[]];
   readonly isoGroup: Sourced<IsoGroupLetter>;
+  readonly subgroup: IsoSubgroup;
   readonly behaviour: readonly [Sourced<string>, ...Sourced<string>[]];
 };
 

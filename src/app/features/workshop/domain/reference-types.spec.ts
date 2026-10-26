@@ -61,8 +61,8 @@ describe('Source types', () => {
     const _refused = aCitation({ basis: 'estimated' });
   });
 
-  it('Given a citation When its scope is other than the group Then it does not compile', () => {
-    // @ts-expect-error: a citation only widens to the advice of the material's ISO group
+  it('Given a citation When its scope is other than the group or the subgroup Then it does not compile', () => {
+    // @ts-expect-error: a citation only widens to the advice of the material's ISO group or subgroup
     const _refused = aCitation({ scope: 'family' });
   });
 
@@ -135,6 +135,17 @@ describe('Material types', () => {
   it('Given a material When its ISO group is not sourced Then it does not compile', () => {
     // @ts-expect-error: the ISO group comes from a cited source
     const _refused: Material = aMaterial({ isoGroup: 'P' });
+  });
+
+  it('Given a material When its subgroup is outside the listed ones Then it does not compile', () => {
+    // @ts-expect-error: the subgroup is one the maker pages name
+    const _refused: Material = aMaterial({ subgroup: 'acier-fictif' });
+  });
+
+  it('Given a material When it has no subgroup Then it does not compile', () => {
+    const { subgroup: _dropped, ...unplaced } = aMaterial();
+    // @ts-expect-error: every material sits in a subgroup, even one no recommendation covers
+    const _refused: Material = unplaced;
   });
 
   it('Given a material When a designation is not sourced Then it does not compile', () => {

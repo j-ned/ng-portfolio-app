@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { editorialTexts } from '../../../testing/editorial-sources';
 import {
   aCitation,
+  aMaterial,
   anIsoInsert,
   anIsoInsertProposal,
   aRecommendation,
@@ -10,7 +11,7 @@ import {
 } from '../testing/insert-guide-builders';
 import { ISO_513_GROUPS } from './iso-groups.static-data';
 import { MATERIALS } from './materials.static-data';
-import type { IsoGroupLetter, Material } from './models/material.model';
+import type { IsoGroupLetter, IsoSubgroup, Material } from './models/material.model';
 import type {
   CuttingSpeedRange,
   IsoInsertProposal,
@@ -453,6 +454,74 @@ const materialsOf = (letter: IsoGroupLetter): readonly string[] =>
 const groupOf = (slug: string): IsoGroupLetter | undefined =>
   MATERIALS.find((material) => material.slug === slug)?.isoGroup.value;
 
+const subgroupOf = (
+  slug: string,
+  materials: readonly Material[] = MATERIALS,
+): IsoSubgroup | undefined => materials.find((material) => material.slug === slug)?.subgroup;
+
+const TURNING_MATERIALS: SourceId = 'sandvik-turning-materials';
+
+const SUBGROUPS: Readonly<
+  Record<IsoSubgroup, { readonly letter: IsoGroupLetter; readonly sections: readonly string[] }>
+> = {
+  steel: {
+    letter: 'P',
+    sections: [
+      'Tournage des aciers non alliés',
+      'Tournage des aciers faiblement alliés',
+      'Tournage des aciers fortement alliés',
+    ],
+  },
+  'ferritic-martensitic-stainless': {
+    letter: 'P',
+    sections: ['Tournage des aciers inoxydables ferritiques et martensitiques'],
+  },
+  'austenitic-stainless': {
+    letter: 'M',
+    sections: ['Tournage des aciers inoxydables austénitiques'],
+  },
+  'duplex-stainless': {
+    letter: 'M',
+    sections: ['Tournage des aciers inoxydables duplex (austénitiques/ferritiques)'],
+  },
+  'precipitation-hardening-stainless': { letter: 'M', sections: [] },
+  'cast-iron': { letter: 'K', sections: ['Tournage des fontes'] },
+  aluminium: { letter: 'N', sections: ["Tournage des alliages d'aluminium"] },
+  'heat-resistant-and-titanium': {
+    letter: 'S',
+    sections: ['Tournage des superalliages réfractaires'],
+  },
+  'hardened-steel': { letter: 'H', sections: ['Tournage des aciers trempés'] },
+  stellite: { letter: 'H', sections: [] },
+};
+
+const sectionLocator = (name: string): string => `section «\u00a0${name}\u00a0»`;
+
+type SubgroupDefect =
+  'several-subgroups' | 'subgroup-without-section' | 'advice-of-another-section';
+
+const subgroupDefects = (
+  entry: RecommendationEntry,
+  materials: readonly Material[],
+): readonly SubgroupDefect[] => {
+  const subgroups = [...new Set(entry.materials.map((slug) => subgroupOf(slug, materials)))];
+  const [subgroup] = subgroups;
+  if (subgroups.length !== 1 || subgroup === undefined) {
+    return ['several-subgroups'];
+  }
+  const { sections } = SUBGROUPS[subgroup];
+  if (sections.length === 0) {
+    return ['subgroup-without-section'];
+  }
+  const advice = citationsIn(entry).filter(({ source }) => source === TURNING_MATERIALS);
+  return advice.length === 0 ||
+    advice.some(
+      ({ locator }) => !sections.some((section) => locator.startsWith(sectionLocator(section))),
+    )
+    ? ['advice-of-another-section']
+    : [];
+};
+
 describe('ISO_513_GROUPS', () => {
   it('Given the six groups When they are read Then each one sits under its own letter', () => {
     expect(Object.entries(ISO_513_GROUPS).map(([key, group]) => [key, group.letter])).toEqual(
@@ -493,13 +562,34 @@ describe('ISO_513_GROUPS', () => {
 describe('MATERIALS content', () => {
   it.each<[string, IsoGroupLetter]>([
     ['stellite-6', 'H'],
-    ['x20cr13-x30cr13', 'M'],
+    ['x20cr13-x30cr13', 'P'],
   ])(
     'Given %s When its group is read Then the Sandvik classification wins over the working list',
     (slug, letter) => {
       expect(groupOf(slug)).toBe(letter);
     },
   );
+
+  it('Given X20Cr13 / X30Cr13 When its subgroup is read Then it sits with the ferritic and martensitic stainless steels, cited by the section that classes them in P', () => {
+    const material = MATERIALS.find(({ slug }) => slug === 'x20cr13-x30cr13');
+
+    expect({ subgroup: material?.subgroup, group: material?.isoGroup.cite }).toEqual({
+      subgroup: 'ferritic-martensitic-stainless',
+      group: {
+        source: 'sandvik-workpiece-materials',
+        locator: sectionLocator('Aciers inoxydables ferritiques et martensitiques – P5.0-5.1'),
+        basis: 'stated',
+      },
+    });
+  });
+
+  it('Given the reference When subgroups are read Then each material sits in a subgroup of its own ISO group', () => {
+    expect(
+      MATERIALS.filter(
+        ({ subgroup, isoGroup }) => SUBGROUPS[subgroup].letter !== isoGroup.value,
+      ).map(({ slug }) => slug),
+    ).toEqual([]);
+  });
 
   it('Given the reference When materials are grouped Then every ISO group has at least one', () => {
     expect(ISO_GROUP_LETTERS.filter((letter) => materialsOf(letter).length === 0)).toEqual([]);
@@ -531,12 +621,12 @@ describe('MATERIALS content', () => {
     },
   );
 
-  it('Given the reference When behaviours are read Then each material has one to three, each the advice of its group on a Sandvik Coromant page', () => {
+  it('Given the reference When behaviours are read Then each material has one to three, each the advice of its group or subgroup on a Sandvik Coromant page', () => {
     expect(
       MATERIALS.filter(
         ({ behaviour }) =>
           behaviour.length > 3 ||
-          behaviour.some(({ cite }) => cite.scope !== 'group' || !isSandvikPage(cite.source)),
+          behaviour.some(({ cite }) => cite.scope === undefined || !isSandvikPage(cite.source)),
       ).map(({ slug }) => slug),
     ).toEqual([]);
   });
@@ -547,6 +637,7 @@ const TURNING_FIELDS = ['Forme', 'Dépouille', 'Tolérance', 'Fixation et brise-
 type PlacedProposal = {
   readonly entry: RecommendationEntry;
   readonly group: IsoGroupLetter | undefined;
+  readonly subgroup: IsoSubgroup | undefined;
   readonly proposal: IsoInsertProposal;
 };
 
@@ -556,6 +647,7 @@ const proposalsOf = (entries: readonly RecommendationEntry[]): readonly PlacedPr
       ? entry.insert.proposals.map((proposal) => ({
           entry,
           group: groupOf(entry.materials[0]),
+          subgroup: subgroupOf(entry.materials[0]),
           proposal,
         }))
       : [],
@@ -564,12 +656,40 @@ const proposalsOf = (entries: readonly RecommendationEntry[]): readonly PlacedPr
 const label = ({ entry, group, proposal }: PlacedProposal): string =>
   `${group} × ${entry.operation} × ${proposal.situation}`;
 
+const SHAPE_WORDS: readonly (readonly [string, string])[] = [
+  ['type C (80°)', 'C'],
+  ['rhombique à 80°', 'C'],
+  ['type D (55°)', 'D'],
+  ['type V (35°)', 'V'],
+  ['carrée', 'S'],
+  ['trigone', 'W'],
+  ['triangulaire', 'T'],
+  ['ronde', 'R'],
+  ['rondes', 'R'],
+];
+
+const shapesNamedBy = (locator: string): readonly string[] =>
+  SHAPE_WORDS.filter(([word]) =>
+    new RegExp(`(?<![\\p{L}])${word.replace(/[()]/gu, '\\$&')}(?![\\p{L}])`, 'u').test(locator),
+  ).map(([, letter]) => letter);
+
 const shapeCitation = (proposal: IsoInsertProposal): SourceCitation | undefined =>
   proposal.choice.find(({ locator }) =>
-    new RegExp(`forme ${proposal.fields[0].value.code}(?![\\p{L}])`, 'u').test(locator),
+    shapesNamedBy(locator).includes(proposal.fields[0].value.code),
   );
 
-const NAMES_A_SHAPE = /forme \p{Lu}(?![\p{L}])/u;
+const WRITTEN_LETTER = /forme \p{Lu}(?![\p{L}])/u;
+
+type ShapeRule = { readonly shapes: readonly string[]; readonly advice: RegExp };
+
+const SHAPE_RULES: Partial<Record<IsoSubgroup, ShapeRule>> = {
+  'austenitic-stainless': {
+    shapes: ['R', 'S'],
+    advice: /plaquettes rondes ou angles d'attaque faibles/u,
+  },
+  'duplex-stainless': { shapes: ['S'], advice: /petits angles d'attaque/u },
+  'heat-resistant-and-titanium': { shapes: ['R'], advice: /angle d'attaque de moins de 45°/u },
+};
 
 const familyOf = ({ operation }: RecommendationEntry): 'external' | 'internal' =>
   operation.startsWith('internal-') ? 'internal' : 'external';
@@ -588,18 +708,91 @@ describe('RECOMMENDATIONS content', () => {
     expect(ISO_GROUP_LETTERS.filter((letter) => !covered.includes(letter))).toEqual([]);
   });
 
-  it('Given the reference When an entry is read Then it lists every material of exactly one group, as group advice', () => {
+  it('Given the reference When an entry is read Then it covers only materials of the subgroup whose section it cites', () => {
     expect(
-      RECOMMENDATIONS.filter((entry) => {
-        const letters = [...new Set(entry.materials.map(groupOf))];
-        const [letter] = letters;
-        return (
-          letters.length !== 1 ||
-          letter === undefined ||
-          [...entry.materials].sort().join() !== [...materialsOf(letter)].sort().join()
-        );
-      }).map(({ operation, materials }) => `${operation} × ${materials.join()}`),
+      RECOMMENDATIONS.filter((entry) => subgroupDefects(entry, MATERIALS).length > 0).map(
+        ({ operation, materials }) => `${operation} × ${materials.join()}`,
+      ),
     ).toEqual([]);
+  });
+
+  it('Given the reference When coverage is read Then the materials of a subgroup without section are the ones left without recommendation', () => {
+    const covered = new Set(RECOMMENDATIONS.flatMap(({ materials }) => materials));
+
+    expect(MATERIALS.filter(({ slug }) => !covered.has(slug)).map(({ slug }) => slug)).toEqual([
+      'x5crnicunb16-4',
+      'stellite-6',
+    ]);
+  });
+
+  it('Given the reference When the turning page is cited as written advice Then it is the advice of a subgroup', () => {
+    expect(
+      citationsIn(RECOMMENDATIONS)
+        .filter(
+          ({ source, basis, scope }) =>
+            source === TURNING_MATERIALS && basis === 'stated' && scope !== 'subgroup',
+        )
+        .map(({ locator }) => locator),
+    ).toEqual([]);
+  });
+
+  describe('Given fictional materials of two subgroups', () => {
+    const MATERIALS_FIXTURE = [
+      aMaterial({ slug: 'alliage-essai-alpha', subgroup: 'austenitic-stainless' }),
+      aMaterial({ slug: 'alliage-essai-beta', subgroup: 'duplex-stainless' }),
+      aMaterial({ slug: 'alliage-essai-gamma', subgroup: 'stellite' }),
+    ];
+    const advice = (section: string): Sourced<string> => ({
+      value: 'Conseil fictif.',
+      cite: aCitation({
+        source: TURNING_MATERIALS,
+        locator: `${sectionLocator(section)} (fixture)`,
+        scope: 'subgroup',
+      }),
+    });
+    const AUSTENITIC = 'Tournage des aciers inoxydables austénitiques';
+
+    it.each<[string, RecommendationEntry, readonly SubgroupDefect[]]>([
+      [
+        'an entry of one subgroup citing its own section',
+        aRecommendation('external-finishing', {
+          materials: ['alliage-essai-alpha'],
+          grade: advice(AUSTENITIC),
+        }),
+        [],
+      ],
+      [
+        'an entry spread over two subgroups',
+        aRecommendation('external-finishing', {
+          materials: ['alliage-essai-alpha', 'alliage-essai-beta'],
+          grade: advice(AUSTENITIC),
+        }),
+        ['several-subgroups'],
+      ],
+      [
+        'an entry for a subgroup the page has no section for',
+        aRecommendation('external-finishing', {
+          materials: ['alliage-essai-gamma'],
+          grade: advice('Tournage des aciers trempés'),
+        }),
+        ['subgroup-without-section'],
+      ],
+      [
+        'an entry citing the section of another subgroup',
+        aRecommendation('external-finishing', {
+          materials: ['alliage-essai-beta'],
+          grade: advice(AUSTENITIC),
+        }),
+        ['advice-of-another-section'],
+      ],
+      [
+        'an entry citing no section at all',
+        aRecommendation('external-finishing', { materials: ['alliage-essai-alpha'] }),
+        ['advice-of-another-section'],
+      ],
+    ])('When %s is checked Then its defects are listed', (_, entry, defects) => {
+      expect(subgroupDefects(entry, MATERIALS_FIXTURE)).toEqual(defects);
+    });
   });
 
   it('Given the reference When entries are read Then none gives a cutting speed', () => {
@@ -633,10 +826,11 @@ describe('RECOMMENDATIONS content', () => {
       RECOMMENDATIONS.flatMap((entry) => {
         if (entry.insert.kind !== 'iso-1832') return [];
         const situations = entry.insert.proposals.map(({ situation }) => situation);
-        const group = groupOf(entry.materials[0]);
-        const tooFew = situations.length < 2 && group !== 'M' && group !== 'S';
+        const subgroup = subgroupOf(entry.materials[0]);
+        const tooFew =
+          situations.length < 2 && (subgroup === undefined || SHAPE_RULES[subgroup] === undefined);
         return situations.length > 3 || duplicates(situations).length > 0 || tooFew
-          ? [`${group} × ${entry.operation}`]
+          ? [`${subgroup} × ${entry.operation}`]
           : [];
       }),
     ).toEqual([]);
@@ -650,10 +844,35 @@ describe('RECOMMENDATIONS content', () => {
     ).toEqual([]);
   });
 
-  it('Given groups P, K, N and H When a shape is proposed Then it is written for the situation by the Sandvik page of its turning family', () => {
+  it('Given the shape words of the pages When they are read Then each gives its ISO letter, and a letter written alone gives none', () => {
+    expect(
+      [
+        'plaquette type C (80°) en priorité',
+        'plaquette rhombique à 80°',
+        "plaquette type D (55°), angle d'attaque de 93°",
+        'plaquette type V (35°)',
+        "plaquette carrée, angle d'attaque de 75°",
+        'plaquette trigone',
+        'plaquette triangulaire',
+        "plaquettes rondes ou angles d'attaque faibles",
+        'forme S, forme W, forme T',
+        'arrondie, carrées',
+      ].map(shapesNamedBy),
+    ).toEqual([['C'], ['C'], ['D'], ['V'], ['S'], ['W'], ['T'], ['R'], [], []]);
+  });
+
+  it('Given the reference When a citation says what the page writes Then it never writes an ISO letter the page does not', () => {
+    expect(
+      citationsIn(RECOMMENDATIONS)
+        .filter(({ basis, locator }) => basis === 'stated' && WRITTEN_LETTER.test(locator))
+        .map(({ source, locator }) => `${source}: ${locator}`),
+    ).toEqual([]);
+  });
+
+  it('Given subgroups without shape rule When a shape is proposed Then it is written for the situation by the Sandvik page of its turning family', () => {
     expect(
       proposalsOf(RECOMMENDATIONS)
-        .filter(({ group }) => group === 'P' || group === 'K' || group === 'N' || group === 'H')
+        .filter(({ subgroup }) => subgroup !== undefined && SHAPE_RULES[subgroup] === undefined)
         .filter(({ entry, proposal }) => {
           const cite = shapeCitation(proposal);
           return cite?.basis !== 'stated' || cite.source !== FAMILY_PAGE[familyOf(entry)];
@@ -662,20 +881,27 @@ describe('RECOMMENDATIONS content', () => {
     ).toEqual([]);
   });
 
-  it('Given groups M and S When a code is proposed Then its shape keeps the entering angle the group asks for, and its choice says so with the advice of the group', () => {
+  it('Given subgroups whose page rules the entering angle When a code is proposed Then its shape keeps that angle, the page advice is cited as written and the shape it imposes as deduced', () => {
     expect(
       proposalsOf(RECOMMENDATIONS)
-        .filter(({ group }) => group === 'M' || group === 'S')
-        .filter(
-          ({ group, proposal }) =>
-            !(group === 'S' ? ['R'] : ['R', 'S']).includes(proposal.fields[0].value.code) ||
+        .filter(({ subgroup }) => subgroup !== undefined && SHAPE_RULES[subgroup] !== undefined)
+        .filter(({ subgroup, proposal }) => {
+          const rule = SHAPE_RULES[subgroup as IsoSubgroup] as ShapeRule;
+          const shape = proposal.fields[0].value.code;
+          return (
+            !rule.shapes.includes(shape) ||
             !proposal.choice.some(
-              ({ source, scope, locator }) =>
-                source === 'sandvik-turning-materials' &&
-                scope === 'group' &&
-                /angle d'attaque|ronde/u.test(locator),
-            ),
-        )
+              ({ source, basis, scope, locator }) =>
+                source === TURNING_MATERIALS &&
+                basis === 'stated' &&
+                scope === 'subgroup' &&
+                rule.advice.test(locator),
+            ) ||
+            !proposal.choice.some(
+              ({ basis, locator }) => basis === 'deduced' && shapesNamedBy(locator).includes(shape),
+            )
+          );
+        })
         .map(label),
     ).toEqual([]);
   });
@@ -729,10 +955,13 @@ describe('RECOMMENDATIONS content', () => {
     expect(
       proposalsOf(RECOMMENDATIONS)
         .filter(({ proposal }) => {
-          const others = proposal.choice.filter(({ locator }) => !NAMES_A_SHAPE.test(locator));
+          const others = proposal.choice.filter(
+            ({ locator }) => shapesNamedBy(locator).length === 0,
+          );
           const wholeCode = others.some(({ source }) => source === 'kyocera-aluminium-finishing');
           return (
-            !wholeCode && others.some(({ basis, scope }) => basis === 'stated' && scope !== 'group')
+            !wholeCode &&
+            others.some(({ basis, scope }) => basis === 'stated' && scope === undefined)
           );
         })
         .map(label),

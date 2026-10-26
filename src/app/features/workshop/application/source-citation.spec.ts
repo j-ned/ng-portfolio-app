@@ -40,6 +40,12 @@ describe('SourceCitation', () => {
       'déduit des principes du fabricant',
     ],
     ['given for the ISO group', { scope: 'group' }, 'conseil du groupe'],
+    ['given for its subgroup', { scope: 'subgroup' }, 'conseil du sous-groupe'],
+    [
+      'given for its subgroup and deduced',
+      { basis: 'deduced', scope: 'subgroup' },
+      'conseil du sous-groupe, déduit des principes du fabricant',
+    ],
     [
       'given for the ISO group and deduced',
       { basis: 'deduced', scope: 'group' },

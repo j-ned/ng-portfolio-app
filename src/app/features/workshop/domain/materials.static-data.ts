@@ -4,7 +4,7 @@ import type {
   IsoGroupLetter,
   Material,
 } from './models/material.model';
-import type { Sourced } from './models/source.model';
+import type { SourceCitation, Sourced } from './models/source.model';
 
 type Row = { readonly page: number; readonly group: IsoGroupLetter; readonly line: string };
 
@@ -20,24 +20,62 @@ const listed =
     },
   });
 
-const inGroup = (letter: IsoGroupLetter, subgroup?: string): Sourced<IsoGroupLetter> => ({
+const section = (name: string): string => `section «\u00a0${name}\u00a0»`;
+
+const GROUP_LIST = (letter: IsoGroupLetter): string =>
+  `${section('Groupes de matières usinées')}, ISO ${letter}`;
+
+const classedIn = (
+  letter: IsoGroupLetter,
+  locator: string,
+  basis: SourceCitation['basis'] = 'stated',
+): Sourced<IsoGroupLetter> => ({
   value: letter,
-  cite: {
-    source: 'sandvik-workpiece-materials',
-    locator: `section «\u00a0Groupes de matières usinées\u00a0», ISO ${letter}${subgroup === undefined ? '' : `, ${subgroup}`}`,
-    basis: 'stated',
-  },
+  cite: { source: 'sandvik-workpiece-materials', locator, basis },
 });
 
-const groupAdvice = (letter: IsoGroupLetter, value: string): Sourced<string> => ({
+const advice = (
+  locator: string,
+  scope: NonNullable<SourceCitation['scope']>,
+  value: string,
+): Sourced<string> => ({
   value,
-  cite: {
-    source: 'sandvik-workpiece-materials',
-    locator: `section «\u00a0Groupes de matières usinées\u00a0», ISO ${letter}`,
-    basis: 'stated',
-    scope: 'group',
-  },
+  cite: { source: 'sandvik-workpiece-materials', locator, basis: 'stated', scope },
 });
+
+const groupAdvice = (letter: IsoGroupLetter, value: string): Sourced<string> =>
+  advice(GROUP_LIST(letter), 'group', value);
+
+const NON_ALLOYED = classedIn('P', section('Aciers non alliés – P 1.1-1.5'));
+const LOW_ALLOYED = classedIn('P', section('Aciers faiblement alliés – P 2.1-2.6'));
+const FERRITIC_MARTENSITIC_SECTION = 'Aciers inoxydables ferritiques et martensitiques – P5.0-5.1';
+const FERRITIC_MARTENSITIC = classedIn('P', section(FERRITIC_MARTENSITIC_SECTION));
+const AUSTENITIC = classedIn(
+  'M',
+  section('Acier inoxydable austénitique et super-austénitique – M1.0-2.0'),
+);
+const DUPLEX_GROUP = classedIn('M', section('Acier inoxydable duplex – M 3.41-3.42'));
+const STAINLESS_BY_CHROMIUM = classedIn(
+  'M',
+  `${GROUP_LIST('M')} (alliage à 12\u00a0% de chrome minimum)`,
+  'deduced',
+);
+const GREY = classedIn(
+  'K',
+  section('Fontes malléables (MCI) K 1.1-1.2 et fontes grises K 2.1-2.3'),
+);
+const NODULAR = classedIn('K', section('Fonte nodulaire (NCI) K 3.1-3.5'));
+const ALUMINIUM = classedIn('N', `${GROUP_LIST('N')} (l'aluminium)`);
+const TITANIUM = classedIn('S', section('Titane– S 4.1-4.4'));
+const HEAT_RESISTANT = classedIn(
+  'S',
+  section('Matières en superalliages réfractaires – S 1.0-3.0'),
+);
+const STELLITES = classedIn(
+  'H',
+  `${section('Codification MC pour les aciers trempés')}, stellites`,
+);
+const HARDENED = classedIn('H', GROUP_LIST('H'));
 
 const STEEL_BEHAVIOUR: Material['behaviour'] = [
   groupAdvice(
@@ -52,9 +90,23 @@ const STAINLESS_BEHAVIOUR: Material['behaviour'] = [
     'M',
     "Écrouissage, arête rapportée et chaleur\u00a0: l'usure en entaille est marquée.",
   ),
-  groupAdvice(
-    'M',
-    'Les ferritiques et les martensitiques se coupent plus facilement que les austénitiques et les duplex.',
+  advice(
+    `${section('ISO M aciers inoxydables')}, «\u00a0Usinabilité en général\u00a0»`,
+    'group',
+    'Le contrôle des copeaux est correct dans les ferritiques et les martensitiques, plus complexe dans les austénitiques et les duplex.',
+  ),
+];
+
+const FERRITIC_MARTENSITIC_BEHAVIOUR: Material['behaviour'] = [
+  advice(
+    section(FERRITIC_MARTENSITIC_SECTION),
+    'subgroup',
+    'Usinabilité en général bonne, très proche de celle des aciers faiblement alliés.',
+  ),
+  advice(
+    section(FERRITIC_MARTENSITIC_SECTION),
+    'subgroup',
+    "Au-delà de 0,2\u00a0% de carbone, la matière peut être durcie\u202f; l'usinage crée de l'usure en dépouille et en cratère, avec des arêtes rapportées.",
   ),
 ];
 
@@ -117,7 +169,8 @@ export const MATERIALS: readonly Material[] = [
       FREE_CUTTING('aisi', '1215'),
       FREE_CUTTING('afnor-legacy', 'S250'),
     ],
-    isoGroup: inGroup('P', 'non alliés'),
+    isoGroup: NON_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -128,7 +181,8 @@ export const MATERIALS: readonly Material[] = [
       FREE_CUTTING('aisi', '12L14'),
       FREE_CUTTING('afnor-legacy', 'S250Pb'),
     ],
-    isoGroup: inGroup('P', 'non alliés'),
+    isoGroup: NON_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -139,7 +193,8 @@ export const MATERIALS: readonly Material[] = [
       STRUCTURAL('aisi', 'A36'),
       STRUCTURAL('afnor-legacy', 'E24'),
     ],
-    isoGroup: inGroup('P', 'non alliés'),
+    isoGroup: NON_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -150,7 +205,8 @@ export const MATERIALS: readonly Material[] = [
       STRUCTURAL('aisi', 'A572 Gr.50'),
       STRUCTURAL('afnor-legacy', 'E36'),
     ],
-    isoGroup: inGroup('P', 'non alliés'),
+    isoGroup: NON_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -162,7 +218,8 @@ export const MATERIALS: readonly Material[] = [
       MEDIUM_CARBON('afnor-legacy', 'XC48'),
       MEDIUM_CARBON('afnor-legacy', 'XC45'),
     ],
-    isoGroup: inGroup('P', 'non alliés'),
+    isoGroup: NON_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -173,7 +230,8 @@ export const MATERIALS: readonly Material[] = [
       CR_MO('aisi', '4140'),
       CR_MO('afnor-legacy', '42CD4'),
     ],
-    isoGroup: inGroup('P', 'faiblement alliés'),
+    isoGroup: LOW_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -184,7 +242,8 @@ export const MATERIALS: readonly Material[] = [
       CASE_HARDENING('aisi', '5115'),
       CASE_HARDENING('afnor-legacy', '16MC5'),
     ],
-    isoGroup: inGroup('P', 'faiblement alliés'),
+    isoGroup: LOW_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -195,7 +254,8 @@ export const MATERIALS: readonly Material[] = [
       CASE_HARDENING('aisi', '8620'),
       CASE_HARDENING('afnor-legacy', '20NCD2'),
     ],
-    isoGroup: inGroup('P', 'faiblement alliés'),
+    isoGroup: LOW_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -206,7 +266,8 @@ export const MATERIALS: readonly Material[] = [
       BEARING('aisi', '52100'),
       BEARING('afnor-legacy', '100C6'),
     ],
-    isoGroup: inGroup('P', 'faiblement alliés'),
+    isoGroup: LOW_ALLOYED,
+    subgroup: 'steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -217,7 +278,8 @@ export const MATERIALS: readonly Material[] = [
       AUSTENITIC_FREE_CUTTING('aisi', '303'),
       AUSTENITIC_FREE_CUTTING('afnor-legacy', 'Z8CNF18-09'),
     ],
-    isoGroup: inGroup('M', 'austénitiques'),
+    isoGroup: AUSTENITIC,
+    subgroup: 'austenitic-stainless',
     behaviour: STAINLESS_BEHAVIOUR,
   },
   {
@@ -228,7 +290,8 @@ export const MATERIALS: readonly Material[] = [
       AUSTENITIC_STANDARD('aisi', '304'),
       AUSTENITIC_STANDARD('afnor-legacy', 'Z7CN18-09'),
     ],
-    isoGroup: inGroup('M', 'austénitiques'),
+    isoGroup: AUSTENITIC,
+    subgroup: 'austenitic-stainless',
     behaviour: STAINLESS_BEHAVIOUR,
   },
   {
@@ -239,7 +302,8 @@ export const MATERIALS: readonly Material[] = [
       AUSTENITIC_STANDARD('aisi', '304L'),
       AUSTENITIC_STANDARD('afnor-legacy', 'Z3CN18-10'),
     ],
-    isoGroup: inGroup('M', 'austénitiques'),
+    isoGroup: AUSTENITIC,
+    subgroup: 'austenitic-stainless',
     behaviour: STAINLESS_BEHAVIOUR,
   },
   {
@@ -250,7 +314,8 @@ export const MATERIALS: readonly Material[] = [
       AUSTENITIC_MOLYBDENUM('aisi', '316L'),
       AUSTENITIC_MOLYBDENUM('afnor-legacy', 'Z3CND17-11-02'),
     ],
-    isoGroup: inGroup('M', 'austénitiques'),
+    isoGroup: AUSTENITIC,
+    subgroup: 'austenitic-stainless',
     behaviour: STAINLESS_BEHAVIOUR,
   },
   {
@@ -264,8 +329,9 @@ export const MATERIALS: readonly Material[] = [
       MARTENSITIC('afnor-legacy', 'Z20C13'),
       MARTENSITIC('afnor-legacy', 'Z30C13'),
     ],
-    isoGroup: inGroup('M', 'ferritiques et martensitiques'),
-    behaviour: STAINLESS_BEHAVIOUR,
+    isoGroup: FERRITIC_MARTENSITIC,
+    subgroup: 'ferritic-martensitic-stainless',
+    behaviour: FERRITIC_MARTENSITIC_BEHAVIOUR,
   },
   {
     slug: 'x5crnicunb16-4',
@@ -276,7 +342,8 @@ export const MATERIALS: readonly Material[] = [
       PRECIPITATION('aisi', '630'),
       PRECIPITATION('afnor-legacy', 'Z6CNU17-04'),
     ],
-    isoGroup: inGroup('M'),
+    isoGroup: STAINLESS_BY_CHROMIUM,
+    subgroup: 'precipitation-hardening-stainless',
     behaviour: STAINLESS_BEHAVIOUR,
   },
   {
@@ -287,7 +354,8 @@ export const MATERIALS: readonly Material[] = [
       DUPLEX('aisi', '2205'),
       DUPLEX('afnor-legacy', 'Z3CND22-05Az'),
     ],
-    isoGroup: inGroup('M', 'duplex'),
+    isoGroup: DUPLEX_GROUP,
+    subgroup: 'duplex-stainless',
     behaviour: STAINLESS_BEHAVIOUR,
   },
   {
@@ -298,7 +366,8 @@ export const MATERIALS: readonly Material[] = [
       GREY_IRON('afnor-legacy', 'FGL 250'),
       GREY_IRON('afnor-legacy', 'Ft 25'),
     ],
-    isoGroup: inGroup('K', 'grise'),
+    isoGroup: GREY,
+    subgroup: 'cast-iron',
     behaviour: CAST_IRON_BEHAVIOUR,
   },
   {
@@ -308,7 +377,8 @@ export const MATERIALS: readonly Material[] = [
       DUCTILE_IRON('afnor-legacy', 'FGS 400'),
       DUCTILE_IRON('common-name', 'GGG40'),
     ],
-    isoGroup: inGroup('K', 'nodulaire'),
+    isoGroup: NODULAR,
+    subgroup: 'cast-iron',
     behaviour: CAST_IRON_BEHAVIOUR,
   },
   {
@@ -318,19 +388,22 @@ export const MATERIALS: readonly Material[] = [
       DUCTILE_IRON('afnor-legacy', 'FGS 500'),
       DUCTILE_IRON('common-name', 'GGG50'),
     ],
-    isoGroup: inGroup('K', 'nodulaire'),
+    isoGroup: NODULAR,
+    subgroup: 'cast-iron',
     behaviour: CAST_IRON_BEHAVIOUR,
   },
   {
     slug: 'en-aw-2017a',
     designations: [ALU_COPPER('en-symbol', 'EN AW-2017A'), ALU_COPPER('common-name', 'AU4G')],
-    isoGroup: inGroup('N', 'aluminium'),
+    isoGroup: ALUMINIUM,
+    subgroup: 'aluminium',
     behaviour: NON_FERROUS_BEHAVIOUR,
   },
   {
     slug: 'en-aw-2024',
     designations: [ALU_COPPER('en-symbol', 'EN AW-2024'), ALU_COPPER('common-name', 'AU4G1')],
-    isoGroup: inGroup('N', 'aluminium'),
+    isoGroup: ALUMINIUM,
+    subgroup: 'aluminium',
     behaviour: NON_FERROUS_BEHAVIOUR,
   },
   {
@@ -340,7 +413,8 @@ export const MATERIALS: readonly Material[] = [
       ALU_FREE_CUTTING('en-symbol', 'EN AW-2030'),
       ALU_FREE_CUTTING('common-name', 'AU5PbBi'),
     ],
-    isoGroup: inGroup('N', 'aluminium'),
+    isoGroup: ALUMINIUM,
+    subgroup: 'aluminium',
     behaviour: NON_FERROUS_BEHAVIOUR,
   },
   {
@@ -350,7 +424,8 @@ export const MATERIALS: readonly Material[] = [
       PURE_TITANIUM('uns', 'R50400'),
       PURE_TITANIUM('material-number', '3.7035'),
     ],
-    isoGroup: inGroup('S', 'titane'),
+    isoGroup: TITANIUM,
+    subgroup: 'heat-resistant-and-titanium',
     behaviour: SUPERALLOY_BEHAVIOUR,
   },
   {
@@ -362,7 +437,8 @@ export const MATERIALS: readonly Material[] = [
       ALPHA_BETA_TITANIUM('uns', 'R56400'),
       ALPHA_BETA_TITANIUM('material-number', '3.7165'),
     ],
-    isoGroup: inGroup('S', 'titane'),
+    isoGroup: TITANIUM,
+    subgroup: 'heat-resistant-and-titanium',
     behaviour: SUPERALLOY_BEHAVIOUR,
   },
   {
@@ -372,13 +448,15 @@ export const MATERIALS: readonly Material[] = [
       NICKEL_PH('uns', 'N07718'),
       NICKEL_PH('material-number', '2.4668'),
     ],
-    isoGroup: inGroup('S', 'base nickel'),
+    isoGroup: HEAT_RESISTANT,
+    subgroup: 'heat-resistant-and-titanium',
     behaviour: SUPERALLOY_BEHAVIOUR,
   },
   {
     slug: 'inconel-625',
     designations: [NICKEL_SOLUTION('common-name', 'Inconel 625'), NICKEL_SOLUTION('uns', 'N06625')],
-    isoGroup: inGroup('S', 'base nickel'),
+    isoGroup: HEAT_RESISTANT,
+    subgroup: 'heat-resistant-and-titanium',
     behaviour: SUPERALLOY_BEHAVIOUR,
   },
   {
@@ -387,31 +465,36 @@ export const MATERIALS: readonly Material[] = [
       NICKEL_SOLUTION('common-name', 'Hastelloy C276'),
       NICKEL_SOLUTION('uns', 'N10276'),
     ],
-    isoGroup: inGroup('S', 'base nickel'),
+    isoGroup: HEAT_RESISTANT,
+    subgroup: 'heat-resistant-and-titanium',
     behaviour: SUPERALLOY_BEHAVIOUR,
   },
   {
     slug: 'haynes-25',
     designations: [COBALT('common-name', 'Haynes 25'), COBALT('uns', 'R30605')],
-    isoGroup: inGroup('S', 'base cobalt'),
+    isoGroup: HEAT_RESISTANT,
+    subgroup: 'heat-resistant-and-titanium',
     behaviour: SUPERALLOY_BEHAVIOUR,
   },
   {
     slug: 'stellite-6',
     designations: [COBALT('common-name', 'Stellite 6'), COBALT('uns', 'R30006')],
-    isoGroup: inGroup('H', 'stellites'),
+    isoGroup: STELLITES,
+    subgroup: 'stellite',
     behaviour: HARD_BEHAVIOUR,
   },
   {
     slug: '100cr6-trempe',
     designations: [HARDENED_BEARING('common-name', '100Cr6 trempé')],
-    isoGroup: inGroup('H', 'aciers trempés'),
+    isoGroup: HARDENED,
+    subgroup: 'hardened-steel',
     behaviour: HARD_BEHAVIOUR,
   },
   {
     slug: '16mncr5-trempe',
     designations: [HARDENED_BEARING('common-name', '16MnCr5 trempé')],
-    isoGroup: inGroup('H', 'aciers trempés'),
+    isoGroup: HARDENED,
+    subgroup: 'hardened-steel',
     behaviour: HARD_BEHAVIOUR,
   },
   {
@@ -422,7 +505,8 @@ export const MATERIALS: readonly Material[] = [
       COLD_WORK_TOOL('aisi', 'D2'),
       COLD_WORK_TOOL('afnor-legacy', 'Z160CDV12'),
     ],
-    isoGroup: inGroup('H', 'aciers trempés'),
+    isoGroup: HARDENED,
+    subgroup: 'hardened-steel',
     behaviour: HARD_BEHAVIOUR,
   },
 ];

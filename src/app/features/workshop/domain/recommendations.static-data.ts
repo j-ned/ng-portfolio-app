@@ -82,7 +82,7 @@ const FIXING = {
 const deduced = (source: SourceId, locator: string): SourceCitation =>
   cite(source, locator, 'deduced');
 
-const writtenShape = (source: SourceId, name: string, detail: string): SourceCitation =>
+const written = (source: SourceId, name: string, detail: string): SourceCitation =>
   cite(source, section(name, detail), 'stated');
 
 type Placed<S extends InsertSituation> = { readonly situation: S; readonly shape: SourceCitation };
@@ -90,42 +90,42 @@ type Placed<S extends InsertSituation> = { readonly situation: S; readonly shape
 const EXTERNAL = {
   shoulder: {
     situation: 'external-shoulder',
-    shape: writtenShape(
+    shape: written(
       'sandvik-external-turning',
       'Chariotage',
-      'forme C en priorité, épaulement à 91–95°',
+      "plaquette type C (80°) en priorité, angle d'attaque de 91–95° pour un épaulement",
     ),
   },
   noShoulder: {
     situation: 'external-no-shoulder',
-    shape: writtenShape(
+    shape: written(
       'sandvik-external-turning',
       'Chariotage',
-      "forme S, plaquette carrée à 75° d'angle d'attaque, sans épaulement",
+      "plaquette carrée avec un angle d'attaque de 75°, sans épaulement",
     ),
   },
   profiling: {
     situation: 'external-profiling',
-    shape: writtenShape(
+    shape: written(
       'sandvik-external-turning',
       'Profilage',
-      "forme D en premier choix, angle d'attaque de 93°",
+      "plaquette type D (55°) en premier choix, angle d'attaque de 93°",
     ),
   },
   steepProfiling: {
     situation: 'external-steep-profiling',
-    shape: writtenShape(
+    shape: written(
       'sandvik-external-turning',
       'Profilage',
-      'forme V pour un angle de rampe plus grand',
+      'plaquette type V (35°) pour un angle de ramping plus grand',
     ),
   },
   facing: {
     situation: 'external-facing',
-    shape: writtenShape(
+    shape: written(
       'sandvik-external-turning',
       'Dressage',
-      "forme W, plaquette trigone à 95° d'angle d'attaque, pour la polyvalence",
+      "plaquette trigone avec un angle d'attaque de 95°, pour la polyvalence",
     ),
   },
 } as const satisfies Readonly<Record<string, Placed<ExternalSituation>>>;
@@ -133,53 +133,62 @@ const EXTERNAL = {
 const INTERNAL = {
   shoulder: {
     situation: 'internal-shoulder',
-    shape: writtenShape(
+    shape: written(
       'sandvik-internal-turning',
       'Chariotage',
-      'forme T, plaquette triangulaire, épaulement à 91–95°',
+      "plaquette triangulaire, angle d'attaque de 91–95° pour un épaulement",
     ),
   },
   strongerEdge: {
     situation: 'internal-stronger-edge',
-    shape: writtenShape(
+    shape: written(
       'sandvik-internal-turning',
       'Chariotage',
-      'forme C pour une arête plus résistante',
+      'plaquette type C (80°) pour une arête plus résistante',
     ),
   },
   noShoulder: {
     situation: 'internal-no-shoulder',
-    shape: writtenShape(
+    shape: written(
       'sandvik-internal-turning',
       'Chariotage',
-      "forme S, plaquette carrée à 75° d'angle d'attaque, sans épaulement",
+      "plaquette carrée avec un angle d'attaque de 75°, sans épaulement",
     ),
   },
   profiling: {
     situation: 'internal-profiling',
-    shape: writtenShape(
+    shape: written(
       'sandvik-internal-turning',
       'Profilage',
-      "forme D en premier choix, angle d'attaque de 93°",
+      "plaquette type D (55°) en premier choix, angle d'attaque de 93°",
     ),
   },
 } as const satisfies Readonly<Record<string, Placed<InternalSituation>>>;
 
 const NEGATIVE = deduced(
   'sandvik-choose-insert',
-  section('Plaquette de tournage négative', 'dépouille N, brise-copeaux sur les deux faces G'),
+  section(
+    'Plaquette de tournage négative',
+    'angle de dépouille de 0°, premier choix en extérieur, réversible : dépouille N, brise-copeaux sur les deux faces G',
+  ),
 );
 const NEGATIVE_CLEARANCE = deduced(
   'sandvik-choose-insert',
-  section('Plaquette de tournage négative', 'dépouille N'),
+  section(
+    'Plaquette de tournage négative',
+    'angle de dépouille de 0°, premier choix en extérieur : dépouille N',
+  ),
 );
 const POSITIVE = deduced(
   'sandvik-choose-insert',
-  section('Plaquette de tournage positive', 'dépouille C, brise-copeaux sur une face T'),
+  section(
+    'Plaquette de tournage positive',
+    'angle de dépouille de 7° par exemple, premier choix en intérieur, non réversible : dépouille C, brise-copeaux sur une face T',
+  ),
 );
 const ONE_SIDED = deduced(
   'sandvik-choose-insert',
-  section('Plaquette de tournage positive', 'brise-copeaux sur une face T'),
+  section('Plaquette de tournage positive', 'non réversible : brise-copeaux sur une face T'),
 );
 const ROUGHING_TOLERANCE = deduced('sandvik-choose-insert', section('Ebauche', 'classe M'));
 const SEMI_FINISHING_TOLERANCE = deduced(
@@ -187,62 +196,83 @@ const SEMI_FINISHING_TOLERANCE = deduced(
   section('Semi-finition', 'classe M'),
 );
 const FINISHING_TOLERANCE = deduced('sandvik-choose-insert', section('Finition', 'classe M'));
-const CAST_IRON_FIXING = deduced(
-  'sandvik-turning-materials',
-  section('Tournage des fontes', 'copeau court, sans brise-copeaux A'),
-);
 
-const groupRule = (
-  name: string,
-  detail: string,
-  basis: SourceCitation['basis'],
-): SourceCitation => ({
+const STEEL_SECTIONS = {
+  nonAlloyed: 'Tournage des aciers non alliés',
+  lowAlloyed: 'Tournage des aciers faiblement alliés',
+} as const;
+const FERRITIC_MARTENSITIC_SECTION =
+  'Tournage des aciers inoxydables ferritiques et martensitiques';
+const AUSTENITIC_SECTION = 'Tournage des aciers inoxydables austénitiques';
+const DUPLEX_SECTION = 'Tournage des aciers inoxydables duplex (austénitiques/ferritiques)';
+const CAST_IRON_SECTION = 'Tournage des fontes';
+const ALUMINIUM_SECTION = "Tournage des alliages d'aluminium";
+const HEAT_RESISTANT_SECTION = 'Tournage des superalliages réfractaires';
+const HARDENED_SECTION = 'Tournage des aciers trempés';
+
+const subgroupRule = (name: string, detail: string): SourceCitation => ({
   source: 'sandvik-turning-materials',
   locator: section(name, detail),
-  basis,
-  scope: 'group',
+  basis: 'stated',
+  scope: 'subgroup',
 });
 
-const STAINLESS_SECTION = 'Tournage des aciers inoxydables austénitiques';
-const STAINLESS_ROUND = groupRule(
-  STAINLESS_SECTION,
-  "forme R, plaquette ronde contre l'usure en entaille, à la place de la forme D du profilage",
-  'stated',
+const fromSubgroup = (name: string, detail: string): SourceCitation =>
+  deduced('sandvik-turning-materials', section(name, detail));
+
+const CAST_IRON_FIXING = fromSubgroup(CAST_IRON_SECTION, 'copeaux courts : sans brise-copeaux A');
+
+const AUSTENITIC_ANGLE = subgroupRule(
+  AUSTENITIC_SECTION,
+  "plaquettes rondes ou angles d'attaque faibles, contre l'usure en entaille",
 );
-const STAINLESS_LOW_ANGLE = groupRule(
-  STAINLESS_SECTION,
-  "angle d'attaque faible contre l'usure en entaille, d'où 75° sans épaulement plutôt que 91–95°",
-  'stated',
+const AUSTENITIC_SQUARE = fromSubgroup(
+  AUSTENITIC_SECTION,
+  "angle d'attaque faible : plaquette carrée à 75° sans épaulement, plutôt qu'un outil à 91–95°",
 );
-const STAINLESS_CLEARANCE = deduced(
-  'sandvik-turning-materials',
-  section(STAINLESS_SECTION, 'dépouille positive C'),
+const AUSTENITIC_ROUND = fromSubgroup(
+  AUSTENITIC_SECTION,
+  'plaquette ronde pour le profilage, à la place de la plaquette de la situation',
 );
-const ALUMINIUM_EDGE = deduced(
-  'sandvik-turning-materials',
-  section("Tournage des alliages d'aluminium", 'forme de base positive C et arête vive G'),
+const AUSTENITIC_POSITIVE = fromSubgroup(
+  AUSTENITIC_SECTION,
+  'arêtes vives et géométries avec une face de dépouille positive : plaquette positive',
+);
+
+const DUPLEX_ANGLE = subgroupRule(
+  DUPLEX_SECTION,
+  "petits angles d'attaque, contre l'usure en entaille et les bavures",
+);
+const DUPLEX_SQUARE = fromSubgroup(
+  DUPLEX_SECTION,
+  "petit angle d'attaque : plaquette carrée à 75° sans épaulement, plutôt qu'un outil à 91–95°",
+);
+
+const ALUMINIUM_EDGE = fromSubgroup(
+  ALUMINIUM_SECTION,
+  'forme de base positive et arêtes vives, toujours : dépouille C, classe G',
 );
 const ALUMINIUM_FINISHING = cite(
   'kyocera-aluminium-finishing',
-  "gamme CCGT, DCGT, TPGT et VCGT pour la finition de l'aluminium",
+  "type positif pour la finition de l'aluminium, plaquettes CCGT, DCGT, TPGT et VCGT",
   'stated',
 );
-const SUPERALLOY_SECTION = 'Tournage des superalliages réfractaires';
-const SUPERALLOY_ROUND = groupRule(
-  SUPERALLOY_SECTION,
-  "forme R, plaquette ronde, seule à garder l'angle d'attaque sous 45° à la place de la forme de la situation",
-  'deduced',
+
+const HEAT_RESISTANT_ANGLE = subgroupRule(
+  HEAT_RESISTANT_SECTION,
+  "angle d'attaque de moins de 45°, contre l'usure en entaille",
 );
-const SUPERALLOY_EDGE = deduced(
-  'sandvik-turning-materials',
-  section(SUPERALLOY_SECTION, 'arêtes vives, dépouille C et classe G'),
+const HEAT_RESISTANT_ROUND = fromSubgroup(
+  HEAT_RESISTANT_SECTION,
+  "plaquette ronde, seule à garder l'angle d'attaque sous 45° en profilage",
 );
-const HARD_TURNING_EDGE = deduced(
-  'sandvik-turning-materials',
-  section(
-    'Tournage des aciers trempés',
-    'CBN, profondeur de coupe aussi petite que possible et arête wiper, classe G sans brise-copeaux A',
-  ),
+const HEAT_RESISTANT_EDGE = fromSubgroup(
+  HEAT_RESISTANT_SECTION,
+  'arêtes vives : plaquette positive, dépouille C et classe G',
+);
+const HARD_TURNING_EDGE = fromSubgroup(
+  HARDENED_SECTION,
+  'CBN, profondeurs de coupe aussi petites que possible et arêtes wiper : classe G, sans brise-copeaux A',
 );
 
 const stated = (source: SourceId, locator: string, value: string): Sourced<string> => ({
@@ -256,47 +286,47 @@ const STAGE_GEOMETRY = {
   roughing: stated(
     'sandvik-choose-insert',
     `${section('Ebauche')} et ${section(RADIUS)}`,
-    "Géométrie d'ébauche, pour les fortes profondeurs de passe et avances et une arête très sûre\u202f; grand rayon de bec, égal à la profondeur de passe ou un peu moins.",
+    "Géométrie d'ébauche, pour les fortes profondeurs de passe et avances et une arête très sûre ; un grand rayon de bec va avec les grandes profondeurs de coupe et une grande sécurité d'arête, égal à la profondeur de passe ou un peu plus petit.",
   ),
   semiFinishing: stated(
     'sandvik-choose-insert',
     `${section('Semi-finition')} et ${section(RADIUS)}`,
-    "Géométrie de semi-finition, pour une ébauche moyenne à légère sur une large plage de profondeurs de passe et d'avances\u202f; rayon de bec égal à la profondeur de passe ou un peu moins.",
+    "Géométrie de semi-finition, pour une ébauche moyenne à légère sur une large plage de profondeurs de passe et d'avances ; rayon de bec égal à la profondeur de passe ou un peu plus petit.",
   ),
   finishing: stated(
     'sandvik-choose-insert',
     `${section('Finition')} et ${section(RADIUS)}`,
-    'Géométrie de finition, pour les faibles profondeurs de passe et avances et des efforts de coupe faibles\u202f; petit rayon de bec, égal à la profondeur de passe ou un peu moins.',
+    'Géométrie de finition, pour les faibles profondeurs de passe et avances et des efforts de coupe faibles ; un petit rayon de bec est idéal pour les petites profondeurs de coupe, égal à la profondeur de passe ou un peu plus petit.',
   ),
 };
 
 const INTERNAL_GEOMETRY = stated(
   'sandvik-internal-turning',
   `${section('Chariotage')}, type de plaquette et porte-outil`,
-  "À l'intérieur, un petit angle de pointe et un petit rayon de bec réduisent les efforts de coupe\u202f; garde le porte-à-faux le plus court possible.",
+  "À l'intérieur, un angle de pointe faible et un petit rayon de bec réduisent aussi les efforts de coupe ; garde le porte-à-faux le plus petit possible.",
 );
 
 const INTERNAL_PITFALL = stated(
   'sandvik-internal-turning',
-  'évacuation des copeaux',
+  `introduction, avant la ${section('Chariotage')}`,
   "Un copeau mal évacué peut casser la plaquette ou abîmer l'état de surface.",
 );
 
-const groupAdvice = (name: string, value: string): Sourced<string> => ({
+const subgroupAdvice = (name: string, value: string): Sourced<string> => ({
   value,
   cite: {
     source: 'sandvik-turning-materials',
     locator: section(name),
     basis: 'stated',
-    scope: 'group',
+    scope: 'subgroup',
   },
 });
 
-type GroupAdvice = Pick<RecommendationEntry, 'materials' | 'grade' | 'pitfalls'> & {
+type SubgroupAdvice = Pick<RecommendationEntry, 'materials' | 'grade' | 'pitfalls'> & {
   readonly geometry: Sourced<string>;
 };
 
-const STEEL: GroupAdvice = {
+const STEEL: SubgroupAdvice = {
   materials: [
     '11smn30',
     '11smnpb30',
@@ -308,92 +338,112 @@ const STEEL: GroupAdvice = {
     '20nicrmo2-2',
     '100cr6',
   ],
-  geometry: groupAdvice(
-    'Tournage des aciers non alliés',
-    "Sur l'acier non allié, arêtes vives et géométrie légère limitent le collage, et une plaquette wiper est conseillée.",
+  geometry: subgroupAdvice(
+    STEEL_SECTIONS.nonAlloyed,
+    "Sur l'acier non allié, arêtes vives et géométries légères limitent l'adhérence de la matière, et une plaquette wiper est conseillée.",
   ),
-  grade: groupAdvice(
-    'Tournage des aciers faiblement alliés',
-    'Nuances et géométries pour aciers en premier choix\u202f; sur acier trempé, une nuance plus dure (céramique, CBN ou nuance pour fonte).',
+  grade: subgroupAdvice(
+    STEEL_SECTIONS.lowAlloyed,
+    'Nuances et géométries pour aciers en premier choix ; sur acier trempé, une nuance plus dure (céramique, CBN ou nuance pour fonte).',
   ),
   pitfalls: [
-    groupAdvice(
-      'Tournage des aciers non alliés',
-      "Sous 0,25\u00a0% de carbone, le copeau se fragmente mal et l'arête rapportée guette\u00a0: vise une avance et une vitesse élevées.",
+    subgroupAdvice(
+      STEEL_SECTIONS.nonAlloyed,
+      "Sous 0,25 % de carbone, le copeau se fragmente mal et l'arête rapportée guette : vise une avance et une vitesse élevées.",
     ),
-    groupAdvice(
-      'Tournage des aciers faiblement alliés',
-      "Sur l'acier allié, l'usure en cratère et en dépouille domine\u202f; sur l'acier trempé, la chaleur déforme l'arête.",
+    subgroupAdvice(
+      STEEL_SECTIONS.lowAlloyed,
+      "Sur l'acier allié, l'usure en cratère et en dépouille domine ; sur l'acier trempé, la chaleur déforme l'arête.",
     ),
   ],
 };
 
-const STAINLESS: GroupAdvice = {
-  materials: [
-    'x8crnis18-9',
-    'x5crni18-10',
-    'x2crni18-9',
-    'x2crnimo17-12-2',
-    'x20cr13-x30cr13',
-    'x5crnicunb16-4',
-    'x2crnimon22-5-3',
-  ],
-  geometry: groupAdvice(
-    'Tournage des aciers inoxydables austénitiques',
-    "Arêtes vives ou géométrie à dépouille positive contre le collage et l'arête rapportée\u202f; rayon de bec aussi grand que possible.",
-  ),
-  grade: groupAdvice(
-    'Tournage des aciers inoxydables austénitiques',
-    'Nuances CVD ou PVD pour inox\u202f; PVD en coupe interrompue, ou quand le copeau martèle ou bourre.',
+const FERRITIC_MARTENSITIC: SubgroupAdvice = {
+  materials: ['x20cr13-x30cr13'],
+  geometry: subgroupAdvice(FERRITIC_MARTENSITIC_SECTION, 'Géométries pour aciers inoxydables.'),
+  grade: subgroupAdvice(
+    FERRITIC_MARTENSITIC_SECTION,
+    'Nuances pour aciers inoxydables ; à 55 HRC ou plus, nuances CBN.',
   ),
   pitfalls: [
-    groupAdvice(
-      'Tournage des aciers inoxydables austénitiques',
+    subgroupAdvice(
+      FERRITIC_MARTENSITIC_SECTION,
+      "Usiné à l'état trempé, le martensitique demande une plaquette très résistante à la déformation plastique.",
+    ),
+  ],
+};
+
+const AUSTENITIC: SubgroupAdvice = {
+  materials: ['x8crnis18-9', 'x5crni18-10', 'x2crni18-9', 'x2crnimo17-12-2'],
+  geometry: subgroupAdvice(
+    AUSTENITIC_SECTION,
+    'Arêtes vives ou géométries avec une face de dépouille positive ; rayon de bec aussi grand que possible.',
+  ),
+  grade: subgroupAdvice(
+    AUSTENITIC_SECTION,
+    'Nuances CVD ou PVD pour inox ; PVD en coupe interrompue, ou quand le copeau martèle ou bourre.',
+  ),
+  pitfalls: [
+    subgroupAdvice(
+      AUSTENITIC_SECTION,
       "Contre l'usure en entaille, prends une plaquette ronde ou un faible angle d'attaque.",
     ),
-    groupAdvice(
-      'Tournage des aciers inoxydables austénitiques',
+    subgroupAdvice(
+      AUSTENITIC_SECTION,
       "Arrose toujours, contre l'usure en cratère et la déformation plastique.",
     ),
   ],
 };
 
-const CAST_IRON: GroupAdvice = {
-  materials: ['en-gjl-250', 'en-gjs-400-15', 'en-gjs-500-7'],
-  geometry: groupAdvice(
-    'Tournage des fontes',
-    'Prends les géométries prévues pour la fonte\u00a0: le copeau est court et se contrôle bien.',
+const DUPLEX: SubgroupAdvice = {
+  materials: ['x2crnimon22-5-3'],
+  geometry: subgroupAdvice(
+    DUPLEX_SECTION,
+    "Petits angles d'attaque, contre l'usure en entaille et les bavures.",
   ),
-  grade: groupAdvice(
-    'Tournage des fontes',
-    'Nuances pour fontes\u202f; céramique ou CBN sur fonte grise à grande vitesse de coupe.',
-  ),
-  pitfalls: [],
-};
-
-const ALUMINIUM: GroupAdvice = {
-  materials: ['en-aw-2017a', 'en-aw-2024', 'en-aw-2011-2030'],
-  geometry: groupAdvice(
-    "Tournage des alliages d'aluminium",
-    'Toujours une plaquette à forme de base positive et à arêtes vives.',
-  ),
-  grade: groupAdvice(
-    "Tournage des alliages d'aluminium",
-    'Carbure non revêtu ou PCD en premier choix.',
-  ),
+  grade: subgroupAdvice(DUPLEX_SECTION, 'Nuances CVD et PVD pour inox.'),
   pitfalls: [
-    groupAdvice(
-      "Tournage des alliages d'aluminium",
-      'Au-delà de 13\u00a0% de silicium, le carbure dure très peu\u00a0: passe au PCD.',
+    subgroupAdvice(
+      DUPLEX_SECTION,
+      'Les super duplex et hyper duplex, plus alliés, sont plus difficiles à usiner : chaleur, efforts de coupe et contrôle des copeaux.',
     ),
-    groupAdvice(
-      "Tournage des alliages d'aluminium",
-      "L'arrosage sert surtout à évacuer les copeaux.",
+    subgroupAdvice(
+      DUPLEX_SECTION,
+      "Arrose pour évacuer les copeaux et éviter la déformation plastique, de préférence par l'intérieur de l'outil, en arrosage de précision.",
     ),
   ],
 };
 
-const SUPERALLOY: GroupAdvice = {
+const CAST_IRON: SubgroupAdvice = {
+  materials: ['en-gjl-250', 'en-gjs-400-15', 'en-gjs-500-7'],
+  geometry: subgroupAdvice(
+    CAST_IRON_SECTION,
+    'Prends les géométries prévues pour la fonte : le copeau est court et se contrôle bien.',
+  ),
+  grade: subgroupAdvice(
+    CAST_IRON_SECTION,
+    'Nuances pour fontes ; céramique ou CBN sur fonte grise à grande vitesse de coupe.',
+  ),
+  pitfalls: [],
+};
+
+const ALUMINIUM: SubgroupAdvice = {
+  materials: ['en-aw-2017a', 'en-aw-2024', 'en-aw-2011-2030'],
+  geometry: subgroupAdvice(
+    ALUMINIUM_SECTION,
+    'Toujours une plaquette à forme de base positive et à arêtes vives.',
+  ),
+  grade: subgroupAdvice(ALUMINIUM_SECTION, 'Carbure non revêtu ou PCD en premier choix.'),
+  pitfalls: [
+    subgroupAdvice(
+      ALUMINIUM_SECTION,
+      'Au-delà de 13 % de silicium, le carbure dure très peu : passe au PCD.',
+    ),
+    subgroupAdvice(ALUMINIUM_SECTION, "L'arrosage sert surtout à évacuer les copeaux."),
+  ],
+};
+
+const HEAT_RESISTANT: SubgroupAdvice = {
   materials: [
     'titane-grade-2',
     'ta6v',
@@ -402,45 +452,42 @@ const SUPERALLOY: GroupAdvice = {
     'hastelloy-c276',
     'haynes-25',
   ],
-  geometry: groupAdvice(
-    'Tournage des superalliages réfractaires',
-    'Arêtes vives indispensables, contre les couches blanches\u202f; diamètre de plaquette ou rayon de bec adapté à la profondeur de passe.',
+  geometry: subgroupAdvice(
+    HEAT_RESISTANT_SECTION,
+    'Des arêtes vives, contre les couches blanches ; diamètre de plaquette ou rayon de bec choisi selon la profondeur de passe.',
   ),
-  grade: groupAdvice(
-    'Tournage des superalliages réfractaires',
-    'Superalliages\u00a0: nuances PVD ou céramique. Titane\u00a0: surtout non revêtu ou PVD.',
+  grade: subgroupAdvice(
+    HEAT_RESISTANT_SECTION,
+    'Superalliages : nuances PVD ou céramique. Titane : surtout non revêtu ou PVD.',
   ),
   pitfalls: [
-    groupAdvice(
-      'Tournage des superalliages réfractaires',
-      "L'usure en entaille est fréquente\u00a0: garde un angle d'attaque sous 45°.",
+    subgroupAdvice(
+      HEAT_RESISTANT_SECTION,
+      "L'usure en entaille est fréquente : garde un angle d'attaque de moins de 45°.",
     ),
-    groupAdvice(
-      'Tournage des superalliages réfractaires',
-      'En rampe ou en passes multiples, prends au moins 0,25\u00a0mm de profondeur de passe.',
+    subgroupAdvice(
+      HEAT_RESISTANT_SECTION,
+      'En ramping ou en passes multiples, prends au moins 0,25 mm de profondeur de passe.',
     ),
-    groupAdvice(
-      'Tournage des superalliages réfractaires',
-      'Arrosage obligatoire, abondant et bien dirigé.',
-    ),
+    subgroupAdvice(HEAT_RESISTANT_SECTION, 'Arrosage obligatoire, à fort débit et bien dirigé.'),
   ],
 };
 
-const HARD: GroupAdvice = {
-  materials: ['stellite-6', '100cr6-trempe', '16mncr5-trempe', 'x153crmov12'],
-  geometry: groupAdvice(
-    'Tournage des aciers trempés',
-    "Une préparation d'arête adaptée allonge la durée de vie, et une arête wiper améliore l'état de surface.",
+const HARDENED: SubgroupAdvice = {
+  materials: ['100cr6-trempe', '16mncr5-trempe', 'x153crmov12'],
+  geometry: subgroupAdvice(
+    HARDENED_SECTION,
+    "Une préparation d'arête correcte allonge la durée de vie, et des arêtes wiper améliorent l'état de surface.",
   ),
-  grade: groupAdvice(
-    'Tournage des aciers trempés',
-    'CBN, le meilleur matériau pour le tournage dur\u202f; sous 55\u00a0HRC environ, céramique ou carbure.',
+  grade: subgroupAdvice(
+    HARDENED_SECTION,
+    'CBN, le meilleur matériau pour le tournage dur ; sous 55 HRC environ, céramique ou carbure.',
   ),
   pitfalls: [
-    groupAdvice('Tournage des aciers trempés', 'Il faut une machine stable et un bridage solide.'),
-    groupAdvice(
-      'Tournage des aciers trempés',
-      'Garde des profondeurs de passe aussi faibles que possible.',
+    subgroupAdvice(HARDENED_SECTION, 'Il faut une machine stable et un bridage solide.'),
+    subgroupAdvice(
+      HARDENED_SECTION,
+      "Garde des profondeurs de coupe aussi petites que possible, pour un faible angle d'attaque.",
     ),
   ],
 };
@@ -454,29 +501,29 @@ const STAGE_OF: Readonly<Record<TurningOperation, Sourced<string>>> = {
 };
 
 const external = (
-  group: GroupAdvice,
+  advice: SubgroupAdvice,
   operation: ExternalOperation,
   insert: IsoInsertDesignation<ExternalSituation>,
 ): RecommendationEntry => ({
   operation,
-  materials: group.materials,
+  materials: advice.materials,
   insert,
-  geometry: [STAGE_OF[operation], group.geometry],
-  grade: group.grade,
-  pitfalls: group.pitfalls,
+  geometry: [STAGE_OF[operation], advice.geometry],
+  grade: advice.grade,
+  pitfalls: advice.pitfalls,
 });
 
 const internal = (
-  group: GroupAdvice,
+  advice: SubgroupAdvice,
   operation: InternalOperation,
   insert: IsoInsertDesignation<InternalSituation>,
 ): RecommendationEntry => ({
   operation,
-  materials: group.materials,
+  materials: advice.materials,
   insert,
-  geometry: [STAGE_OF[operation], INTERNAL_GEOMETRY, group.geometry],
-  grade: group.grade,
-  pitfalls: [...group.pitfalls, INTERNAL_PITFALL],
+  geometry: [STAGE_OF[operation], INTERNAL_GEOMETRY, advice.geometry],
+  grade: advice.grade,
+  pitfalls: [...advice.pitfalls, INTERNAL_PITFALL],
 });
 
 const propose = <S extends InsertSituation>(
@@ -487,6 +534,18 @@ const propose = <S extends InsertSituation>(
 ): IsoInsertProposal<S> => ({
   situation,
   choice: [shape, ...principles],
+  fields: [SHAPE[letter], ...rest],
+});
+
+const imposed = <S extends InsertSituation>(
+  situation: S,
+  letter: ShapeLetter,
+  rest: readonly [Field, Field, Field],
+  rule: SourceCitation,
+  ...principles: readonly SourceCitation[]
+): IsoInsertProposal<S> => ({
+  situation,
+  choice: [rule, ...principles],
   fields: [SHAPE[letter], ...rest],
 });
 
@@ -523,31 +582,43 @@ const positiveInside = (stage: SourceCitation) =>
     profiling: propose(INTERNAL.profiling, 'D', CMT, POSITIVE, stage),
   }) as const;
 
-const stainlessOutside = (stage: SourceCitation): IsoInsertDesignation<ExternalSituation> =>
+const austeniticOutside = (stage: SourceCitation): IsoInsertDesignation<ExternalSituation> =>
   iso<ExternalSituation>(
     propose(
       EXTERNAL.noShoulder,
       'S',
       CMT,
-      STAINLESS_LOW_ANGLE,
-      STAINLESS_CLEARANCE,
+      AUSTENITIC_ANGLE,
+      AUSTENITIC_SQUARE,
+      AUSTENITIC_POSITIVE,
+      POSITIVE,
       stage,
-      ONE_SIDED,
     ),
-    propose(EXTERNAL.profiling, 'R', CMT, STAINLESS_ROUND, STAINLESS_CLEARANCE, stage, ONE_SIDED),
+    imposed(
+      'external-profiling',
+      'R',
+      CMT,
+      AUSTENITIC_ANGLE,
+      AUSTENITIC_ROUND,
+      AUSTENITIC_POSITIVE,
+      POSITIVE,
+      stage,
+    ),
   );
 
-const stainlessInside = (stage: SourceCitation): IsoInsertDesignation<InternalSituation> =>
+const austeniticInside = (stage: SourceCitation): IsoInsertDesignation<InternalSituation> =>
   iso<InternalSituation>(
-    propose(
-      INTERNAL.noShoulder,
-      'S',
-      CMT,
-      STAINLESS_LOW_ANGLE,
-      STAINLESS_CLEARANCE,
-      stage,
-      ONE_SIDED,
-    ),
+    propose(INTERNAL.noShoulder, 'S', CMT, AUSTENITIC_ANGLE, AUSTENITIC_SQUARE, POSITIVE, stage),
+  );
+
+const duplexOutside = (stage: SourceCitation): IsoInsertDesignation<ExternalSituation> =>
+  iso<ExternalSituation>(
+    propose(EXTERNAL.noShoulder, 'S', NMG, DUPLEX_ANGLE, DUPLEX_SQUARE, NEGATIVE, stage),
+  );
+
+const duplexInside = (stage: SourceCitation): IsoInsertDesignation<InternalSituation> =>
+  iso<InternalSituation>(
+    propose(INTERNAL.noShoulder, 'S', CMT, DUPLEX_ANGLE, DUPLEX_SQUARE, POSITIVE, stage),
   );
 
 const aluminiumOutside = {
@@ -562,9 +633,16 @@ const aluminiumFinishingOutside = iso<ExternalSituation>(
   propose(EXTERNAL.steepProfiling, 'V', CGT, ALUMINIUM_FINISHING),
 );
 
-const superalloyOutside = iso<ExternalSituation>(
-  propose(EXTERNAL.noShoulder, 'R', CGT, SUPERALLOY_ROUND, SUPERALLOY_EDGE, ONE_SIDED),
-  propose(EXTERNAL.profiling, 'R', CGT, SUPERALLOY_ROUND, SUPERALLOY_EDGE, ONE_SIDED),
+const heatResistantOutside = iso<ExternalSituation>(
+  imposed(
+    'external-profiling',
+    'R',
+    CGT,
+    HEAT_RESISTANT_ANGLE,
+    HEAT_RESISTANT_ROUND,
+    HEAT_RESISTANT_EDGE,
+    ONE_SIDED,
+  ),
 );
 
 const hardFinishing = iso<ExternalSituation>(
@@ -581,6 +659,21 @@ const castIronFinishing = castIron(FINISHING_TOLERANCE);
 const insideRoughing = positiveInside(ROUGHING_TOLERANCE);
 const insideFinishing = positiveInside(FINISHING_TOLERANCE);
 
+const STEEL_ROUGHING = iso<ExternalSituation>(
+  steelRoughing.shoulder,
+  steelRoughing.noShoulder,
+  steelRoughing.facing,
+);
+const STEEL_SEMI_FINISHING = iso<ExternalSituation>(
+  steelSemiFinishing.shoulder,
+  steelSemiFinishing.profiling,
+  steelSemiFinishing.facing,
+);
+const STEEL_FINISHING = iso<ExternalSituation>(
+  steelFinishing.shoulder,
+  steelFinishing.profiling,
+  steelFinishing.steepProfiling,
+);
 const STEEL_INSIDE_ROUGHING = iso<InternalSituation>(
   insideRoughing.strongerEdge,
   insideRoughing.shoulder,
@@ -591,36 +684,23 @@ const STEEL_INSIDE_FINISHING = iso<InternalSituation>(
 );
 
 export const RECOMMENDATIONS: readonly RecommendationEntry[] = [
-  external(
-    STEEL,
-    'external-roughing',
-    iso<ExternalSituation>(steelRoughing.shoulder, steelRoughing.noShoulder, steelRoughing.facing),
-  ),
-  external(
-    STEEL,
-    'external-semi-finishing',
-    iso<ExternalSituation>(
-      steelSemiFinishing.shoulder,
-      steelSemiFinishing.profiling,
-      steelSemiFinishing.facing,
-    ),
-  ),
-  external(
-    STEEL,
-    'external-finishing',
-    iso<ExternalSituation>(
-      steelFinishing.shoulder,
-      steelFinishing.profiling,
-      steelFinishing.steepProfiling,
-    ),
-  ),
-  internal(STEEL, 'internal-roughing', STEEL_INSIDE_ROUGHING),
-  internal(STEEL, 'internal-finishing', STEEL_INSIDE_FINISHING),
-  external(STAINLESS, 'external-roughing', stainlessOutside(ROUGHING_TOLERANCE)),
-  external(STAINLESS, 'external-semi-finishing', stainlessOutside(SEMI_FINISHING_TOLERANCE)),
-  external(STAINLESS, 'external-finishing', stainlessOutside(FINISHING_TOLERANCE)),
-  internal(STAINLESS, 'internal-roughing', stainlessInside(ROUGHING_TOLERANCE)),
-  internal(STAINLESS, 'internal-finishing', stainlessInside(FINISHING_TOLERANCE)),
+  ...[STEEL, FERRITIC_MARTENSITIC].flatMap((advice) => [
+    external(advice, 'external-roughing', STEEL_ROUGHING),
+    external(advice, 'external-semi-finishing', STEEL_SEMI_FINISHING),
+    external(advice, 'external-finishing', STEEL_FINISHING),
+    internal(advice, 'internal-roughing', STEEL_INSIDE_ROUGHING),
+    internal(advice, 'internal-finishing', STEEL_INSIDE_FINISHING),
+  ]),
+  external(AUSTENITIC, 'external-roughing', austeniticOutside(ROUGHING_TOLERANCE)),
+  external(AUSTENITIC, 'external-semi-finishing', austeniticOutside(SEMI_FINISHING_TOLERANCE)),
+  external(AUSTENITIC, 'external-finishing', austeniticOutside(FINISHING_TOLERANCE)),
+  internal(AUSTENITIC, 'internal-roughing', austeniticInside(ROUGHING_TOLERANCE)),
+  internal(AUSTENITIC, 'internal-finishing', austeniticInside(FINISHING_TOLERANCE)),
+  external(DUPLEX, 'external-roughing', duplexOutside(ROUGHING_TOLERANCE)),
+  external(DUPLEX, 'external-semi-finishing', duplexOutside(SEMI_FINISHING_TOLERANCE)),
+  external(DUPLEX, 'external-finishing', duplexOutside(FINISHING_TOLERANCE)),
+  internal(DUPLEX, 'internal-roughing', duplexInside(ROUGHING_TOLERANCE)),
+  internal(DUPLEX, 'internal-finishing', duplexInside(FINISHING_TOLERANCE)),
   external(
     CAST_IRON,
     'external-roughing',
@@ -670,8 +750,8 @@ export const RECOMMENDATIONS: readonly RecommendationEntry[] = [
       propose(INTERNAL.strongerEdge, 'C', CGT, ALUMINIUM_FINISHING),
     ),
   ),
-  external(SUPERALLOY, 'external-roughing', superalloyOutside),
-  external(SUPERALLOY, 'external-semi-finishing', superalloyOutside),
-  external(SUPERALLOY, 'external-finishing', superalloyOutside),
-  external(HARD, 'external-finishing', hardFinishing),
+  external(HEAT_RESISTANT, 'external-roughing', heatResistantOutside),
+  external(HEAT_RESISTANT, 'external-semi-finishing', heatResistantOutside),
+  external(HEAT_RESISTANT, 'external-finishing', heatResistantOutside),
+  external(HARDENED, 'external-finishing', hardFinishing),
 ];
