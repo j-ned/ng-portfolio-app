@@ -825,7 +825,13 @@ Après lecture du site Sandvik Coromant et d'une recherche sourcée sur les fabr
 15. **Liste de travail de Julien** : source **sans lien** (pas d'URL publique) ; jamais pointée sur le
     site lui-même.
 16. **Classement des matières** : quand la liste de Julien et Sandvik divergent, le classement de Sandvik
-    (« Matériaux de pièce ») l'emporte, par exemple Stellite 6 en H et X20Cr13 en M.
+    (« Matériaux de pièce ») l'emporte, par exemple Stellite 6 en H et X20Cr13 en P (inox ferritiques et
+    martensitiques, sous-groupe P5 : l'exemple « X20Cr13 en M » donné le 2026-10-26 lisait mal la
+    page, corrigé après la revue).
+17. **Conseils par sous-groupe** (2026-10-26, après la revue) : une recommandation couvre le
+    sous-groupe que la page du fabricant traite (inox austénitiques, duplex, ferritiques et
+    martensitiques, aciers trempés…), jamais le groupe entier par extension. Une matière dont le
+    sous-groupe n'a pas de section (17-4 PH, Stellite 6…) affiche « pas encore de recommandation ».
 
 ## Plan de test
 
@@ -1896,6 +1902,58 @@ Codes par situation, 2026-10-26, worktree `034-pr5`.
 - Verdict : **PASS**.
 
 ## Review code
+
+PR 5, état complet (tranche 10, données du tournage, codes par situation), `git diff f7813c3...HEAD` (`847b90d` à `067cda3`), lu avec `git diff feat/034-accueil...HEAD` ; revue du 2026-10-26.
+
+**Verdict** : REJECTED
+**Gates CI locaux** : `pnpm install --frozen-lockfile` 0 / `pnpm run build --configuration production` 0 (« Prerendered 3 static routes ») / `pnpm test` 0 (252 fichiers, 4981 passed / 4981) / `pnpm lint` 0 / `pnpm run format:check` 0 / `docker build -t ng-portfolio-app:a11y .` 0, `ci/a11y-stack.sh up` 0, `pnpm a11y -g atelier` 0 (6 passed, dont `?matiere=42crmo4&operation=ebauche-exterieure` clair et sombre)
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main. Archéologie (motif du profil) 0 hit sur les lignes ajoutées (les `@ts-expect-error:` disent la garantie, sans référence) ; `fakeAsync`/`waitForAsync`/`.only`/`.skip`/snapshot/`fireEvent`/`export default`/`ngModel`/`styles:`/`changeDetection` 0 ; `innerHTML` une fois, en lecture dans un test ; IA citée dans les données 0 ; `nedellec-julien.fr` 0 hors de la garde qui l'interdit.
+**Warnings de gate** : (b) pré-existant hors diff : `pnpm install`, « Ignored build scripts » (lockfile non touché). Build, test, lint, format, axe : aucun.
+**Rendu compilé** : N/A (aucun composant à sélecteur attribut ni `shared/ui` touché)
+**Preuve de verify runtime** : ✅ (preuves « Tranche 10 », « Tranches 10 et 11, données » et « Codes par situation » complètes et cohérentes avec le diff ; axe rejoué sur l'image de cette revue, 6 passed)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌
+
+Vérité des données, pages Sandvik `fr-fr` relues le 2026-10-26 :
+
+- **Exactes** : noms des six groupes (S5, « Groupes de matières usinées ») ; Stellite en H (S5) ; S2 « Chariotage » (« type C (80°) en priorité », carrée à 75°, 91–95°), « Profilage » (« type D (55°) » à 93°, « type V (35°) » pour un angle de ramping plus grand), « Dressage » (carrée à 75°, rhombique 80° ou trigone à 95°) ; S3 « Chariotage » (positive, triangulaire ou type D, type C pour une arête plus résistante, carrée à 75°, petit angle de pointe et petit rayon, porte-à-faux le plus petit possible) ; rupture de plaquette sur copeau mal évacué (introduction de S3) ; S1 (négative premier choix en extérieur, positive en intérieur, sections Ebauche, Semi-finition, Finition, rayon de bec) ; S4 alu (positive à arêtes vives, toujours ; PCD au-delà de 13 % de Si ; arrosage pour les copeaux), superalliages (angle d'attaque inférieur à 45°, valable aussi pour le titane ; arêtes vives ; 0,25 mm ; arrosage), aciers trempés (CBN ; céramique ou carbure sous 55 HRC ; wiper ; profondeur faible ; stabilité), fontes (copeau court, déduction du A correctement marquée). Toutes les bases `deduced` contrôlées découlent du principe cité. La forme R du groupe S est bien marquée déduite.
+- **Fausses ou étendues** : points 1 à 4.
+
+Contrôles demandés : (2) aucune vitesse (garde + modèle), aucune IA ; noms d'outils et de nuances absents des recommandations, garde intacte ; exemption limitée aux chemins `.cite.source` et `.choice[n].source` (identifiants, jamais affichés). La liste de Julien est sans lien, la garde interdit toute URL vers le site. Correspondances sous « Correspondances indicatives ». (5) `InsertFor<O>` borne les situations par famille, `choice` et `proposals` non vides au type ; `url?` tenu par deux gardes (seule la liste sans URL, `https` vérifié sinon) ; panneau `h3` puis `h4` par situation, listes, citations après chaque valeur, mention sur sa propre ligne, statut `role="status"` mis à jour (singulier, pluriel) ; aucune API navigateur, rendu serveur vérifié par `curl` dans la preuve. (6) Locators paraphrasés, pas de longue citation.
+
+**Tests notables** :
+- ✨ `reference-integrity.spec.ts:591-605` et voisins : chaque invariant de contenu est doublé de fixtures qui prouvent qu'il mord.
+- ⚠️ `reference-integrity.spec.ts:567-572` : `shapeCitation` et `NAMES_A_SHAPE` jugent sur la chaîne « forme <lettre> » du locator, pas sur ce que la page écrit. La garde passe dès que le locator contient la lettre, et pousse à l'écrire dans une citation `stated` même quand la page ne l'écrit pas (point 3). Fragilité de l'écart 6 confirmée.
+- ⚠️ `reference-integrity.spec.ts:496` : épingle X20Cr13 en M, contraire à S5 (point 1).
+
+**Duplication / dérivation** (advisory) :
+- ⚠️ `recommendations.static-data.ts:565-568` : RCGT deux fois en S. Les deux éléments ne diffèrent que par la citation de situation ; celle du chariotage sans épaulement dit « carrée à 75° » au-dessus d'une plaquette ronde. Une seule proposition (profilage, ou situation commune) dirait la même chose sans doublon. À trancher par Julien ; non bloquant.
+
+**Observations non bloquantes** :
+- `sources.static-data.ts:52` : le titre « AP Breaker » est affiché dans chaque citation Kyocera, et « AP » figure parmi les brise-copeaux du référentiel (« à ne jamais afficher comme recommandation »). C'est un titre de source, pas une recommandation, mais un titre descriptif (« Plaquettes positives pour la finition de l'aluminium ») éviterait la question. Les noms de matières de la liste (Inconel, Hastelloy, Haynes, Stellite) sont des marques d'alliage, hors de la règle des noms d'outils.
+- `recommendations.static-data.ts:255-270` : « grand rayon » en ébauche, « petit rayon » en finition, sous base `stated` : S1 associe le grand rayon aux grandes profondeurs et le petit aux petites, sans le rattacher aux étapes. Le pas est court, mais il est déduit.
+- `recommendations.static-data.ts:217-220` : en français, S4 écrit « face de dépouille positive », traduction de *positive rake* (face de coupe) ; la déduction « dépouille C, 7° » porte sur l'angle de dépouille. Elle est marquée déduite, mais elle repose sur une traduction ambiguë.
+- `specs/assets/034/donnees-tournage.md` et le journal citent S3 « jamais moins de 75° » ; la page écrit « toujours supérieur à 75° ». Le sens est le même, à reprendre si le texte est cité.
+
+**Risque résiduel** :
+- réversibilité : profil muet · monitoring : Sentry (profil)
+- non couvert par les gates : la vérité des données n'est prouvée que par la lecture humaine des pages (cette revue en a lu cinq) ; aucun test ne compare un locator au contenu de la page. Publication sans relecture (décision 9) : les points 1 à 3 partiraient en ligne tels quels.
+
+**Points à corriger** :
+1. `src/app/features/workshop/domain/materials.static-data.ts:267` : X20Cr13 / X30Cr13 cités en ISO M par S5 en base `stated`. S5 écrit le contraire, sous « Aciers inoxydables ferritiques et martensitiques – P5.0-5.1 » : du point de vue de l'usinabilité, ces aciers sont classés en ISO P, et le paragraphe ISO P les cite. La décision 16 (« le classement de Sandvik l'emporte ») place donc X20Cr13 en P ; son exemple « X20Cr13 en M » repose sur une lecture fausse de S5, reprise au journal. À remonter à Julien avant correction. Ensuite : groupe P (sous-groupe P5), test `reference-integrity.spec.ts:496` ré-ancré, entrées P qui le couvrent, `donnees-tournage.md`, décision 16 et journal corrigés.
+2. `src/app/features/workshop/domain/recommendations.static-data.ts:206-220` et `:331-359` (M), `:429-446` (H) : un conseil de **sous-groupe** est appliqué à tout le groupe. S4 a trois sous-sections inox. Les conseils cités (ronde ou faible angle d'attaque, dépouille positive, grand rayon, arrosage toujours, CVD/PVD) sont écrits pour les **austénitiques**. Ils s'affichent pour 17-4 PH, et pour X20Cr13 tant que le point 1 n'est pas corrigé, alors que S4 ne donne pour les ferritiques et martensitiques qu'un conseil de nuance. Pour le duplex, S4 a sa propre sous-section, qui n'est pas citée. Même chose pour Stellite 6, qui reçoit le CBN et le CNGA/WNGA de « Tournage des aciers trempés » (S4 : aciers de 55 à 65 HRC). La décision 11 rattache un conseil « à chaque matière de ce groupe » ; l'étendre d'un sous-groupe aux autres est l'extrapolation qu'ADR-0033 rejette. Le test `reference-integrity.spec.ts:591` (« chaque entrée couvre exactement toutes les matières d'un groupe ») impose aujourd'hui cette extension. Décision de Julien attendue : entrées par sous-groupe (test à revoir), ou matières sans conseil propre laissées en `unavailable`.
+3. Citations `stated` qui portent une déduction ou une lettre que la page n'écrit pas :
+   - `recommendations.static-data.ts:212-216` : « d'où 75° sans épaulement plutôt que 91–95° » ;
+   - `:207-211` : « à la place de la forme D du profilage » (S4 écrit seulement « plaquettes rondes ou angles d'attaque faibles ») ;
+   - `:104`, `:128`, `:139` et `:155` : « forme S », « forme W », « forme T » attribuées à S2 ou S3, qui écrivent « carrée », « trigone » et « triangulaire » sans lettre. Seules C, D et V y sont écrites.
+
+   Les locators doivent dire ce que la page écrit (le mot de la page). La correspondance mot ↔ lettre reste portée par la table de lecture (MMC), déjà citée sur le champ, et la sélection de forme imposée par la matière passe en `deduced` (ou en deux citations : le conseil écrit, puis le choix déduit). La garde `shapeCitation` / `NAMES_A_SHAPE` (`reference-integrity.spec.ts:567-572`) est à réécrire en conséquence, par une table mot de la page → lettre, en RED d'abord.
+4. Locators inexacts : `materials.static-data.ts:52-57` cite « Groupes de matières usinées » pour une phrase de « ISO M aciers inoxydables > Usinabilité en général ». Elle en élargit aussi le sens : S5 dit que le contrôle des copeaux est correct en ferritique et martensitique, pas que ces aciers « se coupent plus facilement ». `recommendations.static-data.ts:281` : « évacuation des copeaux » n'est pas une section ; c'est l'introduction de S3.
+5. `docs/adr/0033-referentiel-d-usinage-source-par-le-type.md:35-37` et `:90-103` : la décision 1 exige une « URL `https` » dans le catalogue, et l'amendement ne couvre que les décisions 9 à 12. La source sans URL (décision 15, `source.model.ts:16`) contredit l'ADR sans qu'il le dise. Ajouter une ligne à l'amendement : URL facultative pour un document sans adresse publique, gardée par test.
 
 PR 5 (tranches 7 à 9 et correctif), `git diff feat/034-accueil...HEAD` (`190be60`, `033c05d`, `d335ca8`, `ecdce69`, `106804e`), revue du 2026-10-26.
 
