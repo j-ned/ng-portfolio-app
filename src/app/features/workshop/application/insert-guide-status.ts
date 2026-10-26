@@ -1,3 +1,4 @@
+import { isoInsertCode } from '../domain/iso-insert-code';
 import type { Operation, OperationFamily } from '../domain/models/operation.model';
 import type { GuideState } from '../domain/models/recommendation.model';
 import { INSERT_GUIDE_COPY } from './insert-guide-copy';
@@ -13,7 +14,11 @@ const spokenOperation = (operation: Operation, families: readonly OperationFamil
 };
 
 export function insertGuideStatus(state: GuideState, families: readonly OperationFamily[]): string {
-  if (state.status !== 'unavailable') return '';
-  const { material, operation } = state;
-  return `${material.designations[0].value}, ${spokenOperation(operation, families)}. ${INSERT_GUIDE_COPY.unavailable}`;
+  if (state.status === 'incomplete') return '';
+  const named = `${state.material.designations[0].value}, ${spokenOperation(state.operation, families)}.`;
+  if (state.status === 'unavailable') return `${named} ${INSERT_GUIDE_COPY.unavailable}`;
+  const { insert } = state.entry;
+  return insert.kind === 'iso-1832'
+    ? `${named} ${INSERT_GUIDE_COPY.proposedInsert} ${isoInsertCode(insert)}.`
+    : named;
 }

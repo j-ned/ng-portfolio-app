@@ -1433,6 +1433,66 @@ HTMLInputElement », 21 sur les valeurs attendues), aucune erreur de harnais ni 
 Retouche après le RED, signalée : `pnpm lint` a demandé le type de retour des deux fonctions du
 `it.each` de la désélection (`(page): Promise<unknown> => …`). Aucune valeur attendue n'a changé.
 
+### Tranche 10 — une recommandation s'affiche, et dit si elle est déduite
+
+Jouée dans la même session, RED puis GREEN par le même agent (exception validée le 2026-10-25).
+Révisée par les décisions de Julien du 2026-10-26 (points 7 à 13) et l'amendement d'ADR-0033.
+**Aucune donnée réelle** : les tests lisent des fixtures fictives (codes `Z`, `Q`, `X`, champs
+« Forme fictive »…, vitesse `123` à `456` pour prouver qu'elle ne s'affiche pas). Builder ajouté :
+`anIsoInsertField(field, code, meaning, cite?)`. `aCitation()` porte `basis: 'stated'` par défaut.
+
+`domain/reference-types.spec.ts` (3 tests ajoutés) : une citation sans `basis` ne compile pas ; une
+`basis` hors `stated` / `deduced` ne compile pas ; une `scope` autre que `group` ne compile pas.
+**RED** (1) : TS2578 « Unused '@ts-expect-error' directive » sur la citation sans `basis`
+(`tsc -p tsconfig.spec.json`, code 2). Les deux autres étaient satisfaits avant le modèle par
+l'erreur de propriété inconnue : ils jugent depuis l'ajout du champ.
+
+`domain/iso-insert-code.spec.ts` (3 tests, `it.each`) : un champ, quatre champs, un code sur deux
+caractères → les codes joints dans l'ordre. **RED** (3).
+
+`application/insert-guide-copy.spec.ts` (golden étendu) : « déduit des principes du fabricant »,
+« conseil du groupe », « Correspondances indicatives », « Plaquette », « Géométrie », « Nuance »,
+« Pièges », « Plaquette proposée : ». **RED**.
+
+`application/source-citation.spec.ts` (4 tests ajoutés) : `it.each` déduit / conseil du groupe / les
+deux → mention visible (pas `sr-only`), juste avant le lien, texte entier « <mention> Source : titre
+(nouvel onglet), repère ». **RED** (3). Base écrite → aucune mention : vert face au stub par
+construction (garde).
+
+`application/material-sheet.spec.ts` (1 test ajouté) : le `dl` des désignations suit un `h4`
+« Correspondances indicatives ». **RED**.
+
+`application/iso-insert-designation.spec.ts` (3 tests) : le code entier d'abord (`ZQX`) ; un `dl` lu
+champ par champ, dans l'ordre, `dt` = champ, code, sens, une citation chacun ; seul le champ déduit
+porte la mention. **RED** (3).
+
+`application/recommendation-panel.spec.ts` (4 tests ajoutés) : état `available` → quatre `h3`
+Plaquette, Géométrie, Nuance, Pièges, ni absence ni invitation ; chaque valeur suivie de sa citation,
+mention « déduit » ou « conseil du groupe » là où la base ou la portée le disent, code `ZQ` dans le
+bloc Plaquette ; vitesse donnée par la source → ni `123`, ni `456`, ni `m/min` ; aucun piège → pas de
+bloc Pièges. **RED** (4).
+
+`application/insert-guide-status.spec.ts` (2 tests ajoutés) : `available` (`it.each`, extérieur et
+intérieur) → « <matière>, <opération> (<famille> si libellé partagé). Plaquette proposée : ZQ. ».
+**RED** (2).
+
+`pages/insert-guide/insert-guide.spec.ts` (2 tests ajoutés) : URL d'un couple couvert → code `ZQ`,
+mention « déduit » dans le panneau, aucune vitesse, statut « Alliage essai Alpha, Finition (Tournage
+extérieur). Plaquette proposée : ZQ. », une seule navigation ; passage de « Gorge » à « Finition »
+extérieure → le statut passe de l'absence au code. **RED** (2).
+
+RED, `pnpm test`, cache invalidé (`.angular/cache` et `node_modules/.vite` supprimés), stubs typés
+(modèle et builders complétés, copie à chaînes vides, `isoInsertCode` rendant `''`,
+`IsoInsertDesignation` au gabarit vide, `RecommendationPanel` avec l'entrée `sources` et le gabarit de
+la tranche 9, page qui la lui passe, `insertGuideStatus` inchangé) : RED confirmé le 2026-10-26,
+19 failed / 4901 total (Test Files 8 failed | 244 passed), code de sortie 1. Les 19 échecs sont des
+`AssertionError` sur les valeurs attendues (code vide, `h3` absents, mention vide, statut vide),
+aucune erreur de harnais ni de type.
+
+Ajouté au GREEN, signalé (vert par construction) : `insertGuideStatus` sur une plaquette décrite
+(gorge) nomme le cas sans code ; la tranche 12 précisera l'annonce. Mutation à la main : rendre `''`
+dans cette branche fait tomber le test.
+
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
@@ -1445,6 +1505,7 @@ Retouche après le RED, signalée : `pnpm lint` a demandé le type de retour des
 - **Tranche 8 — je choisis ma matière au clavier, et l'URL la garde** : GREEN 4844 passed / 4844 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : la constante `FIELD_ID` à un seul site est inlinée dans le champ `fieldId` du combobox ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, gagne la section « La matière ». Décision du 2026-10-26 (session principale, option A) : `isoGroups` sort d'`InsertGuideReference` et d'`aReference` jusqu'à la première PR de données ; le type décrit ce qui existe, le champ reviendra avec `ISO_513_GROUPS` et sa source. `IsoGroup` et `anIsoGroup` restent (garanties de compilation de `reference-types.spec.ts`). `INSERT_GUIDE_REFERENCE` est créé, sa `factory` rend les quatre constantes réelles sans cast ; `aReference` porte désormais la source fictive dans `sources` (cast confiné à `testing/`). Écarts : le cycle 1 a fait tomber deux tests, la garde des rayons nommés (`rounded-lg` sur la liste, remplacé par `rounded-field`) et le retour arrière (harnais, cf. Plan de test) ; la règle `@angular-eslint/no-input-rename` est désactivée sur l'input `matiere`, avec sa raison (clé figée des URL partagées, code en anglais), plutôt qu'un input nommé en français ; la navigation garde les autres paramètres (`queryParamsHandling: 'merge'`, `matiere` retiré quand le choix est vide) au lieu d'écrire `operation`, qui arrive en tranche 9 ; le scénario axe « liste ouverte » n'est pas ajouté (référentiel vide : rien à ouvrir), il rejoint la première PR de données avec « choix fait » ; `DESIGN.md` § 5 : section « La matière », champ à suggestions, badge de groupe ISO, citation. Effacer le texte du champ ne retire pas la matière choisie (Échap la réaffiche) : comportement non spécifié, laissé tel quel.
 - **Tranche 9 — je choisis l'opération, et l'absence se dit franchement** : GREEN 4876 passed / 4876 total (au premier cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : imports de la page remis dans l'ordre, diff relu (pas de presenter : la page ne fait que câbler, la phrase d'annonce est une fonction pure) ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, gagne les sections « L'opération » et « La plaquette ». Décision du brief (signalée en tranche 8) : vider le texte du champ matière puis le quitter, ou appuyer sur Échap champ vide, désélectionne la matière ; l'URL perd `matiere`. Un texte partiel laissé en quittant le champ garde la matière choisie. Écarts : l'input d'URL s'appelle `operation`, sans alias (le nom public est déjà la clé de l'URL : aucune règle `no-input-rename` à désactiver), quand celui de la matière reste `materialParam` aliasé `matiere` ; `RecommendationPanel` ne prend que `state` (`sources` arrive avec l'état `available` en tranche 10, `isoGroups` avec `ISO_513_GROUPS`) ; la phrase annoncée est « <matière>, <opération>. Pas encore de recommandation pour ce cas. », muette tant que le couple est incomplet ; une clé d'URL inconnue est retirée à la première navigation de l'utilisateur, jamais réécrite ; l'avertissement passe dans la section « La plaquette » (colonne de droite en `lg`). `DESIGN.md` § 5 : trois sections, deux colonnes, choix de l'opération, panneau. Risque : deux opérations de même libellé dans deux familles (« Ébauche », « Finition ») donnent la même phrase d'annonce ; le radio lui-même est annoncé avec la `legend` de sa famille.
 - **Correctif après la tranche 9 (session principale)** : la phrase annoncée nomme la famille quand le libellé de l'opération est partagé (« Ébauche (Tournage extérieur) » / « Ébauche (Intérieur (alésage)) »), pour que le passage de l'une à l'autre change la phrase et soit réannoncé. `insertGuideStatus(state, families)` ; RED par signature (TS2554), puis GREEN 4877/4877, lint et format en code 0.
+- **Tranche 10 — une recommandation s'affiche, et dit si elle est déduite** : GREEN 4901 passed / 4901 total (au deuxième cycle), puis 4902 / 4902 avec le test de la plaquette décrite, code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : aucun (diff relu ; le couple « valeur puis citation » revient trois fois dans le panneau et une fois dans la fiche matière, l'extraire toucherait la fiche de la tranche 8 : à faire avec la tranche 12, qui ajoute `DescribedInsert` et un quatrième site). Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, change de fiche (intitulé « Correspondances indicatives ») et de panneau. Écarts : le cycle 1 a fait tomber la garde « aucune capitale » (`first-letter:uppercase` sur la mention) ; la mention reste en minuscules, mot pour mot de la décision 10, sur sa propre ligne (à valider en revue UI) ; `scope?: 'group'` optionnel plutôt qu'un `scope: 'material' | 'group'` obligatoire, pour ne pas imposer un champ aux citations propres à la matière, majoritaires ; `cuttingSpeed` reste dans le modèle (V3, plan) mais n'est pas affiché (décision 13) ; le code ISO est une fonction pure du domaine, `isoInsertCode`, lue par le composant et par l'annonce ; l'intitulé des correspondances est un `h4` sous le `h3` de la matière ; `insertGuideStatus` annonce « Plaquette proposée : <code>. » (copie à valider), et seulement la matière et l'opération pour une plaquette décrite ; une plaquette décrite n'a pas encore de rendu (tranche 12). Scénario axe « choix fait » non ajouté : aucun état `available` n'est atteignable sans donnée réelle ; il rejoint la tranche de données. Joué en vérification sur l'image fixture (non commité) : 6 passed.
 
 ## Verify
 
@@ -1596,6 +1657,42 @@ Tranche 9, 2026-10-26, worktree `034-pr5`.
   clair et sombre), code de sortie 0.
 - Lecteur d'écran : non joué (Orca indisponible dans la session) ; l'annonce repose sur la région
   `role="status"` présente dès le HTML serveur, dont le texte change à chaque couple.
+- Verdict : **PASS**.
+
+Tranche 10, 2026-10-26, worktree `034-pr5`.
+
+- Steps (image réelle, référentiel sans matière) : `pnpm run build --configuration production`
+  (code 0, « Prerendered 3 static routes ») ; `docker build -t ng-portfolio-app:a11y .` (code 0) puis
+  `ci/a11y-stack.sh up` ; `curl '/atelier/plaquettes?operation=finition-exterieure'` : 200,
+  `X-Cache-Status: MISS`, aucun `'unsafe-inline'`, panneau « Choisis une matière et une opération. ».
+  `pnpm a11y -g atelier` : 4 passed, code 0.
+- Image de vérification **non commitée** (`ng-portfolio-app:verify-fixture` : `factory` du token
+  remplacée le temps du `docker build` par `aReference` avec `OPERATION_FAMILIES`,
+  `aMaterialCatalogue()` et une entrée fictive « finition extérieure » pour Alpha : code `ZQX`, champ
+  `Q` déduit, géométrie déduite et de groupe, piège de groupe, vitesse `123` à `456 m/min` ; fichier
+  restauré aussitôt, `git diff --quiet HEAD` le confirme ; image supprimée ensuite) :
+  - rendu serveur (`curl`, sans JavaScript) de
+    `?matiere=alliage-essai-alpha&operation=finition-exterieure` : 200, `X-Cache-Status: MISS`,
+    aucun `'unsafe-inline'` ; panneau `h3` Plaquette, Géométrie, Nuance, Pièges ; « ZQX » puis un seul
+    `dl` de trois champs (« Forme fictive Z Losange fictif », « Dépouille fictive Q Angle fictif
+    **déduit des principes du fabricant** », « Tolérance fictive X Classe fictive »), chacun suivi de
+    « Source : Document fictif de test (nouvel onglet), fixture » ; géométrie « conseil du groupe,
+    déduit des principes du fabricant » ; piège « conseil du groupe » ; **aucune** occurrence de
+    `123`, `456`, `m/min` ni « Vitesse » ; statut « Alliage essai Alpha, Finition (Tournage
+    extérieur). Plaquette proposée : ZQX. » ; fiche : `h4` « Correspondances indicatives » ;
+  - après hydratation, navigateur, `?matiere=alliage-essai-alpha&operation=gorge` : statut « Alliage
+    essai Alpha, Gorge. Pas encore de recommandation pour ce cas. » ; clic réel sur « Finition »
+    (tournage extérieur) → URL `?matiere=alliage-essai-alpha&operation=finition-exterieure`, même
+    document (marqueur `window`), `history.length` inchangé (2), statut « … Plaquette proposée :
+    ZQX. », code `ZQX`, trois champs lus avec la mention sur le seul `Q`, mentions du panneau
+    « déduit… », « conseil du groupe, déduit… », « conseil du groupe », aucune vitesse ;
+  - axe sur cette image, scénario « choix fait » ajouté le temps du passage
+    (`e2e/a11y/scenarios.ts` restauré, `git diff --quiet HEAD`) : 6 passed (`/atelier`,
+    `/atelier/plaquettes` et le couple couvert, clair et sombre), code 0.
+- Capture : panneau « Plaquette », code `ZQX`, champs et mention « déduit des principes du fabricant »
+  sous « Angle fictif » (prise dans la session, non versionnée).
+- Console : aucune erreur de l'application ni d'hydratation ; seule erreur, `GET /api/config` 404
+  (absent de la doublure).
 - Verdict : **PASS**.
 
 ## Review code

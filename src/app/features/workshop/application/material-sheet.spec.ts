@@ -63,6 +63,22 @@ describe('MaterialSheet', () => {
     });
   });
 
+  it('Given a material When its sheet renders Then its designations come under the heading that calls them indicative', async () => {
+    const page = await render();
+    const list = page.all('material-designation')[0]?.parentElement;
+    const heading = list?.previousElementSibling;
+
+    expect({
+      tag: heading?.tagName,
+      text: heading?.textContent?.trim(),
+      testId: heading?.getAttribute('data-testid'),
+    }).toEqual({
+      tag: 'H4',
+      text: 'Correspondances indicatives',
+      testId: 'material-designations-heading',
+    });
+  });
+
   it('Given a material When its sheet renders Then the ISO group is cited too, so every datum has its source', async () => {
     const page = await render();
 

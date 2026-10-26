@@ -45,6 +45,21 @@ describe('Source types', () => {
     const _refused: SourceCitation = { source: aCitation().source };
   });
 
+  it('Given a citation When its basis is missing Then it does not compile', () => {
+    // @ts-expect-error: a citation says whether the source writes the value or states the principle it is deduced from
+    const _refused: SourceCitation = { source: aCitation().source, locator: 'fixture' };
+  });
+
+  it('Given a citation When its basis is neither stated nor deduced Then it does not compile', () => {
+    // @ts-expect-error: a value is either written by the source or deduced from its principles
+    const _refused = aCitation({ basis: 'estimated' });
+  });
+
+  it('Given a citation When its scope is other than the group Then it does not compile', () => {
+    // @ts-expect-error: a citation only widens to the advice of the material's ISO group
+    const _refused = aCitation({ scope: 'family' });
+  });
+
   it('Given a source When its URL is not https Then it does not compile', () => {
     // @ts-expect-error: a source URL is always https
     const _refused: Source = { ...aSource(), url: 'http://exemple.invalid/document-fictif' };

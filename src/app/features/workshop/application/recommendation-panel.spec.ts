@@ -1,8 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import { settle } from '@shared/testing/settle';
-import type { GuideState } from '../domain/models/recommendation.model';
-import { aMaterialCatalogue, anOperation } from '../testing/insert-guide-builders';
+import type { GuideState, RecommendationEntry } from '../domain/models/recommendation.model';
+import {
+  aCitation,
+  aMaterialCatalogue,
+  anIsoInsertField,
+  anOperation,
+  aRecommendation,
+  aReference,
+  aSourced,
+} from '../testing/insert-guide-builders';
 import { InsertGuidePage } from '../testing/insert-guide.page-model';
 import { INSERT_GUIDE_COPY } from './insert-guide-copy';
 import { RecommendationPanel } from './recommendation-panel';
@@ -13,6 +21,7 @@ async function render(state: GuideState): Promise<InsertGuidePage> {
   TestBed.configureTestingModule({ imports: [RecommendationPanel] });
   const fixture = TestBed.createComponent(RecommendationPanel);
   fixture.componentRef.setInput('state', state);
+  fixture.componentRef.setInput('sources', aReference().sources);
   await settle(fixture);
   return new InsertGuidePage(fixture);
 }
@@ -48,5 +57,106 @@ describe('RecommendationPanel', () => {
       whole: INSERT_GUIDE_COPY.unavailable,
       citations: 0,
     });
+  });
+
+  const OUTER_FINISHING = anOperation('external-finishing', { label: 'Finition fictive' });
+
+  const ENTRY = aRecommendation('external-finishing', {
+    materials: [ALPHA.slug],
+    insert: {
+      kind: 'iso-1832',
+      fields: [
+        anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
+        anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif', aCitation({ basis: 'deduced' })),
+      ],
+    },
+    geometry: { value: 'Géométrie fictive.', cite: aCitation({ basis: 'deduced' }) },
+    grade: aSourced('Nuance fictive.'),
+    cuttingSpeed: aSourced({ min: 123, max: 456, unit: 'm/min' }),
+    pitfalls: [
+      aSourced('Premier piège fictif.'),
+      { value: 'Second piège fictif.', cite: aCitation({ scope: 'group' }) },
+    ],
+  });
+
+  const available = (entry: RecommendationEntry = ENTRY): GuideState => ({
+    status: 'available',
+    material: ALPHA,
+    operation: OUTER_FINISHING,
+    entry,
+  });
+
+  const blocks = (page: InsertGuidePage): readonly Record<string, unknown>[] =>
+    page.all('recommendation-block').map((block) => ({
+      heading: block.firstElementChild?.tagName,
+      title: block.firstElementChild?.textContent?.trim(),
+      values: page.texts('recommendation-value', block),
+      code: page.texts('iso-insert-code', block),
+      mentions: page
+        .all('source-citation', block)
+        .map((citation) => page.texts('source-citation-mention', citation).join('')),
+    }));
+
+  it('Given an available recommendation When the panel renders Then it shows the insert, geometry, grade and pitfalls blocks, each under its h3', async () => {
+    const page = await render(available());
+
+    expect({
+      headings: [...page.host.querySelectorAll('h3')].map((heading) => heading.textContent?.trim()),
+      unavailable: page.one('insert-guide-unavailable'),
+      incomplete: page.one('recommendation-incomplete'),
+    }).toEqual({
+      headings: ['Plaquette', 'Géométrie', 'Nuance', 'Pièges'],
+      unavailable: null,
+      incomplete: null,
+    });
+  });
+
+  it('Given an available recommendation When the panel renders Then every value is followed by its citation, which says when it is deduced or given for the group', async () => {
+    const page = await render(available());
+
+    expect(blocks(page)).toEqual([
+      {
+        heading: 'H3',
+        title: 'Plaquette',
+        values: [],
+        code: ['ZQ'],
+        mentions: ['', 'déduit des principes du fabricant'],
+      },
+      {
+        heading: 'H3',
+        title: 'Géométrie',
+        values: ['Géométrie fictive.'],
+        code: [],
+        mentions: ['déduit des principes du fabricant'],
+      },
+      { heading: 'H3', title: 'Nuance', values: ['Nuance fictive.'], code: [], mentions: [''] },
+      {
+        heading: 'H3',
+        title: 'Pièges',
+        values: ['Premier piège fictif.', 'Second piège fictif.'],
+        code: [],
+        mentions: ['', 'conseil du groupe'],
+      },
+    ]);
+  });
+
+  it('Given a recommendation whose source gives a cutting speed When the panel renders Then no speed is shown', async () => {
+    const page = await render(available());
+    const whole = page.host.textContent ?? '';
+
+    expect({
+      min: whole.includes('123'),
+      max: whole.includes('456'),
+      unit: whole.includes('m/min'),
+      blocks: page.all('recommendation-block').length,
+    }).toEqual({ min: false, max: false, unit: false, blocks: 4 });
+  });
+
+  it('Given a recommendation without pitfall When the panel renders Then no empty pitfalls block is shown', async () => {
+    const page = await render(available({ ...ENTRY, pitfalls: [] }));
+
+    expect(
+      [...page.host.querySelectorAll('h3')].map((heading) => heading.textContent?.trim()),
+    ).toEqual(['Plaquette', 'Géométrie', 'Nuance']);
   });
 });

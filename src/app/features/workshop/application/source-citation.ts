@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
 import type { Source, SourceCitation as Citation } from '../domain/models/source.model';
 import { INSERT_GUIDE_COPY } from './insert-guide-copy';
 
@@ -6,6 +6,11 @@ import { INSERT_GUIDE_COPY } from './insert-guide-copy';
   selector: 'app-source-citation',
   host: { class: 'block text-xs text-muted', 'data-testid': 'source-citation' },
   template: `
+    @if (mention()) {
+      <span data-testid="source-citation-mention" class="block font-medium text-foreground">{{
+        mention()
+      }}</span>
+    }
     {{ copy.source }}
     <a
       data-testid="source-citation-link"
@@ -23,4 +28,10 @@ export class SourceCitation {
   readonly source = input.required<Source>();
 
   protected readonly copy = INSERT_GUIDE_COPY;
+  protected readonly mention = computed(() => {
+    const { basis, scope } = this.citation();
+    return [scope === 'group' && this.copy.groupAdvice, basis === 'deduced' && this.copy.deduced]
+      .filter(Boolean)
+      .join(', ');
+  });
 }

@@ -36,7 +36,13 @@ import { SourceCitation } from './source-citation';
         />
       </div>
     }
-    <dl class="mt-5 grid gap-3 border-t border-line pt-5">
+    <h4
+      data-testid="material-designations-heading"
+      class="mt-5 border-t border-line pt-5 text-sm font-semibold"
+    >
+      {{ copy.designationsHeading }}
+    </h4>
+    <dl class="mt-3 grid gap-3">
       @for (designation of sheet.designations; track designation.system + designation.value) {
         <div data-testid="material-designation">
           <dt data-testid="material-designation-system" class="text-sm text-muted">

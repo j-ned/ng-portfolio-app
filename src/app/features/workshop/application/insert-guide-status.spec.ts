@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { Material } from '../domain/models/material.model';
 import type { Operation, OperationFamily } from '../domain/models/operation.model';
+import type {
+  IsoInsertDesignation,
+  RecommendationEntry,
+} from '../domain/models/recommendation.model';
 import {
   aMaterialCatalogue,
+  anIsoInsertField,
   anOperation,
   anOperationFamily,
+  aRecommendation,
 } from '../testing/insert-guide-builders';
 import { INSERT_GUIDE_COPY } from './insert-guide-copy';
 import { insertGuideStatus } from './insert-guide-status';
@@ -46,4 +52,45 @@ describe('insertGuideStatus', () => {
       );
     },
   );
+
+  const ZQ_INSERT: IsoInsertDesignation = {
+    kind: 'iso-1832',
+    fields: [
+      anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
+      anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif'),
+    ],
+  };
+
+  it.each<[Material, Operation, RecommendationEntry, string]>([
+    [
+      ALPHA,
+      OUTER_FINISHING,
+      aRecommendation('external-finishing', { materials: [ALPHA.slug], insert: ZQ_INSERT }),
+      'Alliage essai Alpha, Finition fictive (Extérieur fictif).',
+    ],
+    [
+      BETA,
+      INNER_FINISHING,
+      aRecommendation('internal-finishing', { materials: [BETA.slug], insert: ZQ_INSERT }),
+      'Alliage essai Bêta, Finition fictive (Intérieur fictif).',
+    ],
+  ])(
+    'Given %#: an available recommendation When the status is derived Then it names the material and the operation, then the proposed insert code',
+    (material, operation, entry, named) => {
+      expect(insertGuideStatus({ status: 'available', material, operation, entry }, FAMILIES)).toBe(
+        `${named} Plaquette proposée\u00a0: ZQ.`,
+      );
+    },
+  );
+
+  it('Given an available recommendation for a described insert When the status is derived Then it names the case, the insert having no code to announce', () => {
+    const entry = aRecommendation('grooving', { materials: [ALPHA.slug] });
+
+    expect(
+      insertGuideStatus(
+        { status: 'available', material: ALPHA, operation: GROOVING, entry },
+        FAMILIES,
+      ),
+    ).toBe('Alliage essai Alpha, Gorge fictive.');
+  });
 });

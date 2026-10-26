@@ -32,6 +32,7 @@ export function aCitation(overrides: Partial<SourceCitation> = {}): SourceCitati
   return {
     source: FICTIONAL_SOURCE_ID,
     locator: 'fixture',
+    basis: 'stated',
     ...overrides,
   };
 }
@@ -76,6 +77,15 @@ export function anOperationFamily(overrides: Partial<OperationFamily> = {}): Ope
     operations: [anOperation('external-finishing')],
     ...overrides,
   };
+}
+
+export function anIsoInsertField(
+  field: string,
+  code: string,
+  meaning: string,
+  cite: SourceCitation = aCitation(),
+): IsoInsertDesignation['fields'][number] {
+  return { value: { field, code, meaning }, cite };
 }
 
 export function anIsoInsert(): IsoInsertDesignation {

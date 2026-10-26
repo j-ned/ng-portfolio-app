@@ -66,7 +66,7 @@ import { parseGuideSelection } from '../../domain/guide-selection';
           <h2 id="insert-guide-recommendation-heading" class="section-title mb-6">
             {{ copy.recommendationHeading }}
           </h2>
-          <app-recommendation-panel [state]="state()" />
+          <app-recommendation-panel [state]="state()" [sources]="reference.sources" />
           <p data-testid="insert-guide-disclaimer" class="mt-6 max-w-prose text-sm text-muted">
             {{ copy.disclaimer }}
           </p>
