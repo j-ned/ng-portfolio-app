@@ -1,8 +1,11 @@
 name: CI
 
-# Pull requests seulement : un merge sur master est construit par Dokploy avec le même Dockerfile.
+# Sur master, le run ne bloque personne : il écrit le cache Docker que les PR lisent (GitHub
+# cloisonne le cache, une PR ne lit jamais celui d'une autre PR).
 on:
   pull_request:
+  push:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -22,8 +25,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # Runner jetable : pas de nettoyage du builder en fin de job.
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          cleanup: false
 
       # Un seul passage BuildKit : étage `test` (lint, format, icônes, typage e2e, Vitest) et image
       # de production, en parallèle sur les mêmes sources installées, avec le cache GHA.

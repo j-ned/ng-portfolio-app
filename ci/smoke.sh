@@ -83,7 +83,8 @@ grep -qi '^content-type: application/rss+xml' /tmp/rss-headers.txt
 grep -q '<title>Article témoin A</title>' /tmp/rss.xml
 python3 -c 'import sys, xml.dom.minidom; [xml.dom.minidom.parse(f) for f in sys.argv[1:]]' /tmp/sitemap.xml /tmp/rss.xml
 # API en panne : copie périmée servie (STALE), /healthz toujours vivant
-docker stop api-stub
+# rm -f tue tout de suite : docker stop attendrait 10 s que la doublure ignore SIGTERM
+docker rm -f api-stub > /dev/null
 sleep 2
 curl -fsS -D /tmp/stale.txt -o /tmp/stale.html http://127.0.0.1:3000/blog
 grep -qi '^x-cache-status: STALE' /tmp/stale.txt || { echo "pas de copie périmée"; cat /tmp/stale.txt; exit 1; }
@@ -152,5 +153,5 @@ for path in /favicon.svg /icons/sprite.svg; do
   grep -qi 'cache-control: .*must-revalidate' <<<"$mutable_headers" || { echo "fichier non empreinté sans revalidation : $path"; echo "$mutable_headers"; exit 1; }
   grep -qi 'x-frame-options: deny' <<<"$mutable_headers" || { echo "en-têtes de sécurité absents : $path"; echo "$mutable_headers"; exit 1; }
 done
-docker stop portfolio api-stub
+docker rm -f portfolio api-stub > /dev/null
 docker network rm portfolio-ci
