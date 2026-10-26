@@ -683,6 +683,11 @@ PR 5 (interface)
 - **Tranche 8 — je choisis ma matière au clavier, et l'URL la garde** : `MaterialCombobox`,
   `MaterialSheet`, `IsoGroupBadge`, `SourceCitation`, modèle et `form()`, input `matiere`, effet
   d'URL ; tokens ISO si validés.
+  Décision du 2026-10-26 (option A) : `isoGroups` sort d'`InsertGuideReference` et du builder
+  `aReference` jusqu'à la première PR de données, qui crée `ISO_513_GROUPS` avec sa source Sandvik
+  Coromant et le remet ; `INSERT_GUIDE_REFERENCE` est créé ici, sans cast. `IsoGroupBadge` affiche la
+  lettre (`material.isoGroup.value`) en pastille neutre, précédée de « Groupe ISO » ; le nom du groupe
+  viendra avec `ISO_513_GROUPS`. Aucun token ISO (réponse 5).
 - **Tranche 9 — je choisis l'opération, et l'absence se dit franchement** : `OperationPicker`, input
   `operation`, `RecommendationPanel` (`incomplete`, `unavailable`), `insertGuideStatus`, annonce.
 
@@ -1251,6 +1256,88 @@ gabarit vide, routes, sitemap et `Dockerfile` inchangés) : RED confirmé le 202
 `workshop tools` sur « No test found » (`it.each` d'une liste vide) : réécrite en un seul test qui
 parcourt les outils.
 
+### Tranche 8 — je choisis ma matière au clavier, et l'URL la garde
+
+Jouée dans la même session, RED puis GREEN par le même agent (exception validée le 2026-10-25).
+Décision du 2026-10-26 (option A, cf. journal) : `isoGroups` sort d'`InsertGuideReference` et du
+builder `aReference` jusqu'à la première PR de données ; `INSERT_GUIDE_REFERENCE` est créé ici. Les
+tests de composants lisent la fixture fictive `aMaterialCatalogue()` (trois alliages « essai »,
+désignations `ZZ-FICTIF-n` et `TEST-00n`) au travers du token ; le comportement réel (référentiel
+vide) est testé à part. PageModel commun : `testing/insert-guide.page-model.ts` (son accès au champ
+est une assertion, pour qu'un champ absent échoue en `AssertionError` et non en `TypeError`).
+
+`application/insert-guide-reference.spec.ts` (1 test) : sans fournisseur, le token rend
+`{ sources, families, materials, recommendations }`, chacun **identique** à la constante réelle. **RED**.
+
+`application/insert-guide-copy.spec.ts` (1 test, golden étendu) : libellés du champ (section, label,
+indication, nom de la liste, « matière trouvée » / « matières trouvées », « Aucune matière trouvée »,
+« Cette matière n'est pas encore dans le guide. »), « Groupe ISO », « Source : », « (nouvel onglet) »,
+libellés des six systèmes de désignation. **RED**.
+
+`application/material-combobox.spec.ts` (24 tests)
+- Structure : `role="combobox"`, `aria-autocomplete="list"`, `autocomplete="off"`,
+  `aria-expanded="false"`, label visible « Matière », indication par `aria-describedby`, listbox
+  nommée par `aria-controls` ; statut `role="status"` présent et muet. **RED** (2).
+- Recherche (`it.each`, 3 cas) : fragment commun, désignation AISI, numéro matière tapé sans tiret →
+  options et statut « 2 matières trouvées » / « 1 matière trouvée ». **RED** (3).
+- L'option dit la désignation trouvée et son système (« TEST-001 · AISI ») et le groupe en texte
+  (« Groupe ISO P ») ; rien de répété quand le nom affiché a trouvé ; aucune correspondance →
+  aucune option, `aria-expanded="false"`, statut « Aucune matière trouvée » et texte visible. **RED** (3).
+- Clavier : flèche bas sur champ vide → toutes les matières, la première active
+  (`aria-activedescendant`, `aria-selected`), `preventDefault` ; flèches en boucle ; flèche haut
+  ouvre sur la dernière ; Entrée choisit l'active (`value` = slug, texte = nom, liste fermée) ;
+  Entrée sans active ne choisit rien (`preventDefault` toujours) ; Échap ferme et garde la saisie ;
+  second Échap remet le nom choisi, ou vide ; perte du focus ferme sans choisir. **RED** (9).
+- Pointeur : `mousedown` empêché (le focus reste au champ), clic choisit. **RED**.
+- Valeur posée de l'extérieur → texte du champ, puis vide. **RED**.
+- Référentiel vide (cas réel) : flèche bas → aucune liste, statut « Aucune matière trouvée »,
+  Entrée sans effet ; saisie → texte « pas encore dans le guide ». **RED** (2).
+- Lié par `[formField]` : affiche le slug du modèle, un choix au clavier met le modèle à jour, un
+  modèle remplacé met le champ à jour. **RED** (3).
+
+`application/material-sheet.spec.ts` (4 tests) : `h3` = nom affiché et lettre du groupe ; chaque trait
+de comportement suivi de sa citation ; chaque désignation dans un `dl` (système, valeur, citation) ;
+le groupe ISO cité aussi (6 citations pour la fixture Alpha). **RED** (4).
+
+`application/iso-group-badge.spec.ts` (3 tests) : « Groupe ISO P » / « Groupe ISO S » en texte, lettre
+dans sa pastille ; aucun `style` en ligne ni pastille `aria-hidden` (pas de couleur, réponse 5). **RED** (3).
+
+`application/source-citation.spec.ts` (2 tests) : « Source : titre (nouvel onglet), repère » ; lien
+`target="_blank" rel="noopener noreferrer"` vers l'URL, mention `sr-only`. **RED** (2).
+
+`pages/insert-guide/insert-guide.spec.ts` (8 tests ajoutés, `provideRouter` +
+`withComponentInputBinding` + `provideLocationMocks` + `RouterTestingHarness`)
+- Section « La matière » nommée par son `h2`, qui contient le champ ; un seul `h1`. **RED**.
+- `?matiere=<slug connu>` → champ et fiche de la matière. **RED**.
+- `?matiere=<slug connu>` → aucune navigation après la première. Vert face au stub par construction
+  (il ne navigue jamais) ; il juge l'effet au GREEN.
+- `?matiere=<inconnu>` → champ vide, aucune fiche, slug absent de la page, URL inchangée, aucune
+  navigation. **RED**.
+- Choix au clavier → `?matiere=<slug>`, `replaceUrl: true`, fiche affichée. **RED**.
+- Un autre paramètre de la query (`operation`) est gardé au choix. **RED**.
+- Retour arrière : champ et fiche suivent l'URL, une seule navigation (le retour lui-même). **RED**.
+- Token réel (référentiel vide) : flèche bas puis Entrée → statut « Aucune matière trouvée », rien
+  choisi, URL inchangée. **RED**.
+
+Suites adaptées : `testing/insert-guide-builders.ts` (`aReference` sans `isoGroups`, avec la source
+fictive dans `sources` ; `aMaterialCatalogue()`).
+
+RED, `pnpm test`, cache invalidé (`ng cache clean` équivalent : `.angular/cache` et
+`node_modules/.vite` supprimés), stubs typés (token rendant un référentiel vide, copie à chaînes
+vides, composants au gabarit vide, page inchangée) : RED confirmé le 2026-10-26, 42 failed / 4844
+total (Test Files 7 failed | 240 passed), code de sortie 1. Les 42 échecs sont des
+`AssertionError` (27 « the material field: expected null to be an instance of HTMLInputElement »,
+15 sur les valeurs attendues), aucune erreur de harnais ni de type. Un premier passage échouait en
+`TypeError` (champ `null`) : le PageModel affirme désormais la présence du champ.
+
+Corrections du harnais au GREEN, signalées (même exigence, mesure possible) : le test du retour
+arrière branche l'écoute du `popstate` (`router.setUpLocationChangeListener()`, faite d'ordinaire
+par la navigation initiale, que `RouterTestingHarness` ne joue pas) et attend une macro-tâche après
+`Location.back()` (le routeur rejoue un `popstate` dans un `setTimeout`). Aucune valeur attendue n'a
+changé. Mutation à la main : sans la garde « ne navigue que si le modèle diffère », le test du slug
+inconnu tombe (l'URL perd `?matiere=`) ; le test du slug connu reste vert, la navigation vers la
+même URL étant ignorée par le routeur.
+
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
@@ -1260,6 +1347,7 @@ parcourt les outils.
 - **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
 - **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
 - **Tranche 7 — le guide existe et se trouve** : GREEN 4797 passed / 4797 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : aucun (la liste de classes du `h1` est la même que sur l'accueil de l'atelier, le blog et les réalisations ; la sortir en `@utility` toucherait trois fichiers hors de la tranche). Verify faite (§ Verify) : `/atelier` gagne sa carte et `/atelier/plaquettes` devient atteignable. Décision du 2026-10-26 (session principale, option E) : `INSERT_GUIDE_REFERENCE` n'est pas créé dans cette tranche. Sa `factory` devrait rendre un `InsertGuideReference`, dont `isoGroups` (`Record` des six lettres, chaque nom `Sourced<string>`) ne se construit pas tant que `SourceId` vaut `never` : il faudrait inventer une source ou affaiblir le type. Aucun élément de la tranche ne lit le référentiel. Le choix entre retirer `isoGroups` jusqu'à la PR de données (A) et avancer `ISO_513_GROUPS` avec une source réelle (C) se fait à la tranche 8, premier consommateur. Correction du contrat au GREEN : le test des cartes comparait le texte de la carte en une chaîne jointe par des espaces ; les trois `span` de `LinkCard` n'ont pas d'espace entre eux, il compare désormais le texte de chaque enfant (même exigence, mesure juste). Écarts : `INSERT_GUIDE_COPY` ne porte que ce que la page rend (titre, chapô, avertissement), les autres libellés arrivent avec leurs composants (tranches 8 et 9) ; le chapô reprend le résumé validé de la carte ; `WorkshopTool` gagne `summary` (réponse 6 de Julien) ; le guide entre aussi dans la boucle CSP du job `docker` ; `DESIGN.md` § 5 : « Les outils » et « Guide des plaquettes ».
+- **Tranche 8 — je choisis ma matière au clavier, et l'URL la garde** : GREEN 4844 passed / 4844 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : la constante `FIELD_ID` à un seul site est inlinée dans le champ `fieldId` du combobox ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, gagne la section « La matière ». Décision du 2026-10-26 (session principale, option A) : `isoGroups` sort d'`InsertGuideReference` et d'`aReference` jusqu'à la première PR de données ; le type décrit ce qui existe, le champ reviendra avec `ISO_513_GROUPS` et sa source. `IsoGroup` et `anIsoGroup` restent (garanties de compilation de `reference-types.spec.ts`). `INSERT_GUIDE_REFERENCE` est créé, sa `factory` rend les quatre constantes réelles sans cast ; `aReference` porte désormais la source fictive dans `sources` (cast confiné à `testing/`). Écarts : le cycle 1 a fait tomber deux tests, la garde des rayons nommés (`rounded-lg` sur la liste, remplacé par `rounded-field`) et le retour arrière (harnais, cf. Plan de test) ; la règle `@angular-eslint/no-input-rename` est désactivée sur l'input `matiere`, avec sa raison (clé figée des URL partagées, code en anglais), plutôt qu'un input nommé en français ; la navigation garde les autres paramètres (`queryParamsHandling: 'merge'`, `matiere` retiré quand le choix est vide) au lieu d'écrire `operation`, qui arrive en tranche 9 ; le scénario axe « liste ouverte » n'est pas ajouté (référentiel vide : rien à ouvrir), il rejoint la première PR de données avec « choix fait » ; `DESIGN.md` § 5 : section « La matière », champ à suggestions, badge de groupe ISO, citation. Effacer le texte du champ ne retire pas la matière choisie (Échap la réaffiche) : comportement non spécifié, laissé tel quel.
 
 ## Verify
 
@@ -1328,6 +1416,42 @@ Tranche 7, 2026-10-26, worktree `034-pr5`.
   absent de la doublure de l'API.
 - Axe : `pnpm a11y -g atelier`, 4 passed (`/atelier` et `/atelier/plaquettes`, clair et sombre),
   code de sortie 0.
+- Verdict : **PASS**.
+
+Tranche 8, 2026-10-26, worktree `034-pr5`.
+
+- Steps (image réelle) : `pnpm run build --configuration production` (code 0, « Prerendered 3
+  static routes ») ; `docker build -t ng-portfolio-app:a11y .` (code 0) puis `ci/a11y-stack.sh up`.
+  `curl -D - '/atelier/plaquettes?matiere=inconnue-zz'` : 200, `X-Cache-Status: MISS`, aucun
+  `'unsafe-inline'` ; le corps contient la section « La matière » (`h2`), le champ
+  `role="combobox" aria-expanded="false" value=""`, la région `material-status` vide, et **zéro**
+  occurrence de `inconnue-zz` (ni page, ni titre, ni canonical).
+- Navigateur, image réelle (référentiel vide), clavier réel : clic dans le champ, flèche bas → aucune
+  liste (`aria-expanded="false"`, pas d'`aria-activedescendant`), statut « Aucune matière trouvée » ;
+  Entrée → rien choisi, URL inchangée (`?matiere=inconnue-zz` gardée telle quelle, jamais réaffichée) ;
+  saisie d'une désignation absente → statut « Aucune matière trouvée » et phrase visible « Cette
+  matière n'est pas encore dans le guide. », focus resté dans le champ.
+- Navigateur, image de vérification **non commitée** (`ng-portfolio-app:verify-fixture`, `factory` du
+  token complétée par `aMaterialCatalogue()` et la source fictive le temps du `docker build`, fichier
+  restauré aussitôt, `git status` le montre identique, image supprimée ensuite) :
+  - rendu serveur de `?matiere=alliage-essai-beta` (`curl`, sans JavaScript) : champ
+    `value="Alliage essai Bêta"`, fiche `h3` « Alliage essai Bêta », citations liées au document fictif ;
+  - clavier réel sur `/atelier/plaquettes` : saisie « zz fictif » → deux options, statut « 2 matières
+    trouvées » ; flèche bas deux fois → `aria-activedescendant="material-option-1"`,
+    `aria-selected="true"` sur Bêta, focus dans le champ ; Entrée → URL
+    `?matiere=alliage-essai-beta`, `history.length` inchangé (5 → 5, `replaceUrl`), champ et fiche
+    Bêta (4 citations) ; saisie « zz », Échap → liste fermée, texte gardé ; second Échap → « Alliage
+    essai Bêta » réaffiché, URL inchangée ;
+  - retour arrière : menu « L'atelier » puis carte du guide (deux navigations client), deux
+    `history.back()` → `/atelier/plaquettes?matiere=alliage-essai-beta`, **même document** (marqueur
+    `window` conservé), champ et fiche Bêta, URL non réécrite, `history.length` inchangé.
+- Captures : champ sur l'état vide avec la phrase d'absence ; liste ouverte, option active ; fiche
+  Bêta après Entrée (prises dans la session, non versionnées).
+- Console : aucune erreur de l'application ni d'hydratation ; seules erreurs, `GET /api/config` 404
+  (absent de la doublure) et un `POST /api/analytics/track` refusé pendant le redémarrage de la pile.
+- Axe : `pnpm a11y -g atelier` sur l'image réelle, 4 passed (`/atelier` et `/atelier/plaquettes`,
+  clair et sombre), code de sortie 0. Aucun axe sur l'image de vérification (liste ouverte et fiche :
+  scénarios de la première PR de données).
 - Verdict : **PASS**.
 
 ## Review code

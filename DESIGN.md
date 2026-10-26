@@ -553,6 +553,10 @@ La cote d'un dessin technique : deux traits de rappel, deux pointes, une ligne i
 ### Guide des plaquettes (`features/workshop/pages/insert-guide/insert-guide.ts`)
 
 - Même tête que l'accueil de l'atelier : `h1` en `font-extrabold`, chapô en `text-muted`, `max-w-[56ch]`. L'avertissement suit en `text-sm text-muted`, `max-w-prose`, toujours visible ; la région `role="status"` (`sr-only`) existe dès le HTML serveur, vide tant que rien n'est choisi.
+- Section « La matière » (`section aria-labelledby`, `h2` en `section-title`), `max-w-2xl`. Sous le champ, la fiche de la matière choisie : carte `rounded-card`, filet `line`, `bg-surface`, `h3` en `text-xl font-bold`, puis le groupe ISO, les traits de comportement (`max-w-prose`) et un `dl` des désignations (système en `text-sm text-muted`, valeur en `font-mono`). Chaque donnée est suivie de sa citation.
+- **Champ à suggestions** (`application/material-combobox.ts`) : même grammaire que le champ de tags de l'admin (`form-input`, `field-label`, `field-hint`, liste `rounded-field` bordée `line-strong` sur `background`, option active `bg-primary/8 text-primary`). Une option : nom en `font-medium`, désignation trouvée et son système en `text-muted`, lettre du groupe ISO en `font-mono` à droite. Sans résultat, une phrase visible en `text-sm` sous l'indication.
+- **Badge de groupe ISO** (`application/iso-group-badge.ts`) : « Groupe ISO » en `text-sm text-muted`, puis la lettre dans une pastille neutre ronde de 28 px, bord `foreground` de 1 px, `font-mono font-semibold`. Aucune couleur de groupe : la lettre porte l'information.
+- **Citation** (`application/source-citation.ts`) : « Source : », titre du document en lien souligné (nouvel onglet, dit en `sr-only`), puis le repère dans le document ; `text-xs text-muted`.
 
 ### Page 404 (`pages/page-not-found.ts`)
 

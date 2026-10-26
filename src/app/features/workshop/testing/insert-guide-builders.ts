@@ -116,18 +116,40 @@ export function aRecommendation<O extends OperationId>(
 
 export function aReference(overrides: Partial<InsertGuideReference> = {}): InsertGuideReference {
   return {
-    sources: {} as InsertGuideReference['sources'],
-    isoGroups: {
-      P: anIsoGroup('P'),
-      M: anIsoGroup('M'),
-      K: anIsoGroup('K'),
-      N: anIsoGroup('N'),
-      S: anIsoGroup('S'),
-      H: anIsoGroup('H'),
-    },
+    sources: { [FICTIONAL_SOURCE_ID]: aSource() } as InsertGuideReference['sources'],
     families: [anOperationFamily()],
     materials: [aMaterial()],
     recommendations: [],
     ...overrides,
   };
+}
+
+export function aMaterialCatalogue(): readonly [Material, Material, Material] {
+  return [
+    aMaterial({
+      slug: 'alliage-essai-alpha',
+      designations: [
+        aDesignation('Alliage essai Alpha'),
+        aDesignation('ZZ-FICTIF-1', 'en-symbol'),
+        aDesignation('TEST-001', 'aisi'),
+      ],
+      isoGroup: aSourced('P'),
+      behaviour: [aSourced('Comportement fictif Alpha.'), aSourced('Second trait fictif Alpha.')],
+    }),
+    aMaterial({
+      slug: 'alliage-essai-beta',
+      designations: [aDesignation('Alliage essai Bêta'), aDesignation('ZZ-FICTIF-2', 'en-symbol')],
+      isoGroup: aSourced('M'),
+      behaviour: [aSourced('Comportement fictif Bêta.')],
+    }),
+    aMaterial({
+      slug: 'alliage-essai-gamma',
+      designations: [
+        aDesignation('Alliage essai Gamma'),
+        aDesignation('TEST-002', 'material-number'),
+      ],
+      isoGroup: aSourced('K'),
+      behaviour: [aSourced('Comportement fictif Gamma.')],
+    }),
+  ];
 }

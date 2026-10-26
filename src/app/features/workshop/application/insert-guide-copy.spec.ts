@@ -2,12 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { INSERT_GUIDE_COPY } from './insert-guide-copy';
 
 describe('INSERT_GUIDE_COPY', () => {
-  it('Given the guide copy When it is read Then the heading, the lead and the disclaimer are the validated texts', () => {
+  it('Given the guide copy When it is read Then every interface text is the proposed one', () => {
     expect(INSERT_GUIDE_COPY).toEqual({
       heading: 'Guide des plaquettes',
       lead: "Choisis ta matière et ton opération : le guide t'indique le type de plaquette à prendre.",
       disclaimer:
         'Recommandation indicative : elle ne remplace ni le catalogue de ton outil ni ton expérience.',
+      materialHeading: 'La matière',
+      materialLabel: 'Matière',
+      materialHint:
+        'Tape une désignation : EN, numéro matière, AISI, UNS, ancienne AFNOR ou nom courant.',
+      materialListLabel: 'Matières suggérées',
+      materialFound: 'matière trouvée',
+      materialsFound: 'matières trouvées',
+      noMaterialFound: 'Aucune matière trouvée',
+      materialNotInGuide: "Cette matière n'est pas encore dans le guide.",
+      isoGroup: 'Groupe ISO',
+      source: 'Source :',
+      newTab: '(nouvel onglet)',
+      designationSystems: {
+        'en-symbol': 'Symbole EN',
+        'material-number': 'Numéro matière',
+        aisi: 'AISI',
+        uns: 'UNS',
+        'afnor-legacy': 'Ancienne AFNOR',
+        'common-name': 'Nom courant',
+      },
     });
   });
 });

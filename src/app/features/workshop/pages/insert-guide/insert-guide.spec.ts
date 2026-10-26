@@ -1,5 +1,15 @@
+import { Location } from '@angular/common';
+import { provideLocationMocks } from '@angular/common/testing';
 import { TestBed } from '@angular/core/testing';
+import { NavigationStart, Router, provideRouter, withComponentInputBinding } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { settle } from '@shared/testing/settle';
 import { INSERT_GUIDE_COPY } from '../../application/insert-guide-copy';
+import { INSERT_GUIDE_REFERENCE } from '../../application/insert-guide-reference';
+import type { InsertGuideReference } from '../../domain/models/insert-guide-reference.model';
+import type { Material } from '../../domain/models/material.model';
+import { aMaterialCatalogue, aReference } from '../../testing/insert-guide-builders';
+import { InsertGuidePage } from '../../testing/insert-guide.page-model';
 import { InsertGuide } from './insert-guide';
 
 const collapsed = (element: Element | null): string =>
@@ -50,5 +60,166 @@ describe('InsertGuide', () => {
 
     expect(host.querySelectorAll('main, header, footer')).toHaveLength(0);
     expect([...host.classList].sort()).toEqual(['block', 'min-h-svh', 'pt-20']);
+  });
+});
+
+const [ALPHA, BETA, GAMMA] = aMaterialCatalogue();
+const GUIDE_PATH = '/atelier/plaquettes';
+const nameOf = (material: Material): string => material.designations[0].value;
+
+type OpenedGuide = {
+  readonly page: InsertGuidePage;
+  readonly router: Router;
+  readonly navigations: () => number;
+};
+
+async function openGuide(
+  url: string,
+  reference: InsertGuideReference | null = aReference({ materials: [ALPHA, BETA, GAMMA] }),
+): Promise<OpenedGuide> {
+  TestBed.configureTestingModule({
+    providers: [
+      provideRouter(
+        [{ path: 'atelier/plaquettes', component: InsertGuide }],
+        withComponentInputBinding(),
+      ),
+      provideLocationMocks(),
+      ...(reference === null ? [] : [{ provide: INSERT_GUIDE_REFERENCE, useValue: reference }]),
+    ],
+  });
+  const router = TestBed.inject(Router);
+  // Sans navigation initiale, rien n'écoute le popstate : le retour arrière doit être branché.
+  router.setUpLocationChangeListener();
+  let started = 0;
+  router.events.subscribe((event) => {
+    if (event instanceof NavigationStart) started++;
+  });
+  const harness = await RouterTestingHarness.create();
+  await harness.navigateByUrl(url);
+  await settle(harness.fixture);
+  return { page: new InsertGuidePage(harness.fixture), router, navigations: () => started };
+}
+
+describe('InsertGuide: choosing the material', () => {
+  it('Given the guide When it renders Then a section named by its h2 holds the material field', async () => {
+    const { page } = await openGuide(GUIDE_PATH);
+    const section = page.one('insert-guide-material');
+    const heading = section?.querySelector(`[id="${section.getAttribute('aria-labelledby')}"]`);
+
+    expect({
+      tag: section?.tagName,
+      heading: heading?.tagName,
+      headingText: heading?.textContent?.trim(),
+      field: section?.contains(page.materialInput),
+      h1: page.host.querySelectorAll('h1').length,
+    }).toEqual({
+      tag: 'SECTION',
+      heading: 'H2',
+      headingText: INSERT_GUIDE_COPY.materialHeading,
+      field: true,
+      h1: 1,
+    });
+  });
+
+  it('Given a known material in the URL When the guide renders Then the field shows it and its sheet is displayed', async () => {
+    const { page } = await openGuide(`${GUIDE_PATH}?matiere=${BETA.slug}`);
+
+    expect([page.materialInput.value, page.sheetName()]).toEqual([nameOf(BETA), nameOf(BETA)]);
+  });
+
+  it('Given a known material in the URL When the guide renders Then it does not navigate', async () => {
+    const { router, navigations } = await openGuide(`${GUIDE_PATH}?matiere=${BETA.slug}`);
+
+    expect([navigations(), router.url]).toEqual([1, `${GUIDE_PATH}?matiere=${BETA.slug}`]);
+  });
+
+  it('Given an unknown material in the URL When the guide renders Then nothing is chosen, the slug is shown nowhere and the URL is left as is', async () => {
+    const { page, router, navigations } = await openGuide(
+      `${GUIDE_PATH}?matiere=matiere-inconnue-zz`,
+    );
+
+    expect({
+      text: page.materialInput.value,
+      sheet: page.one('material-sheet'),
+      echoed: page.host.textContent?.includes('matiere-inconnue-zz'),
+      url: router.url,
+      navigations: navigations(),
+    }).toEqual({
+      text: '',
+      sheet: null,
+      echoed: false,
+      url: `${GUIDE_PATH}?matiere=matiere-inconnue-zz`,
+      navigations: 1,
+    });
+  });
+
+  it('Given no material in the URL When one is chosen at the keyboard Then the URL keeps it, replacing the history entry, and its sheet is displayed', async () => {
+    const { page, router } = await openGuide(GUIDE_PATH);
+
+    await page.typeMaterial('gamma');
+    await page.press('ArrowDown');
+    await page.press('Enter');
+
+    expect({
+      url: router.url,
+      replaceUrl: router.lastSuccessfulNavigation()?.extras.replaceUrl,
+      sheet: page.sheetName(),
+    }).toEqual({
+      url: `${GUIDE_PATH}?matiere=${GAMMA.slug}`,
+      replaceUrl: true,
+      sheet: nameOf(GAMMA),
+    });
+  });
+
+  it('Given another query parameter When a material is chosen Then that parameter is kept', async () => {
+    const { page, router } = await openGuide(`${GUIDE_PATH}?operation=operation-fictive-zz`);
+
+    await page.press('ArrowDown');
+    await page.press('Enter');
+
+    expect(router.url).toBe(`${GUIDE_PATH}?operation=operation-fictive-zz&matiere=${ALPHA.slug}`);
+  });
+
+  it('Given a material chosen after another When the user goes back Then the field and the sheet follow the URL without a new navigation', async () => {
+    const { page, router, navigations } = await openGuide(`${GUIDE_PATH}?matiere=${ALPHA.slug}`);
+    await router.navigateByUrl(`${GUIDE_PATH}?matiere=${BETA.slug}`);
+    await settle(page.fixture);
+    const before = navigations();
+
+    TestBed.inject(Location).back();
+    // Le routeur ne rejoue un popstate qu'après une macro-tâche.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await settle(page.fixture);
+
+    expect({
+      url: router.url,
+      text: page.materialInput.value,
+      sheet: page.sheetName(),
+      navigations: navigations() - before,
+    }).toEqual({
+      url: `${GUIDE_PATH}?matiere=${ALPHA.slug}`,
+      text: nameOf(ALPHA),
+      sheet: nameOf(ALPHA),
+      navigations: 1,
+    });
+  });
+
+  it('Given the real reference, still without material When ArrowDown is pressed in the field Then the field stays usable and announces that no material is found', async () => {
+    const { page, router } = await openGuide(GUIDE_PATH, null);
+
+    await page.press('ArrowDown');
+    await page.press('Enter');
+
+    expect({
+      status: page.materialStatus(),
+      expanded: page.expanded(),
+      sheet: page.one('material-sheet'),
+      url: router.url,
+    }).toEqual({
+      status: INSERT_GUIDE_COPY.noMaterialFound,
+      expanded: 'false',
+      sheet: null,
+      url: GUIDE_PATH,
+    });
   });
 });
