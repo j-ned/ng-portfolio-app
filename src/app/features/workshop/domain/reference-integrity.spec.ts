@@ -462,40 +462,41 @@ const subgroupOf = (
 const TURNING_MATERIALS: SourceId = 'sandvik-turning-materials';
 
 const SUBGROUPS: Readonly<
-  Record<IsoSubgroup, { readonly letter: IsoGroupLetter; readonly sections: readonly string[] }>
+  Record<IsoSubgroup, { readonly letter: IsoGroupLetter; readonly section: string | undefined }>
 > = {
-  steel: {
-    letter: 'P',
-    sections: [
-      'Tournage des aciers non alliés',
-      'Tournage des aciers faiblement alliés',
-      'Tournage des aciers fortement alliés',
-    ],
-  },
+  'non-alloyed-steel': { letter: 'P', section: 'Tournage des aciers non alliés' },
+  'low-alloyed-steel': { letter: 'P', section: 'Tournage des aciers faiblement alliés' },
+  'free-cutting-steel': { letter: 'P', section: undefined },
   'ferritic-martensitic-stainless': {
     letter: 'P',
-    sections: ['Tournage des aciers inoxydables ferritiques et martensitiques'],
+    section: 'Tournage des aciers inoxydables ferritiques et martensitiques',
   },
   'austenitic-stainless': {
     letter: 'M',
-    sections: ['Tournage des aciers inoxydables austénitiques'],
+    section: 'Tournage des aciers inoxydables austénitiques',
   },
   'duplex-stainless': {
     letter: 'M',
-    sections: ['Tournage des aciers inoxydables duplex (austénitiques/ferritiques)'],
+    section: 'Tournage des aciers inoxydables duplex (austénitiques/ferritiques)',
   },
-  'precipitation-hardening-stainless': { letter: 'M', sections: [] },
-  'cast-iron': { letter: 'K', sections: ['Tournage des fontes'] },
-  aluminium: { letter: 'N', sections: ["Tournage des alliages d'aluminium"] },
+  'precipitation-hardening-stainless': { letter: 'M', section: undefined },
+  'cast-iron': { letter: 'K', section: 'Tournage des fontes' },
+  aluminium: { letter: 'N', section: "Tournage des alliages d'aluminium" },
   'heat-resistant-and-titanium': {
     letter: 'S',
-    sections: ['Tournage des superalliages réfractaires'],
+    section: 'Tournage des superalliages réfractaires',
   },
-  'hardened-steel': { letter: 'H', sections: ['Tournage des aciers trempés'] },
-  stellite: { letter: 'H', sections: [] },
+  'hardened-steel': { letter: 'H', section: 'Tournage des aciers trempés' },
+  stellite: { letter: 'H', section: undefined },
 };
 
 const sectionLocator = (name: string): string => `section «\u00a0${name}\u00a0»`;
+
+const groupList = (letter: IsoGroupLetter): string =>
+  `${sectionLocator('Groupes de matières usinées')}, ISO ${letter}`;
+
+const part = (name: string, ...headings: readonly string[]): string =>
+  [sectionLocator(name), ...headings.map((heading) => `«\u00a0${heading}\u00a0»`)].join(', ');
 
 type SubgroupDefect =
   'several-subgroups' | 'subgroup-without-section' | 'advice-of-another-section';
@@ -509,15 +510,13 @@ const subgroupDefects = (
   if (subgroups.length !== 1 || subgroup === undefined) {
     return ['several-subgroups'];
   }
-  const { sections } = SUBGROUPS[subgroup];
-  if (sections.length === 0) {
+  const { section } = SUBGROUPS[subgroup];
+  if (section === undefined) {
     return ['subgroup-without-section'];
   }
   const advice = citationsIn(entry).filter(({ source }) => source === TURNING_MATERIALS);
   return advice.length === 0 ||
-    advice.some(
-      ({ locator }) => !sections.some((section) => locator.startsWith(sectionLocator(section))),
-    )
+    advice.some(({ locator }) => !locator.startsWith(sectionLocator(section)))
     ? ['advice-of-another-section']
     : [];
 };
@@ -550,12 +549,12 @@ describe('ISO_513_GROUPS', () => {
     ).toEqual([]);
   });
 
-  it('Given a material sheet When its group is cited Then the citation is the page that names the group', () => {
+  it('Given a material sheet When its group is cited Then the citation is the page that names the group, except 17-4 PH, which only the working list classes', () => {
     expect(
       MATERIALS.filter(
         ({ isoGroup }) => isoGroup.cite.source !== ISO_513_GROUPS[isoGroup.value].name.cite.source,
       ).map(({ slug }) => slug),
-    ).toEqual([]);
+    ).toEqual(['x5crnicunb16-4']);
   });
 });
 
@@ -582,6 +581,90 @@ describe('MATERIALS content', () => {
       },
     });
   });
+
+  it.each<[string, IsoSubgroup, string]>([
+    ['11smn30', 'free-cutting-steel', 'Aciers non alliés – P 1.1-1.5'],
+    ['11smnpb30', 'free-cutting-steel', 'Aciers non alliés – P 1.1-1.5'],
+    ['s235jr', 'non-alloyed-steel', 'Aciers non alliés – P 1.1-1.5'],
+    ['s355j2', 'non-alloyed-steel', 'Aciers non alliés – P 1.1-1.5'],
+    ['c45', 'non-alloyed-steel', 'Aciers non alliés – P 1.1-1.5'],
+    ['42crmo4', 'low-alloyed-steel', 'Aciers faiblement alliés – P 2.1-2.6'],
+    ['16mncr5', 'low-alloyed-steel', 'Aciers faiblement alliés – P 2.1-2.6'],
+    ['20nicrmo2-2', 'low-alloyed-steel', 'Aciers faiblement alliés – P 2.1-2.6'],
+    ['100cr6', 'low-alloyed-steel', 'Aciers faiblement alliés – P 2.1-2.6'],
+  ])(
+    'Given %s When its subgroup is read Then it is %s, as the section %s of the materials page classes it',
+    (slug, subgroup, section) => {
+      const material = MATERIALS.find((candidate) => candidate.slug === slug);
+
+      expect({ subgroup: material?.subgroup, group: material?.isoGroup.cite.locator }).toEqual({
+        subgroup,
+        group: sectionLocator(section),
+      });
+    },
+  );
+
+  it('Given 17-4 PH When its group is read Then M is the one the working list writes for it', () => {
+    expect(MATERIALS.find(({ slug }) => slug === 'x5crnicunb16-4')?.isoGroup).toEqual({
+      value: 'M',
+      cite: {
+        source: WORKING_LIST,
+        locator: 'page 2, ISO M, ligne «\u00a0Précipitation (PH)\u00a0»',
+        basis: 'stated',
+      },
+    });
+  });
+
+  it.each<[string, readonly string[]]>([
+    ['s235jr', [groupList('P'), part('Aciers ISO P', 'Usinabilité en général')]],
+    ['42crmo4', [groupList('P'), part('Aciers ISO P', 'Usinabilité en général')]],
+    ['11smn30', [groupList('P'), part('Aciers ISO P', "Eléments d'alliage", 'Effet positif')]],
+    [
+      'x5crni18-10',
+      [
+        groupList('M'),
+        part('ISO M aciers inoxydables', 'Usinabilité en général'),
+        part('ISO M aciers inoxydables', 'Usinabilité en général'),
+      ],
+    ],
+    [
+      'en-gjl-250',
+      [part('ISO K fontes', 'Usinabilité en général'), groupList('K'), groupList('K')],
+    ],
+    [
+      'en-aw-2024',
+      [
+        part('ISO N - Matières non ferreuses', "Usinabilité de l'aluminium"),
+        groupList('N'),
+        groupList('N'),
+      ],
+    ],
+    [
+      'ta6v',
+      [
+        groupList('S'),
+        part('ISO S, superalliages réfractaires et titane', 'Usinabilité en général'),
+        part('Titane– S 4.1-4.4', 'Usinabilité'),
+      ],
+    ],
+    [
+      '100cr6-trempe',
+      [
+        part('ISO H aciers trempés', 'Usinabilité'),
+        part('ISO H aciers trempés', 'Usinabilité'),
+        groupList('H'),
+      ],
+    ],
+  ])(
+    'Given %s When its behaviour is read Then each sentence cites the section of the materials page that writes it',
+    (slug, locators) => {
+      expect(
+        MATERIALS.find((material) => material.slug === slug)?.behaviour.map(
+          ({ cite }) => cite.locator,
+        ),
+      ).toEqual(locators);
+    },
+  );
 
   it('Given the reference When subgroups are read Then each material sits in a subgroup of its own ISO group', () => {
     expect(
@@ -720,6 +803,8 @@ describe('RECOMMENDATIONS content', () => {
     const covered = new Set(RECOMMENDATIONS.flatMap(({ materials }) => materials));
 
     expect(MATERIALS.filter(({ slug }) => !covered.has(slug)).map(({ slug }) => slug)).toEqual([
+      '11smn30',
+      '11smnpb30',
       'x5crnicunb16-4',
       'stellite-6',
     ]);
@@ -736,11 +821,12 @@ describe('RECOMMENDATIONS content', () => {
     ).toEqual([]);
   });
 
-  describe('Given fictional materials of two subgroups', () => {
+  describe('Given fictional materials of several subgroups', () => {
     const MATERIALS_FIXTURE = [
       aMaterial({ slug: 'alliage-essai-alpha', subgroup: 'austenitic-stainless' }),
       aMaterial({ slug: 'alliage-essai-beta', subgroup: 'duplex-stainless' }),
       aMaterial({ slug: 'alliage-essai-gamma', subgroup: 'stellite' }),
+      aMaterial({ slug: 'alliage-essai-delta', subgroup: 'non-alloyed-steel' }),
     ];
     const advice = (section: string): Sourced<string> => ({
       value: 'Conseil fictif.',
@@ -782,6 +868,15 @@ describe('RECOMMENDATIONS content', () => {
         aRecommendation('external-finishing', {
           materials: ['alliage-essai-beta'],
           grade: advice(AUSTENITIC),
+        }),
+        ['advice-of-another-section'],
+      ],
+      [
+        'an entry citing the sections of two steel subgroups',
+        aRecommendation('external-finishing', {
+          materials: ['alliage-essai-delta'],
+          geometry: [advice('Tournage des aciers non alliés')],
+          grade: advice('Tournage des aciers faiblement alliés'),
         }),
         ['advice-of-another-section'],
       ],

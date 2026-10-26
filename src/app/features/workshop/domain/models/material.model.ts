@@ -8,7 +8,9 @@ export type IsoGroup = {
 };
 
 export type IsoSubgroup =
-  | 'steel'
+  | 'non-alloyed-steel'
+  | 'low-alloyed-steel'
+  | 'free-cutting-steel'
   | 'ferritic-martensitic-stainless'
   | 'austenitic-stainless'
   | 'duplex-stainless'

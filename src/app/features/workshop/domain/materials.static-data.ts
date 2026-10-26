@@ -8,16 +8,18 @@ import type { SourceCitation, Sourced } from './models/source.model';
 
 type Row = { readonly page: number; readonly group: IsoGroupLetter; readonly line: string };
 
+const onWorkingList = ({ page, group, line }: Row): SourceCitation => ({
+  source: 'julien-working-list',
+  locator: `page ${page}, ISO ${group}, ligne «\u00a0${line}\u00a0»`,
+  basis: 'stated',
+});
+
 const listed =
-  ({ page, group, line }: Row) =>
+  (row: Row) =>
   (system: DesignationSystem, value: string): Designation => ({
     value,
     system,
-    cite: {
-      source: 'julien-working-list',
-      locator: `page ${page}, ISO ${group}, ligne «\u00a0${line}\u00a0»`,
-      basis: 'stated',
-    },
+    cite: onWorkingList(row),
   });
 
 const section = (name: string): string => `section «\u00a0${name}\u00a0»`;
@@ -25,13 +27,9 @@ const section = (name: string): string => `section «\u00a0${name}\u00a0»`;
 const GROUP_LIST = (letter: IsoGroupLetter): string =>
   `${section('Groupes de matières usinées')}, ISO ${letter}`;
 
-const classedIn = (
-  letter: IsoGroupLetter,
-  locator: string,
-  basis: SourceCitation['basis'] = 'stated',
-): Sourced<IsoGroupLetter> => ({
+const classedIn = (letter: IsoGroupLetter, locator: string): Sourced<IsoGroupLetter> => ({
   value: letter,
-  cite: { source: 'sandvik-workpiece-materials', locator, basis },
+  cite: { source: 'sandvik-workpiece-materials', locator, basis: 'stated' },
 });
 
 const advice = (
@@ -46,6 +44,9 @@ const advice = (
 const groupAdvice = (letter: IsoGroupLetter, value: string): Sourced<string> =>
   advice(GROUP_LIST(letter), 'group', value);
 
+const heading = (name: string, ...headings: readonly string[]): string =>
+  [section(name), ...headings.map((title) => `«\u00a0${title}\u00a0»`)].join(', ');
+
 const NON_ALLOYED = classedIn('P', section('Aciers non alliés – P 1.1-1.5'));
 const LOW_ALLOYED = classedIn('P', section('Aciers faiblement alliés – P 2.1-2.6'));
 const FERRITIC_MARTENSITIC_SECTION = 'Aciers inoxydables ferritiques et martensitiques – P5.0-5.1';
@@ -55,11 +56,6 @@ const AUSTENITIC = classedIn(
   section('Acier inoxydable austénitique et super-austénitique – M1.0-2.0'),
 );
 const DUPLEX_GROUP = classedIn('M', section('Acier inoxydable duplex – M 3.41-3.42'));
-const STAINLESS_BY_CHROMIUM = classedIn(
-  'M',
-  `${GROUP_LIST('M')} (alliage à 12\u00a0% de chrome minimum)`,
-  'deduced',
-);
 const GREY = classedIn(
   'K',
   section('Fontes malléables (MCI) K 1.1-1.2 et fontes grises K 2.1-2.3'),
@@ -77,21 +73,43 @@ const STELLITES = classedIn(
 );
 const HARDENED = classedIn('H', GROUP_LIST('H'));
 
+const STEEL_GROUP = groupAdvice(
+  'P',
+  'Usinabilité en général bonne, mais elle varie beaucoup avec la dureté et la teneur en carbone.',
+);
+
 const STEEL_BEHAVIOUR: Material['behaviour'] = [
-  groupAdvice(
-    'P',
-    'Usinabilité en général bonne, mais elle varie beaucoup avec la dureté et la teneur en carbone.',
+  STEEL_GROUP,
+  advice(
+    heading('Aciers ISO P', 'Usinabilité en général'),
+    'group',
+    'Les aciers bas carbone produisent des copeaux plus longs et collants, qui demandent des arêtes vives.',
   ),
-  groupAdvice('P', "L'acier bas carbone donne un copeau long et collant."),
 ];
+
+const FREE_CUTTING_BEHAVIOUR: Material['behaviour'] = [
+  STEEL_GROUP,
+  advice(
+    heading('Aciers ISO P', "Eléments d'alliage", 'Effet positif'),
+    'subgroup',
+    'Dans les aciers de décolletage, le soufre et le plomb réduisent le frottement entre le copeau et la plaquette et améliorent la fragmentation des copeaux.',
+  ),
+];
+
+const STAINLESS_MACHINABILITY = heading('ISO M aciers inoxydables', 'Usinabilité en général');
 
 const STAINLESS_BEHAVIOUR: Material['behaviour'] = [
   groupAdvice(
     'M',
-    "Écrouissage, arête rapportée et chaleur\u00a0: l'usure en entaille est marquée.",
+    "Les arêtes de coupe subissent beaucoup de chaleur, de l'usure en entaille et des arêtes rapportées.",
   ),
   advice(
-    `${section('ISO M aciers inoxydables')}, «\u00a0Usinabilité en général\u00a0»`,
+    STAINLESS_MACHINABILITY,
+    'group',
+    "L'usinage génère des efforts de coupe élevés et des surfaces écrouies en coupe.",
+  ),
+  advice(
+    STAINLESS_MACHINABILITY,
     'group',
     'Le contrôle des copeaux est correct dans les ferritiques et les martensitiques, plus complexe dans les austénitiques et les duplex.',
   ),
@@ -111,29 +129,65 @@ const FERRITIC_MARTENSITIC_BEHAVIOUR: Material['behaviour'] = [
 ];
 
 const CAST_IRON_BEHAVIOUR: Material['behaviour'] = [
-  groupAdvice('K', 'Copeau court et usinabilité en général bonne.'),
-  groupAdvice('K', 'La fonte grise est la plus facile, la nodulaire plus exigeante.'),
+  advice(
+    heading('ISO K fontes', 'Usinabilité en général'),
+    'group',
+    'Matière à copeaux courts, avec un bon contrôle des copeaux dans la plupart des conditions.',
+  ),
+  groupAdvice(
+    'K',
+    'Les fontes grises et malléables sont assez faciles à usiner\u202f; les nodulaires, compactes et bainitiques sont plus difficiles.',
+  ),
+  groupAdvice('K', 'Toutes les fontes contiennent du SiC, très abrasif pour les arêtes de coupe.'),
 ];
 
 const NON_FERROUS_BEHAVIOUR: Material['behaviour'] = [
+  advice(
+    heading('ISO N - Matières non ferreuses', "Usinabilité de l'aluminium"),
+    'group',
+    'Matière à copeaux longs, dont le contrôle des copeaux est relativement facile si elle est alliée.',
+  ),
   groupAdvice(
     'N',
-    'Métal tendre à copeau long, souvent facile à usiner, qui réussit avec des arêtes vives.',
+    'Métal tendre\u202f; les plaquettes à arêtes vives y ont en général une longue durée de vie.',
   ),
-  groupAdvice('N', 'Un aluminium riche en silicium devient très abrasif.'),
+  groupAdvice('N', "L'aluminium est très abrasif quand sa teneur en silicium atteint 13\u00a0%."),
 ];
 
 const SUPERALLOY_BEHAVIOUR: Material['behaviour'] = [
   groupAdvice(
     'S',
-    'Le groupe le plus difficile\u00a0: efforts de coupe élevés, chaleur, écrouissage et copeau dur à maîtriser.',
+    "Collants, ils créent des arêtes rapportées, s'écrouissent en coupe et génèrent de la chaleur\u202f; beaucoup plus difficiles à couper que les aciers inoxydables.",
   ),
-  groupAdvice('S', "Le titane conduit mal la chaleur et peut réagir avec l'outil."),
+  advice(
+    heading('ISO S, superalliages réfractaires et titane', 'Usinabilité en général'),
+    'group',
+    'Contrôle des copeaux difficile, efforts de coupe et puissance requise relativement élevés.',
+  ),
+  advice(
+    heading('Titane– S 4.1-4.4', 'Usinabilité'),
+    'group',
+    'Le titane conduit mal la chaleur\u202f; une vitesse de coupe trop élevée provoque une réaction chimique entre le copeau et la plaquette.',
+  ),
 ];
 
+const HARD_MACHINABILITY = heading('ISO H aciers trempés', 'Usinabilité');
+
 const HARD_BEHAVIOUR: Material['behaviour'] = [
-  groupAdvice('H', 'Le plus petit groupe, surtout usiné en finition.'),
-  groupAdvice('H', 'Efforts de coupe et chaleur élevés.'),
+  advice(
+    HARD_MACHINABILITY,
+    'group',
+    "Le plus petit groupe du point de vue de l'usinage\u202f; la finition est l'opération la plus courante.",
+  ),
+  advice(
+    HARD_MACHINABILITY,
+    'group',
+    'Les efforts de coupe et la puissance requise sont relativement élevés.',
+  ),
+  groupAdvice(
+    'H',
+    "Ces matières génèrent de la chaleur à la coupe et sont très abrasives pour l'arête.",
+  ),
 ];
 
 const FREE_CUTTING = listed({ page: 1, group: 'P', line: 'Décolletage' });
@@ -146,7 +200,8 @@ const AUSTENITIC_FREE_CUTTING = listed({ page: 2, group: 'M', line: 'Austénitiq
 const AUSTENITIC_STANDARD = listed({ page: 2, group: 'M', line: 'Austénitique (Standard)' });
 const AUSTENITIC_MOLYBDENUM = listed({ page: 2, group: 'M', line: 'Austénitique (Molybdène)' });
 const MARTENSITIC = listed({ page: 2, group: 'M', line: 'Martensitique' });
-const PRECIPITATION = listed({ page: 2, group: 'M', line: 'Précipitation (PH)' });
+const PRECIPITATION_ROW: Row = { page: 2, group: 'M', line: 'Précipitation (PH)' };
+const PRECIPITATION = listed(PRECIPITATION_ROW);
 const DUPLEX = listed({ page: 2, group: 'M', line: 'Duplex (Austéno-ferritique)' });
 const ALU_COPPER = listed({ page: 2, group: 'N', line: 'Alu Cuivre (2000)' });
 const ALU_FREE_CUTTING = listed({ page: 2, group: 'N', line: 'Alu Décolletage' });
@@ -170,8 +225,8 @@ export const MATERIALS: readonly Material[] = [
       FREE_CUTTING('afnor-legacy', 'S250'),
     ],
     isoGroup: NON_ALLOYED,
-    subgroup: 'steel',
-    behaviour: STEEL_BEHAVIOUR,
+    subgroup: 'free-cutting-steel',
+    behaviour: FREE_CUTTING_BEHAVIOUR,
   },
   {
     slug: '11smnpb30',
@@ -182,8 +237,8 @@ export const MATERIALS: readonly Material[] = [
       FREE_CUTTING('afnor-legacy', 'S250Pb'),
     ],
     isoGroup: NON_ALLOYED,
-    subgroup: 'steel',
-    behaviour: STEEL_BEHAVIOUR,
+    subgroup: 'free-cutting-steel',
+    behaviour: FREE_CUTTING_BEHAVIOUR,
   },
   {
     slug: 's235jr',
@@ -194,7 +249,7 @@ export const MATERIALS: readonly Material[] = [
       STRUCTURAL('afnor-legacy', 'E24'),
     ],
     isoGroup: NON_ALLOYED,
-    subgroup: 'steel',
+    subgroup: 'non-alloyed-steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -206,7 +261,7 @@ export const MATERIALS: readonly Material[] = [
       STRUCTURAL('afnor-legacy', 'E36'),
     ],
     isoGroup: NON_ALLOYED,
-    subgroup: 'steel',
+    subgroup: 'non-alloyed-steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -219,7 +274,7 @@ export const MATERIALS: readonly Material[] = [
       MEDIUM_CARBON('afnor-legacy', 'XC45'),
     ],
     isoGroup: NON_ALLOYED,
-    subgroup: 'steel',
+    subgroup: 'non-alloyed-steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -231,7 +286,7 @@ export const MATERIALS: readonly Material[] = [
       CR_MO('afnor-legacy', '42CD4'),
     ],
     isoGroup: LOW_ALLOYED,
-    subgroup: 'steel',
+    subgroup: 'low-alloyed-steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -243,7 +298,7 @@ export const MATERIALS: readonly Material[] = [
       CASE_HARDENING('afnor-legacy', '16MC5'),
     ],
     isoGroup: LOW_ALLOYED,
-    subgroup: 'steel',
+    subgroup: 'low-alloyed-steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -255,7 +310,7 @@ export const MATERIALS: readonly Material[] = [
       CASE_HARDENING('afnor-legacy', '20NCD2'),
     ],
     isoGroup: LOW_ALLOYED,
-    subgroup: 'steel',
+    subgroup: 'low-alloyed-steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -267,7 +322,7 @@ export const MATERIALS: readonly Material[] = [
       BEARING('afnor-legacy', '100C6'),
     ],
     isoGroup: LOW_ALLOYED,
-    subgroup: 'steel',
+    subgroup: 'low-alloyed-steel',
     behaviour: STEEL_BEHAVIOUR,
   },
   {
@@ -342,7 +397,7 @@ export const MATERIALS: readonly Material[] = [
       PRECIPITATION('aisi', '630'),
       PRECIPITATION('afnor-legacy', 'Z6CNU17-04'),
     ],
-    isoGroup: STAINLESS_BY_CHROMIUM,
+    isoGroup: { value: 'M', cite: onWorkingList(PRECIPITATION_ROW) },
     subgroup: 'precipitation-hardening-stainless',
     behaviour: STAINLESS_BEHAVIOUR,
   },

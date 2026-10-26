@@ -152,7 +152,7 @@ const INTERNAL = {
     shape: written(
       'sandvik-internal-turning',
       'Chariotage',
-      "plaquette carrée avec un angle d'attaque de 75°, sans épaulement",
+      "plaquette carrée avec un angle d'attaque de 75°, sans épaulement et si les conditions sont stables",
     ),
   },
   profiling: {
@@ -197,10 +197,8 @@ const SEMI_FINISHING_TOLERANCE = deduced(
 );
 const FINISHING_TOLERANCE = deduced('sandvik-choose-insert', section('Finition', 'classe M'));
 
-const STEEL_SECTIONS = {
-  nonAlloyed: 'Tournage des aciers non alliés',
-  lowAlloyed: 'Tournage des aciers faiblement alliés',
-} as const;
+const NON_ALLOYED_SECTION = 'Tournage des aciers non alliés';
+const LOW_ALLOYED_SECTION = 'Tournage des aciers faiblement alliés';
 const FERRITIC_MARTENSITIC_SECTION =
   'Tournage des aciers inoxydables ferritiques et martensitiques';
 const AUSTENITIC_SECTION = 'Tournage des aciers inoxydables austénitiques';
@@ -326,34 +324,44 @@ type SubgroupAdvice = Pick<RecommendationEntry, 'materials' | 'grade' | 'pitfall
   readonly geometry: Sourced<string>;
 };
 
-const STEEL: SubgroupAdvice = {
-  materials: [
-    '11smn30',
-    '11smnpb30',
-    's235jr',
-    's355j2',
-    'c45',
-    '42crmo4',
-    '16mncr5',
-    '20nicrmo2-2',
-    '100cr6',
-  ],
+const NON_ALLOYED_STEEL: SubgroupAdvice = {
+  materials: ['s235jr', 's355j2', 'c45'],
   geometry: subgroupAdvice(
-    STEEL_SECTIONS.nonAlloyed,
+    NON_ALLOYED_SECTION,
     "Sur l'acier non allié, arêtes vives et géométries légères limitent l'adhérence de la matière, et une plaquette wiper est conseillée.",
   ),
+  grade: {
+    value:
+      'Sur les aciers bas carbone (moins de 0,25\u00a0%), des nuances à revêtement mince réduisent la tendance au collage.',
+    cite: {
+      source: 'sandvik-workpiece-materials',
+      locator: `${section('Aciers non alliés – P 1.1-1.5')}, «\u00a0Usinabilité\u00a0»`,
+      basis: 'stated',
+      scope: 'subgroup',
+    },
+  },
+  pitfalls: [
+    subgroupAdvice(
+      NON_ALLOYED_SECTION,
+      "Sous 0,25 % de carbone, le copeau se fragmente mal et l'arête rapportée guette : vise une avance et une vitesse élevées.",
+    ),
+  ],
+};
+
+const LOW_ALLOYED_STEEL: SubgroupAdvice = {
+  materials: ['42crmo4', '16mncr5', '20nicrmo2-2', '100cr6'],
+  geometry: subgroupAdvice(
+    LOW_ALLOYED_SECTION,
+    'Sur matière non trempée, la série de géométries pour aciers en premier choix.',
+  ),
   grade: subgroupAdvice(
-    STEEL_SECTIONS.lowAlloyed,
-    'Nuances et géométries pour aciers en premier choix ; sur acier trempé, une nuance plus dure (céramique, CBN ou nuance pour fonte).',
+    LOW_ALLOYED_SECTION,
+    'Nuances pour aciers en premier choix ; sur acier trempé, une nuance plus dure (céramique, CBN ou nuance pour fonte).',
   ),
   pitfalls: [
     subgroupAdvice(
-      STEEL_SECTIONS.nonAlloyed,
-      "Sous 0,25 % de carbone, le copeau se fragmente mal et l'arête rapportée guette : vise une avance et une vitesse élevées.",
-    ),
-    subgroupAdvice(
-      STEEL_SECTIONS.lowAlloyed,
-      "Sur l'acier allié, l'usure en cratère et en dépouille domine ; sur l'acier trempé, la chaleur déforme l'arête.",
+      LOW_ALLOYED_SECTION,
+      "L'usure en cratère et l'usure en dépouille sont les plus courantes ; sur matière trempée, la chaleur entraîne une déformation plastique de l'arête.",
     ),
   ],
 };
@@ -684,7 +692,7 @@ const STEEL_INSIDE_FINISHING = iso<InternalSituation>(
 );
 
 export const RECOMMENDATIONS: readonly RecommendationEntry[] = [
-  ...[STEEL, FERRITIC_MARTENSITIC].flatMap((advice) => [
+  ...[NON_ALLOYED_STEEL, LOW_ALLOYED_STEEL, FERRITIC_MARTENSITIC].flatMap((advice) => [
     external(advice, 'external-roughing', STEEL_ROUGHING),
     external(advice, 'external-semi-finishing', STEEL_SEMI_FINISHING),
     external(advice, 'external-finishing', STEEL_FINISHING),

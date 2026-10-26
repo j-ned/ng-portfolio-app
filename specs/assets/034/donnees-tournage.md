@@ -39,22 +39,22 @@ correspondances indicatives. Groupe : S5, la section qui classe la famille de la
 
 | Matière (slug) | Désignations | Groupe, citation S5 | Sous-groupe (section S4) |
 |---|---|---|---|
-| `11smn30` | 11SMn30, 1.0715, 1215, S250 | P, « Aciers non alliés – P 1.1-1.5 » | aciers (non alliés, faiblement alliés, fortement alliés) |
-| `11smnpb30` | 11SMnPb30, 1.0718, 12L14, S250Pb | P, « Aciers non alliés – P 1.1-1.5 » | aciers |
-| `s235jr` | S235JR, 1.0038, A36, E24 | P, « Aciers non alliés – P 1.1-1.5 » | aciers |
-| `s355j2` | S355J2, 1.0577, A572 Gr.50, E36 | P, « Aciers non alliés – P 1.1-1.5 » | aciers |
-| `c45` | C45, 1.0503, 1045, XC48, XC45 | P, « Aciers non alliés – P 1.1-1.5 » | aciers |
-| `42crmo4` | 42CrMo4, 1.7225, 4140, 42CD4 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers |
-| `16mncr5` | 16MnCr5, 1.7131, 5115, 16MC5 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers |
-| `20nicrmo2-2` | 20NiCrMo2-2, 1.6523, 8620, 20NCD2 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers |
-| `100cr6` | 100Cr6, 1.3505, 52100, 100C6 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers |
+| `11smn30` | 11SMn30, 1.0715, 1215, S250 | P, « Aciers non alliés – P 1.1-1.5 » | aciers de décolletage (P1.4 chez S5) : **aucune section** |
+| `11smnpb30` | 11SMnPb30, 1.0718, 12L14, S250Pb | P, « Aciers non alliés – P 1.1-1.5 » | aciers de décolletage : **aucune section** |
+| `s235jr` | S235JR, 1.0038, A36, E24 | P, « Aciers non alliés – P 1.1-1.5 » | aciers non alliés (« Tournage des aciers non alliés ») |
+| `s355j2` | S355J2, 1.0577, A572 Gr.50, E36 | P, « Aciers non alliés – P 1.1-1.5 » | aciers non alliés |
+| `c45` | C45, 1.0503, 1045, XC48, XC45 | P, « Aciers non alliés – P 1.1-1.5 » | aciers non alliés |
+| `42crmo4` | 42CrMo4, 1.7225, 4140, 42CD4 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers faiblement alliés (« Tournage des aciers faiblement alliés ») |
+| `16mncr5` | 16MnCr5, 1.7131, 5115, 16MC5 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers faiblement alliés |
+| `20nicrmo2-2` | 20NiCrMo2-2, 1.6523, 8620, 20NCD2 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers faiblement alliés |
+| `100cr6` | 100Cr6, 1.3505, 52100, 100C6 | P, « Aciers faiblement alliés – P 2.1-2.6 » | aciers faiblement alliés |
 | `x20cr13-x30cr13` | X20Cr13, X30Cr13, 1.4021, 1.4028, 420, Z20C13, Z30C13 | **P**, « Aciers inoxydables ferritiques et martensitiques – P5.0-5.1 » | **inox ferritiques et martensitiques (P5)** |
 | `x8crnis18-9` | X8CrNiS18-9, 1.4305, 303, Z8CNF18-09 | M, « Acier inoxydable austénitique et super-austénitique – M1.0-2.0 » | inox austénitiques |
 | `x5crni18-10` | X5CrNi18-10, 1.4301, 304, Z7CN18-09 | M, idem | inox austénitiques |
 | `x2crni18-9` | X2CrNi18-9, 1.4307, 304L, Z3CN18-10 | M, idem | inox austénitiques |
 | `x2crnimo17-12-2` | X2CrNiMo17-12-2, 1.4404, 316L, Z3CND17-11-02 | M, idem | inox austénitiques |
 | `x2crnimon22-5-3` | X2CrNiMoN22-5-3, 1.4462, 2205, Z3CND22-05Az | M, « Acier inoxydable duplex – M 3.41-3.42 » | **inox duplex** |
-| `x5crnicunb16-4` | X5CrNiCuNb16-4, 1.4542, 17-4 PH, 630, Z6CNU17-04 | M, « Groupes de matières usinées », ISO M (12 % de chrome minimum), **déduit** | inox durcis par précipitation : **aucune section** |
+| `x5crnicunb16-4` | X5CrNiCuNb16-4, 1.4542, 17-4 PH, 630, Z6CNU17-04 | M, liste de travail, page 2, ISO M, ligne « Précipitation (PH) » (écrit, indicatif) | inox durcis par précipitation : **aucune section** |
 | `en-gjl-250` | EN-GJL-250, GG25, FGL 250, Ft 25 | K, « Fontes malléables (MCI) K 1.1-1.2 et fontes grises K 2.1-2.3 » | fontes |
 | `en-gjs-400-15` | EN-GJS-400-15, FGS 400, GGG40 | K, « Fonte nodulaire (NCI) K 3.1-3.5 » | fontes |
 | `en-gjs-500-7` | EN-GJS-500-7, FGS 500, GGG50 | K, « Fonte nodulaire (NCI) K 3.1-3.5 » | fontes |
@@ -86,8 +86,18 @@ second garde que chaque sous-groupe appartient au groupe de sa matière.
 
 **17-4 PH** : S5 range les inox durcis par précipitation selon leur structure, ferritiques ou
 martensitiques en P5 (`P5.0.Z.PH`), austénitiques en M (`M1.0.Z.PH`, exemple 17/7), sans nommer le
-17-4 PH. Aucune page lue ne dit sa structure ; il reste en M (liste de travail), rattaché au groupe M
-par la définition de S5 (chrome à 12 % minimum, base **déduite**), sans recommandation.
+17-4 PH. Aucune page lue ne dit sa structure, et le chrome ne départage pas M de P (les inox ferritiques
+et martensitiques, à 12 % de chrome ou plus, sont en P chez S5). Il reste en M parce que la liste de
+travail l'y écrit (page 2, ISO M, ligne « Précipitation (PH) », base écrite, correspondance
+indicative), sans recommandation. Un test épingle cette seule exception à la règle « le groupe d'une
+fiche est cité par la page qui nomme le groupe ».
+
+**Aciers** : un sous-groupe par section de S4. Non alliés (S235JR, S355J2, C45) : « Tournage des
+aciers non alliés », carbone inférieur ou égal à 0,55 %. Faiblement alliés (42CrMo4, 16MnCr5,
+20NiCrMo2-2, 100Cr6) : « Tournage des aciers faiblement alliés », P2.x ; S5 : moins de 5 % d'éléments
+d'alliage. Aciers de décolletage (11SMn30, 11SMnPb30) : P1.4 chez S5, aucune section S4, donc aucune
+recommandation ; S5 écrit que le soufre et le plomb y améliorent la fragmentation des copeaux, ce que
+le piège des non alliés contredirait. Aucune matière de la liste ne relève des fortement alliés.
 
 ## Situations
 
@@ -123,10 +133,10 @@ table de lecture (forme et tolérance : MMC ; dépouille et fixation : KYO p. B1
 
 | Sous-groupe | Opération | Situations → code |
 |---|---|---|
-| Aciers, inox ferritiques et martensitiques | Ébauche ext. | chariotage avec épaulement **CNMG** · sans épaulement **SNMG** · dressage **WNMG** |
+| Aciers non alliés, faiblement alliés, inox ferritiques et martensitiques | Ébauche ext. | chariotage avec épaulement **CNMG** · sans épaulement **SNMG** · dressage **WNMG** |
 | idem | Semi-finition ext. | chariotage avec épaulement **CNMG** · profilage **DNMG** · dressage **WNMG** |
 | idem | Finition ext. | chariotage avec épaulement **CNMG** · profilage **DNMG** · profilage à forte rampe **VNMG** |
-| Aciers, inox ferritiques et martensitiques, fontes | Ébauche int. | arête plus résistante **CCMT** · avec épaulement **TCMT** |
+| Aciers non alliés, faiblement alliés, inox ferritiques et martensitiques, fontes | Ébauche int. | arête plus résistante **CCMT** · avec épaulement **TCMT** |
 | idem | Finition int. | avec épaulement **TCMT** · profilage **DCMT** |
 | Inox austénitiques | Ébauche, semi-finition, finition ext. | chariotage sans épaulement **SCMT** · profilage **RCMT** (ronde) |
 | Inox austénitiques | Ébauche, finition int. | chariotage sans épaulement **SCMT** |
@@ -142,8 +152,9 @@ table de lecture (forme et tolérance : MMC ; dépouille et fixation : KYO p. B1
 | Superalliages et titane | Ébauche, semi-finition, finition ext. | profilage **RCGT** (une seule proposition) |
 | Aciers trempés | Finition ext. | chariotage avec épaulement **CNGA** · dressage **WNGA** |
 
-**Sans recommandation** (aucune section S4 pour leur sous-groupe, décision 17) : `x5crnicunb16-4`
-(17-4 PH) et `stellite-6` (Stellite 6), pour toutes les opérations.
+**Sans recommandation** (aucune section S4 pour leur sous-groupe, décision 17) : `11smn30`,
+`11smnpb30` (aciers de décolletage), `x5crnicunb16-4` (17-4 PH) et `stellite-6` (Stellite 6), pour
+toutes les opérations.
 
 ### D'où vient chaque lettre
 
@@ -182,18 +193,24 @@ table de lecture (forme et tolérance : MMC ; dépouille et fixation : KYO p. B1
   l'intérieur, S3 « Chariotage », écrit (angle de pointe faible, petit rayon, porte-à-faux le plus petit
   possible) ; (3) la section du sous-groupe dans S4, écrit, « conseil du sous-groupe ».
 - Nuance : S4, section du sous-groupe, écrit, « conseil du sous-groupe ». En mots (CVD, PVD, CBN, PCD,
-  céramique, carbure non revêtu), aucun nom commercial.
+  céramique, carbure non revêtu), aucun nom commercial. Exception : la section des aciers non alliés
+  n'écrit aucune nuance ; la leur vient de S5, « Aciers non alliés – P 1.1-1.5 », « Usinabilité »
+  (nuances à revêtement mince contre le collage des aciers bas carbone), écrit.
 - Pièges : S4, section du sous-groupe, « conseil du sous-groupe » ; à l'intérieur, en plus, S3
   (introduction, copeau mal évacué). Aucun piège pour les fontes : S4 n'en écrit aucun.
-- Comportement à la coupe (fiche matière) : S5, « conseil du groupe » pour les textes de groupe,
-  « conseil du sous-groupe » pour X20Cr13 (section P5).
+- Comportement à la coupe (fiche matière) : S5, chaque phrase citée à la section qui l'écrit
+  (« Groupes de matières usinées » pour le paragraphe du groupe, sinon la section du groupe : « Aciers
+  ISO P », « ISO M aciers inoxydables », « ISO K fontes », « ISO N - Matières non ferreuses », « ISO S,
+  superalliages réfractaires et titane », « Titane– S 4.1-4.4 », « ISO H aciers trempés », avec
+  l'intertitre) ; « conseil du groupe », ou « conseil du sous-groupe » pour X20Cr13 (section P5) et les
+  aciers de décolletage (« Aciers ISO P », « Eléments d'alliage », « Effet positif »).
 - Vitesse de coupe : jamais renseignée (décision 13).
 
 ## Cases laissées vides, et pourquoi
 
 | Cases | Raison |
 |---|---|
-| 17-4 PH, Stellite 6 : toutes | Aucune section S4 pour leur sous-groupe (décision 17). |
+| Aciers de décolletage, 17-4 PH, Stellite 6 : toutes | Aucune section S4 pour leur sous-groupe (décision 17). |
 | Aciers trempés : ébauche et semi-finition ext. | S4 : tournage dur aux profondeurs de coupe aussi petites que possible ; S5 : groupe surtout usiné en finition. Aucune étape d'ébauche applicable. |
 | Aciers trempés : ébauche et finition int. | Aucune page lue ne traite le tournage dur intérieur. |
 | Superalliages et titane : ébauche et finition int. | Principes contradictoires : S4 veut un angle d'attaque de moins de 45°, S3 un angle « toujours supérieur à 75° » à l'intérieur. Aucune forme ne satisfait les deux. |
