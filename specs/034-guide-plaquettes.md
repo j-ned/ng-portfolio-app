@@ -678,6 +678,8 @@ PR 5 (interface)
 - **Tranche 7 — le guide existe et se trouve** : token, copie, page `InsertGuide` (`h1`, chapô,
   avertissement, statut vide), route `atelier/plaquettes` + SEO, `Server`, location nginx, sitemap,
   carte sur l'accueil (`WorkshopTool`), scénario axe, gardes CI.
+  `INSERT_GUIDE_REFERENCE` reporté à la tranche 8 (décision du 2026-10-26) : rien dans cette tranche
+  ne lit le référentiel, et le token ne se construit pas tant qu'`isoGroups` est vide.
 - **Tranche 8 — je choisis ma matière au clavier, et l'URL la garde** : `MaterialCombobox`,
   `MaterialSheet`, `IsoGroupBadge`, `SourceCitation`, modèle et `form()`, input `matiere`, effet
   d'URL ; tokens ISO si validés.
@@ -1176,6 +1178,79 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
   `string`, géométrie non sourcée, unité libre, `entry` optionnelle, famille vide permise,
   `RECOMMENDATIONS` typé `unknown[]`) : chaque garantie tombe sous le sien (`TS2578`, `TS2344`).
 
+### Tranche 7 — le guide existe et se trouve
+
+Joué dans la même session, RED puis GREEN par le même agent (exception validée le 2026-10-25).
+`INSERT_GUIDE_REFERENCE` n'en fait pas partie (décision du 2026-10-26, cf. journal) : aucun test de
+la tranche ne lit le référentiel. Le titre et la description SEO du guide, l'avertissement et le
+résumé de la carte sont épinglés mot pour mot ; le chapô reprend le résumé validé de la carte.
+
+`features/workshop/domain/workshop-space.static-data.spec.ts` (2 tests ajoutés)
+- `toolsHeading` vaut « Les outils ». **RED**.
+- Golden de `tools` : une carte `insert-guide`, sur-titre « Outil », titre « Guide des plaquettes »,
+  résumé validé (U+00A0 avant le deux-points), `path` `/atelier/plaquettes`. **RED**.
+
+`features/workshop/pages/workshop/workshop.spec.ts` (2 tests ajoutés)
+- `[data-testid="workshop-tools"]` est une `SECTION` dont l'`aria-labelledby` désigne un `H2` de
+  texte `toolsHeading`. **RED**.
+- Chaque `[data-testid="workshop-tool-card"]` est un `A` dont le `href` vaut `tool.path`, et dont les
+  enfants portent, dans l'ordre, sur-titre, titre et résumé. Vert face au stub (`tools: []`) par
+  construction ; le nombre de cartes est tenu par le golden ci-dessus.
+
+`features/workshop/application/insert-guide-copy.spec.ts` (1 test) : golden de
+`INSERT_GUIDE_COPY` (`heading`, `lead`, `disclaimer`). **RED**.
+
+`features/workshop/pages/insert-guide/insert-guide.spec.ts` (5 tests, TestBed, `whenStable`)
+- Un seul `h1`, `data-testid="insert-guide-title"`, texte `INSERT_GUIDE_COPY.heading`. **RED**.
+- `insert-guide-lead` est un `P` de texte `lead`. **RED**.
+- `insert-guide-disclaimer` est un `P` de texte `disclaimer`. **RED**.
+- `insert-guide-status` porte `role="status"` et est vide. **RED**.
+- Aucun `main`, `header` ni `footer` ; classes de l'hôte exactement `block min-h-svh pt-20`. **RED**.
+
+`src/app/app.routes.workshop.spec.ts` (7 tests ajoutés)
+- `/atelier/plaquettes?matiere=inconnue` avec les routes réelles → feuille `atelier/plaquettes`,
+  composant `InsertGuide`. **RED**.
+- Route de premier niveau, ni `component` ni `loadChildren`, `loadComponent()` rend `InsertGuide`.
+  **RED**.
+- Titre d'onglet `Guide des plaquettes de tournage | Julien Nédellec`. **RED**.
+- `data` exacte : `seo` seul (pas de `preload`), description proposée, canonical
+  `${siteUrl}/atelier/plaquettes` sans query string, `type: 'website'`, `BreadcrumbList` Accueil →
+  L'atelier → Guide des plaquettes. **RED**.
+- Description de 1 à 160 caractères. **RED**.
+- `ROUTE_TEXTS['/atelier/plaquettes']` porte titre et SEO. **RED**.
+- Chaque `path` de `WORKSHOP_SPACE.tools` mène à une route déclarée (URL gardée, feuille = chemin).
+  Vert face au stub par construction (aucun outil) ; il juge la carte au GREEN.
+
+Suites existantes adaptées
+- `app.routes.server.spec.ts` : `atelier/plaquettes` en `Server` (test neuf) ; « exactly the content
+  routes » devient « exactly the routes nginx relays to Node » et inclut le guide. **RED** (2).
+- `src/server/nginx-config.spec.ts` : la regex de la location SSR, lue dans le `Dockerfile`, relaie
+  `/`, `/about`, un projet, un article, `/atelier/plaquettes` et `/atelier/plaquettes/` ; elle
+  écarte `/atelier`, `/atelier/`, `/atelier/autre`, `/atelier/plaquettes/autre`, `/wp-login.php`.
+  **RED** (2, les deux chemins du guide) ; les 9 autres passent dès l'état actuel.
+- `src/server/feeds/sitemap.spec.ts` : `/atelier/plaquettes` après `/atelier`, huit pages statiques,
+  et un test neuf pour son entrée (`monthly`, `0.7`, sans query string). **RED** (3).
+- `src/app/workshop-confidentiality.spec.ts` : `INSERT_GUIDE_COPY` et
+  `ROUTE_TEXTS['/atelier/plaquettes']` ajoutés aux données réelles gardées. Verts face au stub.
+- `src/app/testing/editorial-sources.ts` : `INSERT_GUIDE_COPY` ajouté aux verrous éditoriaux.
+- `e2e/a11y/scenarios.ts` : `{ path: '/atelier/plaquettes', ready: 'insert-guide-title' }`.
+
+Scaffold dû au GREEN : `WorkshopTool` (avec `summary`), `toolsHeading` et `tools` dans
+`WorkshopSpace` ; `application/insert-guide-copy.ts` ; `pages/insert-guide/insert-guide.ts` ; route
+`atelier/plaquettes` ; `Server` dans `app.routes.server.ts` ; location SSR du `Dockerfile` ; entrée du
+sitemap ; section « Les outils » de `Workshop`. Hors tests : job `verify` (`test ! -f
+$browser/atelier/plaquettes/index.html`) ; job `docker` (`/atelier/plaquettes?matiere=inconnue` en
+200 avec `insert-guide-title` et un `X-Cache-Status`, et le guide dans la boucle CSP des pages
+rendues à la requête).
+
+RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_modules/.vite`), avec
+des stubs typés selon le plan (`toolsHeading: ''`, `tools: []`, copie à chaînes vides, composant au
+gabarit vide, routes, sitemap et `Dockerfile` inchangés) : RED confirmé le 2026-10-26 17:55,
+22 failed / 4797 total (Test Files 8 failed | 234 passed), code de sortie 1. Les 22 échecs sont des
+`AssertionError`, aucune erreur de harnais ni de type. Un premier passage avait fait tomber la suite
+`workshop tools` sur « No test found » (`it.each` d'une liste vide) : réécrite en un seul test qui
+parcourt les outils.
+
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
@@ -1184,6 +1259,7 @@ RED, commande du profil `pnpm test`, cache invalidé (`ng cache clean`, `node_mo
 - **Tranche 4 — une désignation tapée n'importe comment retrouve sa matière** : GREEN 4447 passed / 4447 total (au premier cycle), code de sortie 0 · refactor : retrait d'un échappement redondant dans `normalizeDesignation` (`\s` couvre déjà U+00A0 et U+202F en JavaScript) ; diff relu, aucune autre simplification trouvée. Verify reportée : domaine pur, aucune surface atteignable restructurée. Écart : `SourceId` vaut `never` (union fermée sans membre tant qu'aucune source n'est saisie), `Source` non créé (aucun test ne l'exige, il arrive avec `SOURCES` en tranche 5).
 - **Tranche 5 — une donnée sans source ne compile pas** : GREEN 4483 passed / 4483 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de trois types et d'un catalogue vide relu, rien à simplifier). Verify reportée : domaine pur, aucune surface atteignable restructurée. Décision : `ISO_513_GROUPS` n'est pas créé ; avec `SourceId` à `never`, il n'existerait qu'avec une source inventée ou un type affaibli. Reporté à la première PR de données (première source Sandvik Coromant), avec sa garantie de type, le test « chaque groupe ISO cité par une matière a son entrée » et son ajout à `EDITORIAL_SOURCES`. `IsoGroupColor` vaut `never` et `SOURCES` est vide tant qu'aucune source n'est saisie.
 - **Tranche 6 — une combinaison sans recommandation le dit** : GREEN 4645 passed / 4645 total (au premier cycle), code de sortie 0 · refactor : aucun (diff de la PR 4 relu en entier, rien à simplifier sans toucher aux tests). Verify reportée : domaine pur, aucune surface atteignable restructurée. Écarts : `InsertGuideReference` garde `isoGroups` (typé `Readonly<Record<IsoGroupLetter, IsoGroup>>`), parce que le builder `aReference` le remplit ; `IsoDesignationField` et `InsertAspect` restent privés au modèle (aucun consommateur hors du fichier) ; le type de la sélection, `GuideSelection`, est déclaré dans `guide-selection.ts` et repris par `resolveGuideState`. Décision : l'extension de `findConfidentialReferences` au texte libre du référentiel n'est pas faite dans la PR 4, parce que le référentiel est vide. Elle arrive avec la PR 3 (tranche 3), qui crée la fonction, et doit être en place avant la première donnée ; la PR 5 dépend donc de la PR 3.
+- **Tranche 7 — le guide existe et se trouve** : GREEN 4797 passed / 4797 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : aucun (la liste de classes du `h1` est la même que sur l'accueil de l'atelier, le blog et les réalisations ; la sortir en `@utility` toucherait trois fichiers hors de la tranche). Verify faite (§ Verify) : `/atelier` gagne sa carte et `/atelier/plaquettes` devient atteignable. Décision du 2026-10-26 (session principale, option E) : `INSERT_GUIDE_REFERENCE` n'est pas créé dans cette tranche. Sa `factory` devrait rendre un `InsertGuideReference`, dont `isoGroups` (`Record` des six lettres, chaque nom `Sourced<string>`) ne se construit pas tant que `SourceId` vaut `never` : il faudrait inventer une source ou affaiblir le type. Aucun élément de la tranche ne lit le référentiel. Le choix entre retirer `isoGroups` jusqu'à la PR de données (A) et avancer `ISO_513_GROUPS` avec une source réelle (C) se fait à la tranche 8, premier consommateur. Correction du contrat au GREEN : le test des cartes comparait le texte de la carte en une chaîne jointe par des espaces ; les trois `span` de `LinkCard` n'ont pas d'espace entre eux, il compare désormais le texte de chaque enfant (même exigence, mesure juste). Écarts : `INSERT_GUIDE_COPY` ne porte que ce que la page rend (titre, chapô, avertissement), les autres libellés arrivent avec leurs composants (tranches 8 et 9) ; le chapô reprend le résumé validé de la carte ; `WorkshopTool` gagne `summary` (réponse 6 de Julien) ; le guide entre aussi dans la boucle CSP du job `docker` ; `DESIGN.md` § 5 : « Les outils » et « Guide des plaquettes ».
 
 ## Verify
 
@@ -1226,6 +1302,32 @@ Tranche 2, 2026-10-25, worktree `034-pr3`.
 - Captures : en-tête à 1 024 px et drawer ouvert à 375 px (prises dans la session, non versionnées).
 - Console : aucune erreur de l'application ni d'hydratation. Erreurs réseau propres au serveur
   statique sans API : `GET /api/config` 404 et `POST /api/analytics/track` 501.
+- Verdict : **PASS**.
+
+Tranche 7, 2026-10-26, worktree `034-pr5`.
+
+- Steps : `pnpm run build --configuration production` (code de sortie 0, « Prerendered 3 static
+  routes », `browser/atelier/index.html` présent, `browser/atelier/plaquettes/index.html` absent) ;
+  `docker build -t ng-portfolio-app:a11y .` (code 0) puis `ci/a11y-stack.sh up` (image derrière
+  nginx, doublure de l'API). Le serveur Node seul (`server.mjs`) écoute sur 127.0.0.1:4000 et
+  répond 400 hors de nginx : la vérification passe par l'image, comme en production.
+- `curl -D - '/atelier/plaquettes?matiere=inconnue'` : 200, `X-Cache-Status: MISS` (rendu par Node),
+  `cache-control: no-cache`, une seule meta CSP, aucun `'unsafe-inline'` ; corps :
+  `<title>Guide des plaquettes de tournage | Julien Nédellec</title>`, canonical
+  `https://nedellec-julien.fr/atelier/plaquettes`, `h1` « Guide des plaquettes », chapô,
+  avertissement, `p role="status"` vide. `/atelier/` : 200 sans `X-Cache-Status` (fichier).
+  `/atelier/autre` : 404. `/sitemap.xml` liste `/atelier` puis `/atelier/plaquettes`.
+- Navigateur : `/atelier/` en thème sombre, section « Les outils » et carte « Outil · Guide des
+  plaquettes · résumé » ; clic sur la carte → `/atelier/plaquettes` sans rechargement (une seule
+  entrée de navigation), titre, canonical et `BreadcrumbList` à trois niveaux suivent. Chargement
+  direct de `/atelier/plaquettes?matiere=inconnue&operation=gorge` : page rendue, statut vide (rien
+  de sélectionné), URL gardée ; la bascule de thème réagit après hydratation (`app-dark` retiré).
+- Captures : carte de l'accueil et page du guide, sombre puis claire (prises dans la session, non
+  versionnées).
+- Console : aucune erreur de l'application ni d'hydratation ; seule erreur, `GET /api/config` 404,
+  absent de la doublure de l'API.
+- Axe : `pnpm a11y -g atelier`, 4 passed (`/atelier` et `/atelier/plaquettes`, clair et sombre),
+  code de sortie 0.
 - Verdict : **PASS**.
 
 ## Review code

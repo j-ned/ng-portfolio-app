@@ -547,7 +547,12 @@ La cote d'un dessin technique : deux traits de rappel, deux pointes, une ligne i
 
 ### Accueil de l'atelier (`features/workshop/pages/workshop/workshop.ts`)
 
-- Même tête que la liste du blog : `h1` en `font-extrabold` (`clamp(2.75rem, 6vw, 5.25rem)`, `tracking-[-0.04em]`), puis l'intro en `text-muted`, `max-w-[56ch]`, un `<p>` par paragraphe, entrée en `animate-fade-up`. Aucun autocollant, aucun cartouche : la page reste sobre tant qu'elle ne porte que l'intro. Les cartes des outils (`app-link-card`) arrivent avec le premier outil, jamais une section vide avant.
+- Même tête que la liste du blog : `h1` en `font-extrabold` (`clamp(2.75rem, 6vw, 5.25rem)`, `tracking-[-0.04em]`), puis l'intro en `text-muted`, `max-w-[56ch]`, un `<p>` par paragraphe, entrée en `animate-fade-up`. Aucun autocollant, aucun cartouche.
+- **Les outils :** `<section aria-labelledby>` nommée par son `h2` (`section-title`, « Les outils »), `mt-14` sous l'intro ; liste `role="list"` en grille `gap-3`, une colonne en mobile, deux à partir de `sm`, trois à partir de `lg` ; un `a[app-link-card]` par outil, avec sur-titre, titre et résumé (`summary`).
+
+### Guide des plaquettes (`features/workshop/pages/insert-guide/insert-guide.ts`)
+
+- Même tête que l'accueil de l'atelier : `h1` en `font-extrabold`, chapô en `text-muted`, `max-w-[56ch]`. L'avertissement suit en `text-sm text-muted`, `max-w-prose`, toujours visible ; la région `role="status"` (`sr-only`) existe dès le HTML serveur, vide tant que rien n'est choisi.
 
 ### Page 404 (`pages/page-not-found.ts`)
 

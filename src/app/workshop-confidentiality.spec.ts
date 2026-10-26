@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { INSERT_GUIDE_COPY } from '@features/workshop/application/insert-guide-copy';
 import { findConfidentialReferences } from '@features/workshop/domain/confidential-references';
 import { MATERIALS } from '@features/workshop/domain/materials.static-data';
 import { OPERATION_FAMILIES } from '@features/workshop/domain/operations.static-data';
@@ -32,6 +33,8 @@ describe('workshop confidentiality', () => {
     ['OPERATION_FAMILIES', OPERATION_FAMILIES],
     ['RECOMMENDATIONS', RECOMMENDATIONS],
     ['the /atelier route', ROUTE_TEXTS['/atelier']],
+    ['INSERT_GUIDE_COPY', INSERT_GUIDE_COPY],
+    ['the /atelier/plaquettes route', ROUTE_TEXTS['/atelier/plaquettes']],
   ])('Given %s When its texts are read Then none carries a part reference', (name, value) => {
     expect(confidentialPaths(value, name)).toEqual([]);
   });
