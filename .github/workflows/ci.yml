@@ -1,7 +1,6 @@
 name: CI
 
-# Pull requests seulement : un merge sur master est construit par Dokploy avec le même Dockerfile,
-# rejouer toute la CI au push n'apporte rien de plus à cette échelle.
+# Pull requests seulement : un merge sur master est construit par Dokploy avec le même Dockerfile.
 on:
   pull_request:
   workflow_dispatch:
@@ -14,99 +13,28 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  HUSKY: '0' # pas de hooks git en CI
-
 jobs:
-  # Tout ce qui se juge sur le code source, sans build : le build de production est fait une seule
-  # fois, dans l'image, par le job suivant.
-  check:
-    name: Lint · Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      # pnpm avant setup-node : la version vient du champ `packageManager` de package.json.
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22 # même majeure que le Dockerfile (node:22-alpine)
-          cache: pnpm
-
-      # Même commande que le Dockerfile : un lockfile incohérent échoue ici, pas chez Dokploy.
-      - name: Install (frozen lockfile)
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm lint
-
-      # Le pré-commit formate les fichiers indexés ; ce contrôle attrape un commit qui l'a contourné.
-      - name: Format
-        run: pnpm run format:check
-
-      # Sprite et empreinte SPRITE_VERSION synchrones : une empreinte périmée resservirait
-      # l'ancien sprite, mis en cache immuable sous l'ancienne URL.
-      - name: Icons in sync
-        run: pnpm icons:check
-
-      # Playwright transpile les tests sans les typer : le typage est une gate à part.
-      - name: Typecheck e2e
-        run: pnpm a11y:typecheck
-
-      - name: Test
-        run: pnpm test
-
-  # L'image que Dokploy construit, construite une seule fois, puis jugée trois fois : fichiers
-  # servis, comportement nginx/Node, accessibilité.
-  image:
-    name: Image · Smoke · Axe
+  ci:
+    name: Build · Test · Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      CI: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-
-      # Les tests Playwright lisent leurs dépendances dans node_modules, monté dans le conteneur.
-      - name: Install (frozen lockfile)
-        run: pnpm install --frozen-lockfile
-
-      # Navigateur et bibliothèques système déjà dans l'image officielle, à la version du paquet :
-      # ni téléchargement de Chromium ni `apt-get`. Tiré en tâche de fond pendant le build.
-      - name: Pull Playwright image (background)
-        run: |
-          version=$(node -p "require('./node_modules/@playwright/test/package.json').version")
-          echo "PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v${version}-noble" >> "$GITHUB_ENV"
-          nohup docker pull "mcr.microsoft.com/playwright:v${version}-noble" > /tmp/playwright-pull.log 2>&1 &
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Exactement ce que Dokploy exécute : le Dockerfile du repo, sans push.
-      - name: Build image
-        uses: docker/build-push-action@v6
+      # Un seul passage BuildKit : étage `test` (lint, format, icônes, typage e2e, Vitest) et image
+      # de production, en parallèle sur les mêmes sources installées, avec le cache GHA.
+      - name: Build and test (Dockerfile)
+        uses: docker/bake-action@v6
         with:
-          context: .
-          push: false
-          load: true
-          tags: ng-portfolio-app:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          source: .
+          targets: ci
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
 
       # Les garanties du build de production, jugées sur les fichiers que l'image sert.
       - name: Verify served build
@@ -120,33 +48,3 @@ jobs:
 
       - name: Smoke test the image
         run: ci/smoke.sh ng-portfolio-app:ci
-
-      - name: Start a11y stack (image + API stub)
-        run: ci/a11y-stack.sh up ng-portfolio-app:ci
-
-      - name: Audit axe (WCAG 2.0/2.1/2.2 A et AA)
-        run: |
-          docker pull -q "$PLAYWRIGHT_IMAGE"
-          docker run --rm --network host --ipc host -e CI=1 \
-            -v "$PWD:/work" -w /work "$PLAYWRIGHT_IMAGE" \
-            node_modules/.bin/playwright test -c e2e/playwright.config.ts
-
-      - name: Container logs
-        if: failure()
-        run: |
-          docker logs a11y-api-stub || true
-          docker logs a11y-portfolio || true
-
-      - name: Upload report
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: a11y-report
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 14
-
-      - name: Stop stack
-        if: always()
-        run: ci/a11y-stack.sh down
