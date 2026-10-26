@@ -793,6 +793,30 @@ Chaque tranche passe sans les suivantes : les PR 5 et 6+ ne cassent rien des pr�
    optionnelle (`text-muted`, sous le titre), documentée dans `DESIGN.md` § 5 ; sans `summary`, la
    carte reste inchangée pour ses usages actuels.
 
+### Décisions de Julien (2026-10-26) : données du tournage
+
+Après lecture du site Sandvik Coromant et d'une recherche sourcée sur les fabricants
+(`specs/assets/034/referentiel-plaquettes-tournage.md`) :
+
+7. **Ce que fait le guide** : à partir de la matière saisie, proposer des **types de plaquettes en code
+   ISO** (CNMG, WNMG, CCGT, VBMT…), sans marque.
+8. **Périmètre de la première mise en ligne** : tournage extérieur (ébauche, semi-finition, finition) et
+   intérieur (ébauche, finition). Gorge, tronçonnage, filetage et perçage plus tard, après lecture des
+   pages Sandvik dédiées. Fraisage hors périmètre.
+9. **Publication sans relecture de Julien** : chaque donnée part avec sa source, sans validation ligne
+   par ligne. Remplace la case « vérifiée par Julien » d'ADR-0033 décision 4 pour les données du guide
+   (amendement d'ADR-0033).
+10. **Codes déduits, dits déduits** : aucun fabricant ne publie de code par matière et par opération.
+    Un code peut s'afficher s'il est **déduit d'un principe écrit par le fabricant** ; il porte alors la
+    mention visible « déduit des principes du fabricant » et cite la page du principe. Un code écrit
+    explicitement par une source s'affiche sans cette mention.
+11. **Conseil de groupe** : un conseil écrit pour un groupe ou sous-groupe ISO est rattaché à chaque
+    matière de ce groupe, avec la mention « conseil du groupe » dans la citation.
+12. **Matières et désignations** : la liste de Julien est reprise telle quelle ; ses correspondances
+    (EN, numéro, AISI, AFNOR) sont affichées comme **correspondances indicatives**, non vérifiées sur
+    une norme. Le groupe ISO de chaque matière est rattaché aux définitions de groupe de Sandvik.
+13. **Aucune vitesse de coupe affichée** : le guide renvoie au calculateur du fabricant.
+
 ## Plan de test
 
 Domaine pur, sans TestBed, fixtures manifestement fictives (`ZZ-FICTIF-1`, `TEST-002`, « Alliage

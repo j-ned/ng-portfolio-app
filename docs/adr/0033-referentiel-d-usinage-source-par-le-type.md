@@ -86,3 +86,18 @@ Faits (2026-10-25) :
 - **Données dans l'API et l'admin** (comme les fiches V5) : publication sans revue ni test. Rejetée
   pour un contenu technique dont chaque valeur doit être vérifiée avant d'être en ligne.
 - **Tests de composants sur les données réelles** (ADR-0004 tel quel) : rejetée, voir décision 5.
+
+## Amendement (2026-10-26)
+
+Décisions de Julien 9 à 12 de la spec 034 :
+
+- **Décision 1, précisée** : une citation dit sa **base**, `stated` (la source écrit la valeur) ou
+  `deduced` (la valeur est déduite d'un principe que la source écrit). Une valeur `deduced` s'affiche
+  avec la mention « déduit des principes du fabricant » ; la citation pointe la page du principe.
+- **Décision 4, remplacée pour les données du guide** : plus de case « vérifiée par Julien » ; une PR
+  de données doit montrer, pour chaque valeur, sa source et sa base. Les gardes de test (IA citée
+  comme source, noms commerciaux, confidentialité, intégrité) restent.
+- **Correspondances indicatives** : les désignations d'une matière viennent de la liste de travail de
+  Julien et s'affichent comme indicatives ; elles ne sont jamais présentées comme vérifiées sur une
+  norme.
+
