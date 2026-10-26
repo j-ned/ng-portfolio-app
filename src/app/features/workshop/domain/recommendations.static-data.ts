@@ -371,7 +371,7 @@ const FERRITIC_MARTENSITIC: SubgroupAdvice = {
   geometry: subgroupAdvice(FERRITIC_MARTENSITIC_SECTION, 'Géométries pour aciers inoxydables.'),
   grade: subgroupAdvice(
     FERRITIC_MARTENSITIC_SECTION,
-    'Nuances pour aciers inoxydables ; à 55 HRC ou plus, nuances CBN.',
+    "Nuances pour aciers inoxydables ; à l'état trempé, nuances CBN.",
   ),
   pitfalls: [
     subgroupAdvice(
