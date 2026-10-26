@@ -95,7 +95,9 @@ export class InsertGuide {
     this.reference.materials.find(({ slug }) => slug === this._selection().material),
   );
   protected readonly state = computed(() => resolveGuideState(this.reference, this._selection()));
-  protected readonly status = computed(() => insertGuideStatus(this.state()));
+  protected readonly status = computed(() =>
+    insertGuideStatus(this.state(), this.reference.families),
+  );
 
   // Ne navigue que sur un choix de l'utilisateur : au rendu serveur et au retour arrière, le modèle vient de l'URL.
   private readonly _reflectSelectionInUrl = effect(() => {
