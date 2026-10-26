@@ -7,6 +7,7 @@ import type {
 } from '../domain/models/recommendation.model';
 import {
   aMaterialCatalogue,
+  aCitation,
   anIsoInsertField,
   anOperation,
   anOperationFamily,
@@ -55,6 +56,7 @@ describe('insertGuideStatus', () => {
 
   const ZQ_INSERT: IsoInsertDesignation = {
     kind: 'iso-1832',
+    choice: [aCitation()],
     fields: [
       anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
       anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif'),

@@ -8,6 +8,10 @@ import { IsoInsertDesignation } from './iso-insert-designation';
 
 const FICTIONAL_INSERT: Designation = {
   kind: 'iso-1832',
+  choice: [
+    aCitation({ basis: 'deduced', locator: 'Principe fictif de forme' }),
+    aCitation({ locator: 'Code écrit par une source fictive' }),
+  ],
   fields: [
     anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
     anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif', aCitation({ basis: 'deduced' })),
@@ -81,5 +85,28 @@ describe('IsoInsertDesignation', () => {
     expect(
       page.all('iso-insert-field').map((row) => page.texts('source-citation-mention', row)),
     ).toEqual([[], ['déduit des principes du fabricant'], []]);
+  });
+
+  it('Given an ISO designation When it renders Then the code is followed by the citations of the principles it comes from, before the fields are read', async () => {
+    const page = await render();
+    const code = page.one('iso-insert-code');
+    const choices = page.all('iso-insert-choice');
+    const fields = page.all('iso-insert-field')[0]?.parentElement;
+
+    expect({
+      choices: choices.map((choice) => ({
+        locator: page.texts('source-citation-locator', choice),
+        mention: page.texts('source-citation-mention', choice),
+      })),
+      afterCode: choices[0]?.previousElementSibling === code,
+      beforeFields: choices.at(-1)?.nextElementSibling === fields,
+    }).toEqual({
+      choices: [
+        { locator: ['Principe fictif de forme'], mention: ['déduit des principes du fabricant'] },
+        { locator: ['Code écrit par une source fictive'], mention: [] },
+      ],
+      afterCode: true,
+      beforeFields: true,
+    });
   });
 });

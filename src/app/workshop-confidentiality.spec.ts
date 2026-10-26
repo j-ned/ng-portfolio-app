@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { INSERT_GUIDE_COPY } from '@features/workshop/application/insert-guide-copy';
 import { findConfidentialReferences } from '@features/workshop/domain/confidential-references';
+import { ISO_513_GROUPS } from '@features/workshop/domain/iso-groups.static-data';
 import { MATERIALS } from '@features/workshop/domain/materials.static-data';
 import { OPERATION_FAMILIES } from '@features/workshop/domain/operations.static-data';
 import { RECOMMENDATIONS } from '@features/workshop/domain/recommendations.static-data';
@@ -29,6 +30,7 @@ const confidentialPaths = (value: unknown, name: string): readonly string[] =>
 describe('workshop confidentiality', () => {
   it.each<[string, unknown]>([
     ['WORKSHOP_SPACE', WORKSHOP_SPACE],
+    ['ISO_513_GROUPS', ISO_513_GROUPS],
     ['MATERIALS', MATERIALS],
     ['OPERATION_FAMILIES', OPERATION_FAMILIES],
     ['RECOMMENDATIONS', RECOMMENDATIONS],
@@ -62,8 +64,8 @@ describe('workshop confidentiality', () => {
       ],
       [
         'a geometry',
-        aRecommendation('grooving', { geometry: aSourced('Arête fictive, réf. pièce à part.') }),
-        ['sample.geometry.value'],
+        aRecommendation('grooving', { geometry: [aSourced('Arête fictive, réf. pièce à part.')] }),
+        ['sample.geometry[0].value'],
       ],
       [
         'a grade',
@@ -102,9 +104,9 @@ describe('workshop confidentiality', () => {
       [
         'the locator of a citation',
         aRecommendation('grooving', {
-          geometry: { value: 'Géométrie fictive.', cite: aCitation({ locator: 'réf. client' }) },
+          geometry: [{ value: 'Géométrie fictive.', cite: aCitation({ locator: 'réf. client' }) }],
         }),
-        ['sample.geometry.cite.locator'],
+        ['sample.geometry[0].cite.locator'],
       ],
       [
         'an operation family label',

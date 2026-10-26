@@ -1493,6 +1493,62 @@ Ajouté au GREEN, signalé (vert par construction) : `insertGuideStatus` sur une
 (gorge) nomme le cas sans code ; la tranche 12 précisera l'annonce. Mutation à la main : rendre `''`
 dans cette branche fait tomber le test.
 
+### Tranches 10 et 11, données — tournage extérieur et intérieur
+
+Jouée dans la même session, RED puis GREEN par le même agent (exception validée le 2026-10-25), selon
+les décisions de Julien du 2026-10-26 et l'amendement d'ADR-0033. Table récapitulative :
+`specs/assets/034/donnees-tournage.md`.
+
+Deux choix de modèle, pour que l'écran dise vrai :
+
+- **Le choix du code est une liste de citations de l'`IsoInsertDesignation`** (`choice`, non vide),
+  rendue juste après le code, avant la lecture champ par champ. Chaque champ garde sa citation, qui
+  porte désormais son **sens** (table de lecture, base écrite). Retenu contre une seconde citation par
+  champ (huit citations par code) et contre une citation de choix par champ affichée sous le sens (le
+  lecteur croirait le sens « déduit »). La section citée dit entre parenthèses la lettre qu'elle fonde.
+- **`geometry` devient une liste non vide**, comme `behaviour` : la géométrie de l'étape et la règle du
+  rayon (S1, écrites, propres à l'opération) ne viennent pas de la même page que le conseil de groupe
+  (S4, « conseil du groupe ») ; une seule citation ne pouvait pas porter les deux.
+
+`domain/reference-types.spec.ts` (5 tests ajoutés) : `ISO_513_GROUPS` et `InsertGuideReference['isoGroups']`
+typés `Record` des six lettres ; une géométrie vide, un code sans `choice` ou avec un `choice` vide ne
+compilent pas. Ces garanties sont satisfaites dès le modèle (posé avec les stubs du RED).
+
+`domain/reference-integrity.spec.ts`, sur les **données réelles** : les six groupes sous leur lettre,
+nommés par une page Sandvik Coromant (base écrite) ; chaque groupe cité par une matière a son entrée ;
+la citation du groupe d'une matière est la page qui nomme le groupe ; au moins une matière par groupe ;
+chaque désignation écrite sur la liste de travail ; numéros matière et UNS à leur format ; un à trois
+comportements, conseil de groupe d'une page Sandvik ; une finition extérieure par groupe ; chaque entrée
+couvre exactement toutes les matières d'un groupe (décision 11) ; aucune vitesse ; toute citation
+`deduced` pointe une page Sandvik ; chaque code se lit Forme, Dépouille, Tolérance, Fixation et
+brise-copeaux, chaque sens écrit hors Sandvik. Nouvelle garde des noms commerciaux sur
+`RECOMMENDATIONS` (fabricants, systèmes d'outils, nuances, brise-copeaux), avec ses cas fictifs.
+
+Composants : `IsoGroupBadge` prend le groupe et dit « Groupe ISO <lettre> <nom> » ; `MaterialSheet`
+reçoit `isoGroups` et affiche le nom ; `IsoInsertDesignation` rend les citations du choix entre le code
+et le `dl` ; `RecommendationPanel` rend chaque ligne de géométrie suivie de sa citation.
+`INSERT_GUIDE_REFERENCE` rend `isoGroups: ISO_513_GROUPS`. `ISO_513_GROUPS` entre dans
+`EDITORIAL_SOURCES` et dans la garde de confidentialité. Scénario axe « choix fait » :
+`/atelier/plaquettes?matiere=42crmo4&operation=ebauche-exterieure`, prêt sur `iso-insert-code`.
+
+**RED** (`pnpm test`, cache invalidé, stubs typés : modèle complété, `SOURCES` et `ISO_513_GROUPS`
+vides, badge sans nom, panneau limité à la première ligne de géométrie, aucune citation de choix
+rendue) : 8 failed / 4960 total (Test Files 5 failed | 247 passed), code de sortie 1, que des
+`AssertionError` :
+
+```
+× Given an available recommendation When the panel renders Then every value is followed by its citation, the insert code by the principles it is deduced from, …
+× Given a material When its sheet renders Then the h3 is its displayed name and its ISO group letter and name follow in text
+× Given an ISO designation When it renders Then the code is followed by the citations of the principles it comes from, before the fields are read
+× Given the six groups When they are read Then each one sits under its own letter
+× Given the reference When materials are grouped Then every ISO group has at least one
+× Given the reference When external finishing is read Then every ISO group has a recommendation
+× Given the group P / S When the badge renders Then its letter then its name are said in text, after its label
+```
+
+Les autres invariants de contenu étaient verts sur un référentiel vide (vrais par construction) : ils
+jugent depuis la saisie.
+
 ## Journal des tranches
 
 - **Tranche 1 — l'accueil de l'atelier existe et se trouve** : GREEN 4687 passed / 4687 total (au premier cycle), code de sortie 0 · refactor : aucun (diff relu : un modèle à deux champs, une constante, une page sans état, une route ; rien à simplifier). Verify faite (§ Verify) : la route `/atelier` devient atteignable. Décision : `WorkshopSpace` se limite à `heading` et `intro` ; `tools`, `toolsHeading` et `WorkshopTool` arrivent en tranche 7 avec la carte du guide, et la page ne rend aucune section « Les outils » vide d'ici là. Intro de Julien découpée en deux paragraphes (la règle, puis l'espace et à qui il s'adresse), texte inchangé, seule l'espace avant le deux-points devient insécable. Gardes CI : job `verify`, `atelier/index.html` présent ; job `docker`, `/atelier/` en 200 avec `data-testid="workshop-title"` et sans `X-Cache-Status`.
@@ -1507,6 +1563,7 @@ dans cette branche fait tomber le test.
 - **Correctif après la tranche 9 (session principale)** : la phrase annoncée nomme la famille quand le libellé de l'opération est partagé (« Ébauche (Tournage extérieur) » / « Ébauche (Intérieur (alésage)) »), pour que le passage de l'une à l'autre change la phrase et soit réannoncé. `insertGuideStatus(state, families)` ; RED par signature (TS2554), puis GREEN 4877/4877, lint et format en code 0.
 - **Tranche 10 — une recommandation s'affiche, et dit si elle est déduite** : GREEN 4901 passed / 4901 total (au deuxième cycle), puis 4902 / 4902 avec le test de la plaquette décrite, code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : aucun (diff relu ; le couple « valeur puis citation » revient trois fois dans le panneau et une fois dans la fiche matière, l'extraire toucherait la fiche de la tranche 8 : à faire avec la tranche 12, qui ajoute `DescribedInsert` et un quatrième site). Verify faite (§ Verify) : `/atelier/plaquettes`, déjà atteignable, change de fiche (intitulé « Correspondances indicatives ») et de panneau. Écarts : le cycle 1 a fait tomber la garde « aucune capitale » (`first-letter:uppercase` sur la mention) ; la mention reste en minuscules, mot pour mot de la décision 10, sur sa propre ligne (à valider en revue UI) ; `scope?: 'group'` optionnel plutôt qu'un `scope: 'material' | 'group'` obligatoire, pour ne pas imposer un champ aux citations propres à la matière, majoritaires ; `cuttingSpeed` reste dans le modèle (V3, plan) mais n'est pas affiché (décision 13) ; le code ISO est une fonction pure du domaine, `isoInsertCode`, lue par le composant et par l'annonce ; l'intitulé des correspondances est un `h4` sous le `h3` de la matière ; `insertGuideStatus` annonce « Plaquette proposée : <code>. » (copie à valider), et seulement la matière et l'opération pour une plaquette décrite ; une plaquette décrite n'a pas encore de rendu (tranche 12). Scénario axe « choix fait » non ajouté : aucun état `available` n'est atteignable sans donnée réelle ; il rejoint la tranche de données. Joué en vérification sur l'image fixture (non commité) : 6 passed.
 
+- **Tranches 10 et 11, données — tournage extérieur et intérieur** : GREEN 4960 passed / 4960 total (au deuxième cycle), code de sortie 0 · RED et GREEN dans la même invocation (exception du 2026-10-25) · refactor : les espaces insécables littérales des gabarits de locator passées en `\u00a0` (lint `no-irregular-whitespace`), `letter` retiré d'un type de saisie où il n'était lu nulle part ; tests inchangés et verts. Verify faite (§ Verify) : `/atelier/plaquettes`, atteignable, affiche désormais de vraies fiches et recommandations. Le cycle 1 a fait tomber quatre tests : espace absente entre lettre et nom du badge (`&ngsp;`), la garde des noms commerciaux lisait les identifiants de source des citations de choix (exemption étendue de `.cite.source` à `.choice[n].source`, même règle : un identifiant de source n'est pas du texte affiché), et le test « référentiel réel encore sans matière » de la page, dont la prémisse a disparu (repointé sur une fixture sans matière ; l'option `null` d'`openGuide` retirée). Décisions de saisie : une ligne de la liste qui accole deux alliages devient deux matières quand chaque système leur donne une valeur distincte (304 et 304L, 625 et C276…), une seule quand une valeur est partagée (X20Cr13 / X30Cr13 partagent AISI 420, EN AW-2011 / 2030 partagent AU5PbBi) ; **100Cr6** : la matière recuite (P) garde toutes les désignations normalisées, la trempée (H) n'a que le nom courant « 100Cr6 trempé » (idem « 16MnCr5 trempé »), la recherche « 100cr6 » propose les deux ; **Stellite 6 en H** (S5 range les stellites en H, la liste la mettait en S), Haynes 25 reste en S (base cobalt) ; X20Cr13 en M d'après S5, alors que S4 range les martensitiques en P5 ; F51 (duplex) omis, ni AISI ni UNS ; « US (AISI) » de la liste repris en `aisi` même pour A36 et A572 Gr.50 (ASTM). La liste de travail n'a pas d'URL publique : sa source pointe `https://nedellec-julien.fr/atelier` (à confirmer par Julien). Cases vides : H ébauche et semi-finition extérieures, H intérieur, S intérieur (S3 « jamais moins de 75° » contre S4 « moins de 45° »).
 ## Verify
 
 Tranche 1, 2026-10-25, worktree `034-pr3`.
@@ -1693,6 +1750,35 @@ Tranche 10, 2026-10-26, worktree `034-pr5`.
   sous « Angle fictif » (prise dans la session, non versionnée).
 - Console : aucune erreur de l'application ni d'hydratation ; seule erreur, `GET /api/config` 404
   (absent de la doublure).
+- Verdict : **PASS**.
+
+Tranches 10 et 11, données, 2026-10-26, worktree `034-pr5`.
+
+- Steps (image réelle) : `pnpm run build --configuration production` (code 0, « Prerendered 3
+  static routes ») ; `docker build -t ng-portfolio-app:a11y .` (code 0) ; `ci/a11y-stack.sh up`.
+- Rendu serveur, sans JavaScript : `curl '/atelier/plaquettes?matiere=inconel-718&operation=finition-exterieure'`
+  → 200, `X-Cache-Status: MISS`, aucun `'unsafe-inline'` ; fiche « Inconel 718 », groupe « Super-alliages
+  et titane », code `RCGT`, trois citations de choix « déduit des principes du fabricant », statut
+  « Inconel 718, Finition (Tournage extérieur). Plaquette proposée : RCGT. », aucune occurrence de `m/min`.
+- Navigateur, après hydratation, au clavier : « 42cd4 » tapé → une suggestion « 42CrMo4 · 42CD4 ·
+  Ancienne AFNOR · P » ; flèche bas, Entrée → fiche 42CrMo4, « Groupe ISO P Acier », URL
+  `?matiere=42crmo4`. Clic sur « Ébauche » (tournage extérieur) → URL
+  `?matiere=42crmo4&operation=ebauche-exterieure`, code `CNMG`, trois citations de choix (S1 négative,
+  N et G ; S2 chariotage, forme C ; S1 ébauche, classe M), chacune « déduit des principes du
+  fabricant » avec son lien Sandvik `fr-fr` ; le `dl` lu champ par champ (« Forme C Losange à 80° »,
+  « Dépouille N Dépouille de 0° », « Tolérance M Classe M, tolérance large », « Fixation et
+  brise-copeaux G Trou cylindrique, brise-copeaux sur les deux faces »), chaque sens cité sur la table
+  (Mitsubishi Materials, Kyocera p. B1) ; statut « 42CrMo4, Ébauche (Tournage extérieur). Plaquette
+  proposée : CNMG. » ; aucune vitesse. Puis « inconel » tapé → « 2 matières trouvées » (Inconel 718,
+  Inconel 625) ; flèche bas, Entrée → `?matiere=inconel-718&operation=ebauche-exterieure`, code
+  `RCGT`. Chargement direct `?matiere=en-aw-2017a&operation=finition-exterieure` : `CCGT`, première
+  citation de choix **sans** mention (Kyocera, code écrit), seconde « déduit » (S2, forme C).
+- Captures : panneau « Plaquette » CNMG (42CrMo4) et CCGT (EN AW-2017A), clair (prises dans la
+  session, non versionnées).
+- Console : aucune erreur de l'application ni d'hydratation ; seule erreur, `GET /api/config` 404
+  (absent de la doublure).
+- Axe : `pnpm a11y -g atelier`, 6 passed (`/atelier`, `/atelier/plaquettes`, et le choix fait
+  `?matiere=42crmo4&operation=ebauche-exterieure`, clair et sombre), code 0.
 - Verdict : **PASS**.
 
 ## Review code

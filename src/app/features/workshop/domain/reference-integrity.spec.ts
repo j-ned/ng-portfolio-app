@@ -7,10 +7,11 @@ import {
   aSource,
   aSourced,
 } from '../testing/insert-guide-builders';
+import { ISO_513_GROUPS } from './iso-groups.static-data';
 import { MATERIALS } from './materials.static-data';
-import type { Material } from './models/material.model';
+import type { IsoGroupLetter, Material } from './models/material.model';
 import type { CuttingSpeedRange, RecommendationEntry } from './models/recommendation.model';
-import type { Source, Sourced } from './models/source.model';
+import type { Source, SourceCitation, SourceId, Sourced } from './models/source.model';
 import { normalizeDesignation } from './normalize-designation';
 import { OPERATION_FAMILIES } from './operations.static-data';
 import { RECOMMENDATIONS } from './recommendations.static-data';
@@ -275,7 +276,7 @@ describe('RECOMMENDATIONS', () => {
         [
           aRecommendation('grooving', {
             materials: ['alliage-essai-alpha'],
-            geometry: aSourced('  '),
+            geometry: [aSourced('  ')],
           }),
         ],
         'blank-text',
@@ -328,7 +329,7 @@ describe('RECOMMENDATIONS', () => {
         [
           aRecommendation('grooving', {
             materials: ['alliage-essai-alpha'],
-            geometry: { value: 'Géométrie fictive.', cite: aCitation({ locator: ' ' }) },
+            geometry: [{ value: 'Géométrie fictive.', cite: aCitation({ locator: ' ' }) }],
           }),
         ],
         'blank-text',
@@ -341,7 +342,7 @@ describe('RECOMMENDATIONS', () => {
 
 const COMMERCIAL_NAMES: readonly RegExp[] = [/sandvik/iu, /\bCoro\p{Lu}/u];
 
-const CITED_SOURCE_ID = /\.cite\.source$/u;
+const CITED_SOURCE_ID = /(?:\.cite|\.choice\[\d+\])\.source$/u;
 
 const commercialNamesIn = (value: unknown, name: string): readonly string[] =>
   editorialTexts(value, name)
@@ -393,5 +394,211 @@ describe('commercial names', () => {
     ],
   ])('Given %s When the guard reads it Then it is not flagged', (_, value) => {
     expect(commercialNamesIn(value, 'sample')).toEqual([]);
+  });
+});
+
+const ISO_GROUP_LETTERS: readonly IsoGroupLetter[] = ['P', 'M', 'K', 'N', 'S', 'H'];
+
+const SANDVIK_HOST = 'www.sandvik.coromant.com';
+
+const WORKING_LIST: SourceId = 'julien-working-list';
+
+const isSandvikPage = (id: SourceId): boolean => new URL(SOURCES[id].url).hostname === SANDVIK_HOST;
+
+const isCitation = (value: object): value is SourceCitation =>
+  'source' in value && 'locator' in value && 'basis' in value;
+
+const citationsIn = (value: unknown): readonly SourceCitation[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap(citationsIn);
+  }
+  if (value !== null && typeof value === 'object') {
+    return isCitation(value) ? [value] : Object.values(value).flatMap(citationsIn);
+  }
+  return [];
+};
+
+const materialsOf = (letter: IsoGroupLetter): readonly string[] =>
+  MATERIALS.filter(({ isoGroup }) => isoGroup.value === letter).map(({ slug }) => slug);
+
+const groupOf = (slug: string): IsoGroupLetter | undefined =>
+  MATERIALS.find((material) => material.slug === slug)?.isoGroup.value;
+
+describe('ISO_513_GROUPS', () => {
+  it('Given the six groups When they are read Then each one sits under its own letter', () => {
+    expect(Object.entries(ISO_513_GROUPS).map(([key, group]) => [key, group.letter])).toEqual(
+      ISO_GROUP_LETTERS.map((letter) => [letter, letter]),
+    );
+  });
+
+  it('Given the six groups When their names are read Then each is written by a Sandvik Coromant page', () => {
+    expect(
+      Object.values(ISO_513_GROUPS)
+        .filter(
+          ({ name }) =>
+            name.value.trim() === '' ||
+            name.cite.basis !== 'stated' ||
+            !isSandvikPage(name.cite.source),
+        )
+        .map(({ letter }) => letter),
+    ).toEqual([]);
+  });
+
+  it('Given the materials When their groups are read Then each group cited by a material has its entry', () => {
+    expect(
+      MATERIALS.filter(({ isoGroup }) => !Object.hasOwn(ISO_513_GROUPS, isoGroup.value)).map(
+        ({ slug }) => slug,
+      ),
+    ).toEqual([]);
+  });
+
+  it('Given a material sheet When its group is cited Then the citation is the page that names the group', () => {
+    expect(
+      MATERIALS.filter(
+        ({ isoGroup }) => isoGroup.cite.source !== ISO_513_GROUPS[isoGroup.value].name.cite.source,
+      ).map(({ slug }) => slug),
+    ).toEqual([]);
+  });
+});
+
+describe('MATERIALS content', () => {
+  it('Given the reference When materials are grouped Then every ISO group has at least one', () => {
+    expect(ISO_GROUP_LETTERS.filter((letter) => materialsOf(letter).length === 0)).toEqual([]);
+  });
+
+  it('Given the reference When designations are read Then each one is written on the working list', () => {
+    expect(
+      MATERIALS.flatMap(({ slug, designations }) =>
+        designations
+          .filter(({ cite }) => cite.source !== WORKING_LIST || cite.basis !== 'stated')
+          .map(({ value }) => `${slug}: ${value}`),
+      ),
+    ).toEqual([]);
+  });
+
+  it.each<[string, RegExp]>([
+    ['material-number', /^\d\.\d{4}$/u],
+    ['uns', /^[A-Z]\d{5}$/u],
+  ])(
+    'Given the reference When %s designations are read Then each follows its format',
+    (system, format) => {
+      expect(
+        MATERIALS.flatMap(({ designations }) =>
+          designations.filter(
+            (designation) => designation.system === system && !format.test(designation.value),
+          ),
+        ).map(({ value }) => value),
+      ).toEqual([]);
+    },
+  );
+
+  it('Given the reference When behaviours are read Then each material has one to three, each the advice of its group on a Sandvik Coromant page', () => {
+    expect(
+      MATERIALS.filter(
+        ({ behaviour }) =>
+          behaviour.length > 3 ||
+          behaviour.some(({ cite }) => cite.scope !== 'group' || !isSandvikPage(cite.source)),
+      ).map(({ slug }) => slug),
+    ).toEqual([]);
+  });
+});
+
+const TURNING_FIELDS = ['Forme', 'Dépouille', 'Tolérance', 'Fixation et brise-copeaux'];
+
+describe('RECOMMENDATIONS content', () => {
+  it('Given the reference When external finishing is read Then every ISO group has a recommendation', () => {
+    const covered = RECOMMENDATIONS.filter(({ operation }) => operation === 'external-finishing')
+      .flatMap(({ materials }) => materials)
+      .map(groupOf);
+
+    expect(ISO_GROUP_LETTERS.filter((letter) => !covered.includes(letter))).toEqual([]);
+  });
+
+  it('Given the reference When an entry is read Then it lists every material of exactly one group, as group advice', () => {
+    expect(
+      RECOMMENDATIONS.filter((entry) => {
+        const letters = [...new Set(entry.materials.map(groupOf))];
+        const [letter] = letters;
+        return (
+          letters.length !== 1 ||
+          letter === undefined ||
+          [...entry.materials].sort().join() !== [...materialsOf(letter)].sort().join()
+        );
+      }).map(({ operation, materials }) => `${operation} × ${materials.join()}`),
+    ).toEqual([]);
+  });
+
+  it('Given the reference When entries are read Then none gives a cutting speed', () => {
+    expect(RECOMMENDATIONS.filter((entry) => entry.cuttingSpeed !== undefined)).toEqual([]);
+  });
+
+  it('Given the whole reference When its citations are read Then every deduced one points to a Sandvik Coromant page', () => {
+    expect(
+      citationsIn([ISO_513_GROUPS, MATERIALS, RECOMMENDATIONS])
+        .filter(({ basis, source }) => basis === 'deduced' && !isSandvikPage(source))
+        .map(({ source, locator }) => `${source}: ${locator}`),
+    ).toEqual([]);
+  });
+
+  it('Given the turning entries When their codes are read Then each one reads shape, clearance, tolerance and fixing, each meaning written by the code table', () => {
+    expect(
+      RECOMMENDATIONS.flatMap(({ operation, insert }) =>
+        insert.kind === 'iso-1832' &&
+        (insert.fields.map(({ value }) => value.field).join() !== TURNING_FIELDS.join() ||
+          insert.fields.some(({ cite }) => cite.basis !== 'stated' || isSandvikPage(cite.source)))
+          ? [operation]
+          : [],
+      ),
+    ).toEqual([]);
+  });
+});
+
+const TRADE_NAMES: readonly RegExp[] = [
+  /kyocera|mitsubishi|tungaloy|iscar|kennametal|\bseco\b|\bwalter\b|sumitomo|ceratizit/iu,
+  /t-max|primeturning|xcel|safe-lok|silent tools|kenloc|kendex|top notch|logiq|heli turn/iu,
+  /(?<![\p{L}\p{N}])(?:GC|CC|CB|KC|IC|MP|PDL|KYK|KS|KA|BXA|BXM|WBH|CH)\d{2,4}\p{Lu}?(?![\p{L}\p{N}])/u,
+  /(?<![\p{L}\p{N}])\p{Lu}\d{2}\p{Lu}(?![\p{L}\p{N}])/u,
+  /(?<![\p{L}\p{N}])-\p{Lu}{1,3}(?![\p{L}\p{N}])/u,
+];
+
+const tradeNamesIn = (value: unknown, name: string): readonly string[] =>
+  editorialTexts(value, name)
+    .filter(
+      ({ path, text }) =>
+        !CITED_SOURCE_ID.test(path) && TRADE_NAMES.some((pattern) => pattern.test(text)),
+    )
+    .map(({ path }) => path);
+
+describe('trade names in recommendations', () => {
+  it('Given RECOMMENDATIONS When its texts are read Then none names a maker, a tool system, a grade or a chip breaker', () => {
+    expect(tradeNamesIn(RECOMMENDATIONS, 'RECOMMENDATIONS')).toEqual([]);
+  });
+
+  it.each<[string, unknown, readonly string[]]>([
+    ['a maker', { grade: { value: 'Nuance fictive vue chez Kyocera' } }, ['sample.grade.value']],
+    [
+      'a tool system',
+      { pitfalls: [{ value: 'Porte-outil T-Max fictif' }] },
+      ['sample.pitfalls[0].value'],
+    ],
+    ['a grade', { grade: { value: 'Nuance GC4325 fictive' } }, ['sample.grade.value']],
+    ['a short grade', { grade: { value: 'Nuance H13A fictive' } }, ['sample.grade.value']],
+    [
+      'a chip breaker',
+      { geometry: [{ value: 'Brise-copeaux -PM fictif' }] },
+      ['sample.geometry[0].value'],
+    ],
+  ])('Given %s When the guard reads it Then it is flagged', (_, value, paths) => {
+    expect(tradeNamesIn(value, 'sample')).toEqual(paths);
+  });
+
+  it.each<[string, unknown]>([
+    ['an ISO code', { value: 'CNMG, plaquette négative' }],
+    ['a hardness and a percentage', { value: 'Au-delà de 55 HRC, ou de 13\u00a0% de silicium' }],
+    ['a word with a hyphen', { value: 'Semi-finition et brise-copeaux' }],
+    ['a second step', { value: 'Une seconde passe' }],
+    ['the id of a catalogued source', { cite: { source: 'kyocera-fictif', locator: 'page B1' } }],
+  ])('Given %s When the guard reads it Then it is not flagged', (_, value) => {
+    expect(tradeNamesIn(value, 'sample')).toEqual([]);
   });
 });

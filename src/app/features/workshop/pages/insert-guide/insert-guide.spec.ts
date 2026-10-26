@@ -83,7 +83,7 @@ type OpenedGuide = {
 
 async function openGuide(
   url: string,
-  reference: InsertGuideReference | null = aReference({
+  reference: InsertGuideReference = aReference({
     materials: [ALPHA, BETA, GAMMA],
     families: OPERATION_FAMILIES,
   }),
@@ -95,7 +95,7 @@ async function openGuide(
         withComponentInputBinding(),
       ),
       provideLocationMocks(),
-      ...(reference === null ? [] : [{ provide: INSERT_GUIDE_REFERENCE, useValue: reference }]),
+      { provide: INSERT_GUIDE_REFERENCE, useValue: reference },
     ],
   });
   const router = TestBed.inject(Router);
@@ -215,8 +215,11 @@ describe('InsertGuide: choosing the material', () => {
     });
   });
 
-  it('Given the real reference, still without material When ArrowDown is pressed in the field Then the field stays usable and announces that no material is found', async () => {
-    const { page, router } = await openGuide(GUIDE_PATH, null);
+  it('Given a reference without material When ArrowDown is pressed in the field Then the field stays usable and announces that no material is found', async () => {
+    const { page, router } = await openGuide(
+      GUIDE_PATH,
+      aReference({ materials: [], families: OPERATION_FAMILIES }),
+    );
 
     await page.press('ArrowDown');
     await page.press('Enter');
@@ -410,6 +413,7 @@ describe('InsertGuide: an available recommendation', () => {
     materials: [ALPHA.slug],
     insert: {
       kind: 'iso-1832',
+      choice: [aCitation()],
       fields: [
         anIsoInsertField('Forme fictive', 'Z', 'Losange fictif', aCitation({ basis: 'deduced' })),
         anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif'),

@@ -12,7 +12,9 @@ import {
   aSource,
   aSourced,
 } from '../testing/insert-guide-builders';
-import type { IsoGroup, Material } from './models/material.model';
+import { ISO_513_GROUPS } from './iso-groups.static-data';
+import type { InsertGuideReference } from './models/insert-guide-reference.model';
+import type { IsoGroup, IsoGroupLetter, Material } from './models/material.model';
 import type { Operation, OperationFamily } from './models/operation.model';
 import type {
   DescribedInsert,
@@ -79,6 +81,16 @@ describe('Source types', () => {
 });
 
 describe('ISO group types', () => {
+  it('Given the six groups When their type is read Then every letter needs its entry', () => {
+    expectTypeOf(ISO_513_GROUPS).toEqualTypeOf<Readonly<Record<IsoGroupLetter, IsoGroup>>>();
+  });
+
+  it('Given the reference read by the guide When its type is read Then it carries the six groups', () => {
+    expectTypeOf<InsertGuideReference['isoGroups']>().toEqualTypeOf<
+      Readonly<Record<IsoGroupLetter, IsoGroup>>
+    >();
+  });
+
   it('Given an ISO group When its letter is outside the six groups Then it does not compile', () => {
     // @ts-expect-error: ISO 513 only defines P, M, K, N, S and H
     const _refused: IsoGroup = { ...anIsoGroup('P'), letter: 'X' };
@@ -198,6 +210,22 @@ describe('Recommendation types', () => {
     const unsourced = { ...aRecommendation('parting-off'), geometry: 'Géométrie fictive.' };
     // @ts-expect-error: the geometry comes from a cited source
     const _refused: RecommendationEntry = unsourced;
+  });
+
+  it('Given an entry When it has no geometry line Then it does not compile', () => {
+    // @ts-expect-error: an entry always says which geometry to take
+    const _refused: RecommendationEntry = { ...aRecommendation('threading'), geometry: [] };
+  });
+
+  it('Given an ISO designation When it does not cite the principle of its choice Then it does not compile', () => {
+    const { choice: _dropped, ...unexplained } = anIsoInsert();
+    // @ts-expect-error: a code always cites the principle it is deduced from, or the source that writes it
+    const _refused: IsoInsertDesignation = unexplained;
+  });
+
+  it('Given an ISO designation When its list of principles is empty Then it does not compile', () => {
+    // @ts-expect-error: a code always cites at least one principle or source
+    const _refused: IsoInsertDesignation = { ...anIsoInsert(), choice: [] };
   });
 
   it('Given an entry When its cutting speed is in another unit Then it does not compile', () => {

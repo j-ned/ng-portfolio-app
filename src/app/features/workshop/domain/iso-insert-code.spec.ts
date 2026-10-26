@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anIsoInsertField, anIsoInsert } from '../testing/insert-guide-builders';
+import { aCitation, anIsoInsertField, anIsoInsert } from '../testing/insert-guide-builders';
 import { isoInsertCode } from './iso-insert-code';
 import type { IsoInsertDesignation } from './models/recommendation.model';
 
@@ -10,6 +10,7 @@ describe('isoInsertCode', () => {
       'four fields',
       {
         kind: 'iso-1832',
+        choice: [aCitation()],
         fields: [
           anIsoInsertField('Champ fictif 1', 'Q', 'Sens fictif 1'),
           anIsoInsertField('Champ fictif 2', 'Z', 'Sens fictif 2'),
@@ -23,6 +24,7 @@ describe('isoInsertCode', () => {
       'a field coded on two characters',
       {
         kind: 'iso-1832',
+        choice: [aCitation()],
         fields: [
           anIsoInsertField('Champ fictif 1', 'Q', 'Sens fictif 1'),
           anIsoInsertField('Champ fictif 2', '09', 'Sens fictif 2'),

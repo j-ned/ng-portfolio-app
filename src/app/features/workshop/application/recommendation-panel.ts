@@ -33,14 +33,18 @@ import { SourceCitation } from './source-citation';
         </div>
         <div data-testid="recommendation-block" class="mt-6 border-t border-line pt-5">
           <h3 class="text-xl font-bold">{{ copy.geometryHeading }}</h3>
-          <p data-testid="recommendation-value" class="mt-2 max-w-prose">
-            {{ entry.geometry.value }}
-          </p>
-          <app-source-citation
-            class="mt-1"
-            [citation]="entry.geometry.cite"
-            [source]="catalogue[entry.geometry.cite.source]"
-          />
+          <ul class="mt-2 grid gap-3">
+            @for (line of entry.geometry; track $index) {
+              <li>
+                <p data-testid="recommendation-value" class="max-w-prose">{{ line.value }}</p>
+                <app-source-citation
+                  class="mt-1"
+                  [citation]="line.cite"
+                  [source]="catalogue[line.cite.source]"
+                />
+              </li>
+            }
+          </ul>
         </div>
         <div data-testid="recommendation-block" class="mt-6 border-t border-line pt-5">
           <h3 class="text-xl font-bold">{{ copy.gradeHeading }}</h3>

@@ -66,6 +66,17 @@ export function anIsoGroup(letter: IsoGroupLetter, overrides: Partial<IsoGroup> 
   };
 }
 
+export function anIsoGroupCatalogue(): InsertGuideReference['isoGroups'] {
+  return {
+    P: anIsoGroup('P'),
+    M: anIsoGroup('M'),
+    K: anIsoGroup('K'),
+    N: anIsoGroup('N'),
+    S: anIsoGroup('S'),
+    H: anIsoGroup('H'),
+  };
+}
+
 export function anOperation(id: OperationId, overrides: Partial<Operation> = {}): Operation {
   return { id, slug: `operation-fictive-${id}`, label: `Opération fictive ${id}`, ...overrides };
 }
@@ -91,6 +102,7 @@ export function anIsoInsertField(
 export function anIsoInsert(): IsoInsertDesignation {
   return {
     kind: 'iso-1832',
+    choice: [aCitation()],
     fields: [aSourced({ field: 'Champ fictif', code: 'Z', meaning: 'Signification fictive' })],
   };
 }
@@ -117,7 +129,7 @@ export function aRecommendation<O extends OperationId>(
     operation,
     materials: ['matiere-fictive'],
     insert: insert as InsertFor<O>,
-    geometry: aSourced('Géométrie fictive.'),
+    geometry: [aSourced('Géométrie fictive.')],
     grade: aSourced('Nuance fictive.'),
     pitfalls: [aSourced('Piège fictif.')],
     ...overrides,
@@ -127,6 +139,7 @@ export function aRecommendation<O extends OperationId>(
 export function aReference(overrides: Partial<InsertGuideReference> = {}): InsertGuideReference {
   return {
     sources: { [FICTIONAL_SOURCE_ID]: aSource() } as InsertGuideReference['sources'],
+    isoGroups: anIsoGroupCatalogue(),
     families: [anOperationFamily()],
     materials: [aMaterial()],
     recommendations: [],

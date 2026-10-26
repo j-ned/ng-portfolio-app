@@ -12,19 +12,26 @@ async function render(material: Material = ALPHA): Promise<InsertGuidePage> {
   const fixture = TestBed.createComponent(MaterialSheet);
   fixture.componentRef.setInput('material', material);
   fixture.componentRef.setInput('sources', aReference().sources);
+  fixture.componentRef.setInput('isoGroups', aReference().isoGroups);
   await settle(fixture);
   return new InsertGuidePage(fixture);
 }
 
 describe('MaterialSheet', () => {
-  it('Given a material When its sheet renders Then the h3 is its displayed name and its ISO group letter follows in text', async () => {
+  it('Given a material When its sheet renders Then the h3 is its displayed name and its ISO group letter and name follow in text', async () => {
     const page = await render();
 
     expect({
       tag: page.one('material-sheet-name')?.tagName,
       name: page.sheetName(),
       group: page.text('iso-group-letter'),
-    }).toEqual({ tag: 'H3', name: 'Alliage essai Alpha', group: 'P' });
+      groupName: page.text('iso-group-name'),
+    }).toEqual({
+      tag: 'H3',
+      name: 'Alliage essai Alpha',
+      group: 'P',
+      groupName: 'Groupe fictif P',
+    });
   });
 
   it('Given a material When its sheet renders Then each behaviour trait is a paragraph followed by its own citation', async () => {

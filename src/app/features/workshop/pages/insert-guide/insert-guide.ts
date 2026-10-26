@@ -43,7 +43,11 @@ import { parseGuideSelection } from '../../domain/guide-selection';
               [formField]="guideForm.material"
             />
             @if (material(); as chosen) {
-              <app-material-sheet [material]="chosen" [sources]="reference.sources" />
+              <app-material-sheet
+                [material]="chosen"
+                [sources]="reference.sources"
+                [isoGroups]="reference.isoGroups"
+              />
             }
           </section>
           <section

@@ -13,6 +13,11 @@ import { SourceCitation } from './source-citation';
     <p data-testid="iso-insert-code" class="font-mono text-3xl font-bold tracking-wider">
       {{ code() }}
     </p>
+    @for (principle of insert().choice; track $index) {
+      <div data-testid="iso-insert-choice" class="mt-1">
+        <app-source-citation [citation]="principle" [source]="catalogue[principle.source]" />
+      </div>
+    }
     <dl class="mt-4 grid gap-3">
       @for (field of insert().fields; track $index) {
         <div data-testid="iso-insert-field" class="grid grid-cols-[3rem_1fr] gap-x-3">

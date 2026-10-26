@@ -1,6 +1,6 @@
 import type { Material } from './material.model';
 import type { Operation, OperationId } from './operation.model';
-import type { Sourced } from './source.model';
+import type { SourceCitation, Sourced } from './source.model';
 
 type IsoDesignatedOperation = Extract<OperationId, `external-${string}` | `internal-${string}`>;
 
@@ -12,6 +12,7 @@ type IsoDesignationField = Sourced<{
 
 export type IsoInsertDesignation = {
   readonly kind: 'iso-1832';
+  readonly choice: readonly [SourceCitation, ...SourceCitation[]];
   readonly fields: readonly [IsoDesignationField, ...IsoDesignationField[]];
 };
 
@@ -39,7 +40,7 @@ export type RecommendationEntry = {
     readonly operation: O;
     readonly materials: readonly [string, ...string[]];
     readonly insert: InsertFor<O>;
-    readonly geometry: Sourced<string>;
+    readonly geometry: readonly [Sourced<string>, ...Sourced<string>[]];
     readonly grade: Sourced<string>;
     readonly cuttingSpeed?: Sourced<CuttingSpeedRange>;
     readonly pitfalls: readonly Sourced<string>[];

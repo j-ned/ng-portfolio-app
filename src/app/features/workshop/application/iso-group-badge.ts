@@ -1,5 +1,5 @@
 import { Component, input } from '@angular/core';
-import type { IsoGroupLetter } from '../domain/models/material.model';
+import type { IsoGroup } from '../domain/models/material.model';
 import { INSERT_GUIDE_COPY } from './insert-guide-copy';
 
 @Component({
@@ -10,12 +10,14 @@ import { INSERT_GUIDE_COPY } from './insert-guide-copy';
     <span
       data-testid="iso-group-letter"
       class="inline-flex size-7 items-center justify-center rounded-full border border-foreground font-mono font-semibold text-foreground"
-      >{{ letter() }}</span
-    >
+      >{{ group().letter }}</span
+    >&ngsp;<span data-testid="iso-group-name" class="text-foreground">{{
+      group().name.value
+    }}</span>
   `,
 })
 export class IsoGroupBadge {
-  readonly letter = input.required<IsoGroupLetter>();
+  readonly group = input.required<IsoGroup>();
 
   protected readonly copy = INSERT_GUIDE_COPY;
 }

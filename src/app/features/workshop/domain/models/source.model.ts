@@ -1,4 +1,13 @@
-export type SourceId = never;
+export type SourceId =
+  | 'sandvik-choose-insert'
+  | 'sandvik-external-turning'
+  | 'sandvik-internal-turning'
+  | 'sandvik-turning-materials'
+  | 'sandvik-workpiece-materials'
+  | 'mitsubishi-insert-identification'
+  | 'kyocera-turning-inserts'
+  | 'kyocera-aluminium-finishing'
+  | 'julien-working-list';
 
 export type Source = {
   readonly title: string;

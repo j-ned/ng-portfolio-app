@@ -1,5 +1,5 @@
 import { Component, input } from '@angular/core';
-import type { Material } from '../domain/models/material.model';
+import type { IsoGroup, IsoGroupLetter, Material } from '../domain/models/material.model';
 import type { Source, SourceId } from '../domain/models/source.model';
 import { INSERT_GUIDE_COPY } from './insert-guide-copy';
 import { IsoGroupBadge } from './iso-group-badge';
@@ -19,7 +19,7 @@ import { SourceCitation } from './source-citation';
       {{ sheet.designations[0].value }}
     </h3>
     <div data-testid="material-sheet-group" class="mt-3">
-      <app-iso-group-badge [letter]="sheet.isoGroup.value" />
+      <app-iso-group-badge [group]="isoGroups()[sheet.isoGroup.value]" />
       <app-source-citation
         class="mt-1"
         [citation]="sheet.isoGroup.cite"
@@ -65,6 +65,7 @@ import { SourceCitation } from './source-citation';
 export class MaterialSheet {
   readonly material = input.required<Material>();
   readonly sources = input.required<Readonly<Record<SourceId, Source>>>();
+  readonly isoGroups = input.required<Readonly<Record<IsoGroupLetter, IsoGroup>>>();
 
   protected readonly copy = INSERT_GUIDE_COPY;
 }

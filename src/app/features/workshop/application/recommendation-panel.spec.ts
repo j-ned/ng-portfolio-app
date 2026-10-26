@@ -65,12 +65,16 @@ describe('RecommendationPanel', () => {
     materials: [ALPHA.slug],
     insert: {
       kind: 'iso-1832',
+      choice: [aCitation({ basis: 'deduced' })],
       fields: [
         anIsoInsertField('Forme fictive', 'Z', 'Losange fictif'),
         anIsoInsertField('Dépouille fictive', 'Q', 'Angle fictif', aCitation({ basis: 'deduced' })),
       ],
     },
-    geometry: { value: 'Géométrie fictive.', cite: aCitation({ basis: 'deduced' }) },
+    geometry: [
+      { value: 'Géométrie fictive.', cite: aCitation({ basis: 'deduced' }) },
+      { value: 'Seconde géométrie fictive.', cite: aCitation({ scope: 'group' }) },
+    ],
     grade: aSourced('Nuance fictive.'),
     cuttingSpeed: aSourced({ min: 123, max: 456, unit: 'm/min' }),
     pitfalls: [
@@ -111,7 +115,7 @@ describe('RecommendationPanel', () => {
     });
   });
 
-  it('Given an available recommendation When the panel renders Then every value is followed by its citation, which says when it is deduced or given for the group', async () => {
+  it('Given an available recommendation When the panel renders Then every value is followed by its citation, the insert code by the principles it is deduced from, each saying when it is deduced or given for the group', async () => {
     const page = await render(available());
 
     expect(blocks(page)).toEqual([
@@ -120,14 +124,14 @@ describe('RecommendationPanel', () => {
         title: 'Plaquette',
         values: [],
         code: ['ZQ'],
-        mentions: ['', 'déduit des principes du fabricant'],
+        mentions: ['déduit des principes du fabricant', '', 'déduit des principes du fabricant'],
       },
       {
         heading: 'H3',
         title: 'Géométrie',
-        values: ['Géométrie fictive.'],
+        values: ['Géométrie fictive.', 'Seconde géométrie fictive.'],
         code: [],
-        mentions: ['déduit des principes du fabricant'],
+        mentions: ['déduit des principes du fabricant', 'conseil du groupe'],
       },
       { heading: 'H3', title: 'Nuance', values: ['Nuance fictive.'], code: [], mentions: [''] },
       {
