@@ -1576,6 +1576,41 @@ Tranche 9, 2026-10-26, worktree `034-pr5`.
 
 ## Review code
 
+PR 5 (tranches 7 à 9 et correctif), `git diff feat/034-accueil...HEAD` (`190be60`, `033c05d`, `d335ca8`, `ecdce69`, `106804e`), revue du 2026-10-26.
+
+**Verdict** : APPROVED
+**Gates CI locaux** : `pnpm install --frozen-lockfile` 0 / `pnpm run build --configuration production` 0 (« Prerendered 3 static routes », CSP hachée sur 4 pages) / `pnpm test` 0 (250 fichiers, 4877 passed / 4877) / `pnpm lint` 0 / `pnpm run format:check` 0 / `docker build -t ng-portfolio-app:a11y .` 0 / `pnpm a11y -g atelier` 0 (4 passed : `/atelier` et `/atelier/plaquettes`, clair et sombre)
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main. Archéologie (motif du profil) 0 hit sur les lignes ajoutées ; `fakeAsync`/`waitForAsync`/`.only`/`.skip`/snapshot/`fireEvent` 0 ; `ngModel`/`FormsModule`/`ReactiveFormsModule`/`styles:`/`changeDetection`/`@Input`/`ngAfterViewInit`/`setTimeout` 0 dans le code applicatif ; import `infra` depuis `application` ou `pages` 0 ; cast hors `testing/` et specs 0 ; ancien slug `percage`, `isoGroups`, `IsoGroupColor`, `--color-iso-*` 0 dans `src/`, `e2e/`, `ci/`, `.github/`, `docs/` ; aucune chaîne de fixture (`ZZ-FICTIF`, `alliage-essai`, `fictif`) dans `dist/…/browser/*.js`.
+**Warnings de gate** : (b) pré-existant hors diff : `pnpm install`, « Ignored build scripts » (lockfile non touché). Build, test, lint, format, axe : aucun.
+**Rendu compilé** : ✅ (`a[app-link-card]` touché : styles posés par classes Tailwind de `host`, aucun `styles:`, rien d'encapsulé à vérifier dans le bundle)
+**Preuve de verify runtime** : ✅ (preuves des tranches 7, 8 et 9 complètes et cohérentes avec le diff ; rejouées sur l'image de cette revue : `curl` de `?operation=gorge` → 200, `X-Cache-Status: MISS`, `checked=""` sur le seul radio `gorge` ; `?operation=inconnue-zz&matiere=inconnue-zz` → aucun `checked`, zéro occurrence du slug ; canonical `https://nedellec-julien.fr/atelier/plaquettes` sans query string sur toutes les variantes ; une seule meta CSP, aucun `'unsafe-inline'` ni dans le corps ni dans les en-têtes ; `/atelier/plaquettes/autre` 404 sans Node, `/atelier/` sans `X-Cache-Status` ; clé du micro-cache par query (`gorge` HIT, `filetage` MISS, radios distincts) ; navigateur, clic réel sur « Filetage » après hydratation → `?operation=filetage`, `history.length` inchangé (5), flèche bas dans le champ → statut « Aucune matière trouvée » ; console : `GET /api/config` 404 de la doublure seulement. Le correctif `106804e` ne touche qu'une fonction pure, couverte par `insert-guide-status.spec.ts`.)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+Contrôles demandés : (1) `MATERIALS`, `RECOMMENDATIONS`, `SOURCES` vides, `SourceId` à `never` ; `INSERT_GUIDE_REFERENCE` sans cast ; seul cast, `aReference` dans `testing/insert-guide-builders.ts:119` ; aucune fixture dans le bundle. (2) Combobox au motif d'`admin-tags-selector` (rôles, `aria-activedescendant`, `mousedown.preventDefault`, statut `sr-only`, `FormValueControl`) ; `afterRenderEffect({ write })` à l'identique de l'admin, sans lecture de mise en page ; Signal Forms correct (`form(linkedSignal)`, `[formField]` sur deux contrôles personnalisés, aucun attribut concurrent). (3) Une seule navigation à deux clés, `replaceUrl: true`, garde « modèle ≠ URL » qui empêche toute navigation au rendu serveur et à l'hydratation ; un slug inconnu n'est jamais réécrit, il tombe à la première navigation de l'utilisateur (décision consignée). (4) cf. ligne verify ; regex nginx et `nginx-config.spec.ts` alignés. (5) `label for`, `fieldset` + `legend` imbriqués, deux régions `role="status"` présentes dès le HTML serveur, aucun déplacement de focus, radios dans des `label` de 44 px ; axe vert. (6) Nommage, hôte, Tailwind, `track`, couches : conformes. (7) `insert-guide.ts:102` : conforme. Une ligne, sans référence ni récit, et elle dit pourquoi la garde existe (rendu serveur, retour arrière), ce que la condition seule ne montre pas ; les commentaires du dépôt sont en français.
+
+**Tests notables** :
+- ✨ `insert-guide.spec.ts` : la mutation à la main de la garde d'URL (journal, tranche 8) fait tomber le test du slug inconnu ; le contrat de navigation est épinglé par le nombre de navigations et `replaceUrl`, pas par l'implémentation.
+- ✨ `material-combobox.spec.ts:163-185` : la boucle des flèches est faite dans un seul `it` et comparée en une liste ; un échec dit quelle touche a dévié.
+- ⚠️ `link-card.spec.ts:97` : épingle la classe `text-muted` du résumé, un détail de style qui casse au moindre ajustement visuel. Prescrit, à garder en tête.
+
+**Duplication / dérivation** (advisory) :
+- ⚠️ `insert-guide.ts:21-28` : la liste de classes du `h1` et du chapô est la même que sur l'accueil de l'atelier, `/blog`, `/projects` et l'en-tête de projet. Le diff ajoute un cinquième site, et le journal (tranche 7) consigne le report. Pour la suite, un composant `shared/ui` « tête de page » plutôt qu'un `@utility`, parce que la structure couvre deux éléments.
+
+**Observations non bloquantes** :
+- `material-sheet.ts:29` : `track $index` sur les traits de comportement. La liste est figée, donc la règle n'est pas enfreinte, mais `track trait.value` serait cohérent avec `workshop.ts` (`track paragraph`).
+- `material-combobox.ts:180-183` : un texte partiel laissé en quittant le champ garde la matière choisie, alors que le champ affiche ce texte et que la fiche montre une autre matière. La décision est consignée (tranche 9) et testée. Elle mérite un regard de Julien à la première PR de données, la seule où elle devient visible.
+- `material-combobox.ts:60` : une option fait environ 36 px de haut (`py-2`, `text-sm`), contre 44 px pour les radios. WCAG 2.5.8 (24 px) est tenu, et la cote reprend celle de l'admin. À contrôler à 375 px avec le scénario axe « liste ouverte » de la première PR de données.
+- `material.model.ts:5` : `IsoGroup` n'a plus de consommateur de production jusqu'au retour d'`ISO_513_GROUPS`. Ce maintien est consigné (tranche 8).
+
+**Risque résiduel** :
+- réversibilité : profil muet · monitoring : Sentry (profil)
+- non couvert par les gates : la liste ouverte, la fiche et le panneau `unavailable` ne passent sous axe qu'avec des données ; ils ne sont vérifiés que sur une image de fixture non commitée. Le lecteur d'écran n'a pas été joué (tranche 9). L'ordre de merge suit la réponse 2 : PR 3 d'abord, puis PR 5 re-ciblée sur `master` avant son merge.
+
 PR 4 (tranches 4 à 6), `git diff origin/master...HEAD` (`35ef862`, `294b178`, `ed89943`), revue du 2026-10-25.
 
 **Verdict** : REJECTED
