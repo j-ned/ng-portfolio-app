@@ -2,7 +2,6 @@ import type {
   Designation,
   DesignationSystem,
   IsoGroup,
-  IsoGroupColor,
   IsoGroupLetter,
   Material,
 } from '../domain/models/material.model';
@@ -16,9 +15,8 @@ import type {
 } from '../domain/models/recommendation.model';
 import type { Source, SourceCitation, SourceId, Sourced } from '../domain/models/source.model';
 
-// Fictional ids stay assignable whatever the real closed unions list.
+// A fictional id stays assignable whatever the real closed union lists.
 const FICTIONAL_SOURCE_ID = 'source-fictive' as string as SourceId;
-const FICTIONAL_COLOR = 'couleur-fictive' as string as IsoGroupColor;
 
 export function aSource(overrides: Partial<Source> = {}): Source {
   return {
@@ -63,7 +61,6 @@ export function anIsoGroup(letter: IsoGroupLetter, overrides: Partial<IsoGroup> 
   return {
     letter,
     name: aSourced(`Groupe fictif ${letter}`),
-    color: aSourced(FICTIONAL_COLOR),
     ...overrides,
   };
 }

@@ -74,14 +74,9 @@ describe('ISO group types', () => {
     const _refused: IsoGroup = { ...anIsoGroup('M'), name: 'Groupe fictif' };
   });
 
-  it('Given an ISO group When its colour is outside the closed union Then it does not compile', () => {
-    // @ts-expect-error: only the colours the standard assigns are accepted
-    const _refused: IsoGroup = { ...anIsoGroup('K'), color: aSourced('couleur-hors-norme') };
-  });
-
-  it('Given an ISO group When its colour is not sourced Then it does not compile', () => {
-    // @ts-expect-error: the group colour comes from a cited source
-    const _refused: IsoGroup = { ...anIsoGroup('N'), color: 'couleur-fictive' };
+  it('Given an ISO group When a colour is added Then it does not compile', () => {
+    // @ts-expect-error: a group is shown by its letter and name, never by a colour
+    const _refused: IsoGroup = { ...anIsoGroup('K'), color: aSourced('couleur-fictive') };
   });
 });
 

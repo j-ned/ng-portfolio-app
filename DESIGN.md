@@ -347,7 +347,7 @@ Aucune autre ombre, boutons compris.
 
 Un lien de navigation interne présenté en carte : « article précédent / suivant » et « Pour aller plus loin » (fiche du projet, articles proches) sur la page article, « Articles sur ce projet » sur la fiche projet.
 
-- **API:** composant à sélecteur d'attribut `a[app-link-card]`, posé sur le lien de l'appelant ; entrées `overline` et `heading` (requises), `align` (`'start'` par défaut, `'end'` aligne le texte à droite). `routerLink`, `data-testid` et le placement dans la grille (`sm:col-start-2`) restent sur l'`<a>`.
+- **API:** composant à sélecteur d'attribut `a[app-link-card]`, posé sur le lien de l'appelant ; entrées `overline` et `heading` (requises), `summary` (optionnelle : une phrase en `text-muted` sous le titre, comprise dans le nom du lien ; « Les outils » de l'atelier), `align` (`'start'` par défaut, `'end'` aligne le texte à droite). `routerLink`, `data-testid` et le placement dans la grille (`sm:col-start-2`) restent sur l'`<a>`.
 - **Apparence:** carte portée par l'hôte (`rounded-card border-2 border-foreground bg-surface p-6`, bord franc 2 px, rayon 16 px), sans élément enveloppant ; sur-titre mono `text-xs text-muted`, puis titre `text-[1.1875rem] font-semibold tracking-tight`.
 - **Survol:** la bordure passe en `primary` (5,21:1 Sable, au-delà de 3:1 dans les deux registres) et le titre en `primary` (`group-hover`) ; pas d'ombre.
 - **Focus:** anneau global `:focus-visible` de `styles.css` (2 px `primary`).
