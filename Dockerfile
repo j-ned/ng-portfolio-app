@@ -48,6 +48,8 @@ RUN apk add --no-cache libstdc++ su-exec \
  && adduser -S -D -H -s /sbin/nologin ssr \
  && node --version
 
+# L'image nginx livre sa page d'accueil et une page 50x : retirées, seul le build est servi.
+RUN rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist/angular-portfolio-app/browser /usr/share/nginx/html
 COPY --from=build /app/dist/angular-portfolio-app/server /app/server
 COPY --from=deps /app/node_modules /app/node_modules
