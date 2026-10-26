@@ -816,6 +816,16 @@ Après lecture du site Sandvik Coromant et d'une recherche sourcée sur les fabr
     (EN, numéro, AISI, AFNOR) sont affichées comme **correspondances indicatives**, non vérifiées sur
     une norme. Le groupe ISO de chaque matière est rattaché aux définitions de groupe de Sandvik.
 13. **Aucune vitesse de coupe affichée** : le guide renvoie au calculateur du fabricant.
+14. **Plusieurs codes par opération, selon la situation** (2026-10-26, après la première saisie) : un
+    même code pour l'ébauche, la semi-finition et la finition est fidèle aux sources mais pauvre. Le
+    fabricant écrit la **forme** par type de situation (chariotage avec ou sans épaulement, copiage,
+    copiage à forte plongée, dressage ; intérieur avec épaulement, arête plus robuste, copiage) : chaque
+    opération propose 2 ou 3 codes selon la situation, la lettre de forme citée comme écrite, le reste
+    du code comme déduit.
+15. **Liste de travail de Julien** : source **sans lien** (pas d'URL publique) ; jamais pointée sur le
+    site lui-même.
+16. **Classement des matières** : quand la liste de Julien et Sandvik divergent, le classement de Sandvik
+    (« Matériaux de pièce ») l'emporte, par exemple Stellite 6 en H et X20Cr13 en M.
 
 ## Plan de test
 
