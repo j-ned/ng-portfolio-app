@@ -162,3 +162,11 @@ selon le besoin. Le guide (spec 035) ne sait pas les ranger aujourd'hui, pour tr
 - Un front d'avant la spec qui lit une ligne générique planterait sur `material` absent. Ce n'est
   possible que si une ligne générique est saisie entre le déploiement de l'API et celui du front,
   et c'est l'admin du nouveau front qui la crée. L'ordre de déploiement suffit.
+
+## Suivi
+
+- **2026-10-27, front, tranche unique** : RED 27 failed / 4945 tests (`pnpm test`, sortie 1 ; tests
+  compilés sur les seuls types, comportement d'avant) · GREEN 4945 passed / 4945 (sortie 0) ·
+  `pnpm lint` 0 · `pnpm run format:check` 0 · `pnpm run build --configuration production` 0 ·
+  rendu serveur contre `ci/api-stub` : la ligne d'alésage générique apparaît sous « Acier témoin »
+  et « Laiton témoin », avec la mention et un tiret · refactor : commentaire descriptif retiré.
