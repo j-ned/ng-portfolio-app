@@ -139,3 +139,99 @@ guide public et le décodeur restent tels quels.
   - mise à jour de `e2e/a11y/interactive-states.spec.ts` si l'admin du guide y figure ;
   - `DESIGN.md` : quelques lignes sur le motif « bloc repliable et lignes compactes » s'il est
     nouveau.
+
+## Suivi
+
+- **RED (2026-10-27)** : tests du brouillon (`insert-guide-draft.spec.ts`) et de la page
+  (`admin-insert-guide.spec.ts`) réécrits pour les blocs, contre des bouchons typés (brouillon
+  sans groupes, formulaire sans blocs) : `pnpm test` → **64 failed / 4962**, `Test Files 2 failed
+  | 245 passed`, code de sortie **1**, uniquement des échecs d'assertion.
+- **GREEN** : brouillon par groupes, `admin-insert-guide-group.ts` (`details` natif, état ouvert
+  piloté par le formulaire et resynchronisé par `toggle`) et `admin-insert-guide-tool.ts` (ligne
+  compacte, `@utility tool-row-grid`), `admin-insert-guide-row.ts` supprimé : `pnpm test` →
+  **4962 passed / 4962**, `Test Files 247 passed`, code de sortie **0**. Un seul ajustement de test
+  après le RED : le nom accessible des champs se lit par `aria-label` ou par le `label[for]` du
+  champ (le composant de suggestion n'expose pas d'`aria-label` ; le libellé court est visible sous
+  `lg`, la suite en `sr-only`).
+- **Refactor sous vert** : focus du retrait de bloc par l'id du bouton (plus de `viewChild`),
+  repérage de confidentialité du nom de matière sans cas particulier ; tests inchangés, toujours
+  verts.
+- **Gates** : `pnpm test` 0, `pnpm lint` 0, `pnpm run format:check` 0,
+  `pnpm run build --configuration production` 0.
+- **Vérification visuelle** (dev server + doublure `ci/api-stub` avec `STUB_ADMIN_SESSION=1` et
+  l'indice `auth:session` dans le navigateur, Playwright headless) : blocs repliés avec leur compte,
+  ouverture au clic et au clavier, erreur dans un bloc replié → le bloc s'ouvre et le focus arrive
+  sur le rayon, une rangée par outil à 1280 et 1024 px, deux rangées à 390 px, aucun défilement
+  horizontal (`scrollWidth − clientWidth = 0`), axe zéro violation sur le formulaire ouvert (clair
+  1280, clair 390, sombre 1280). Console : seul un 404 sur `/api/config`, absent de la doublure,
+  sans lien avec cette spec.
+- **e2e a11y** : scénario `/admin/guide-plaquettes` attendu sur `admin-insert-guide-group`, nouvel
+  état « bloc de matière ouvert » dans `interactive-states.spec.ts`.
+- **Reste ouvert** : sous `lg`, une opération longue (« Alésage (ébauche et finition) ») est tronquée
+  dans son `select` natif (demi-largeur) ; la liste déroulante l'affiche entière.
+
+## Review code
+
+### PR front — spec 038 (revue du 2026-10-27)
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test`, 4962/4962, 247 fichiers, code 0, après `ng cache clean`) / lint ✅ (`pnpm lint`, code 0) / format ✅ (`pnpm run format:check`, code 0) / build ✅ (`pnpm run build --configuration production`, code 0, prerender et CSP compris) ; `pnpm a11y:typecheck` code 0
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main sur les lignes ajoutées ; un hit d'archéologie (`/**`, point 1), zéro `fakeAsync`/`waitForAsync`, `styles:`, `ngModel`, `innerHTML`, `console.`, `export default`, `effect(`, `.only`/`.skip`
+**Warnings de gate** : aucun
+**Rendu compilé** : N/A (aucun composant à sélecteur d'attribut sous `shared/ui`, pas de `styles:`)
+**Preuve de verify runtime** : ✅ rejouée par le reviewer (image Docker de la branche, `ci/a11y-stack.sh up`, Playwright) : `/admin/guide-plaquettes` à 375, 1024 et 1280 px, trois blocs repliés, ouverture et fermeture par Entrée sur le `summary` (l'attribut `open` suit), « Ajouter un outil » met le focus sur `insert-guide-g1-t4-operation`, `scrollWidth − clientWidth = 0` replié et ouvert. Verdict PASS. Console : un seul 404 sur `/api/config`, route absente de la doublure, hors diff. `pnpm a11y --grep "insert guide|guide-plaquettes"` : 6/6 passés (page admin et nouvel état « bloc de matière ouvert », clair et sombre), code 0
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ❌ (point 1)
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ✅
+
+**Contrat du `PUT`** : vérifié, inchangé. `toInsertGuidePayload` garde le même corps par outil : `allMaterials: true` sans `material`, `material.trim()` sinon, rayon omis s'il est `null` ou `NaN`, remarque vide omise. Les tests qui l'épinglent : `insert-guide-draft.spec.ts` (aplatissement bloc après bloc, champ par champ ; bloc générique sans matière ni rayon ; rayon vide ; aller-retour brouillon → payload → brouillon) et `admin-insert-guide.spec.ts` (payload complet avec version 7, matière corrigée appliquée aux deux outils). Seul changement visible côté API : **l'ordre des entrées**. Les lignes d'une même matière sont désormais contiguës, dans l'ordre de première apparition, le générique en dernier. Le premier enregistrement réordonne donc le document stocké. Le site trie par matière, et la spec (exigence 1) le prévoit.
+
+**Tests de l'ancien `admin-insert-guide.spec.ts`** : rien n'est perdu. Payload, version 8 au second envoi, 409 (toast et brouillon conservé), 400, envoi en cours, interrupteurs du guide et du décodeur, bornes de longueur et du rayon, plafond de 300 (et 300 répartis sur deux blocs acceptés), confidentialité (outil, bloc générique, nom de matière, code ISO décodable ou non, non bloquante) et suggestions (y compris la saisie au clavier puis l'envoi) sont tous là. Seuls ont disparu les tests de la case « Toutes matières » par ligne, car le contrôle n'existe plus. Conséquence fonctionnelle : on ne peut plus faire passer un outil d'une matière vers le bloc générique sans le ressaisir. La spec le permet, mais il faut le savoir.
+
+**Synchronisation `<details>` ↔ signal** : correcte. `[open]` côté hôte écrit la propriété, `(toggle)` filtré sur `event.target === host` écrit le `model()`, le formulaire range les clés ouvertes dans un `ReadonlySet`. Une ouverture programmatique déclenche un `toggle` qui réécrit la même valeur, sans boucle. Les cas couverts par les tests : ouvert puis replié à la main puis rouvert par un ajout, bloc invalide ouvert à l'envoi avec le focus sur le champ, état conservé après un enregistrement réussi. Je l'ai aussi vérifié au clavier dans Chromium. Le `model()` est justifié : le parent et l'enfant écrivent tous les deux l'état ouvert.
+
+**Conventions** : `applyEach` imbriqué (groupes puis outils), doublon validé sur le second bloc par `valueOf(path.groups)`, ajout et retrait par `value.update()`, focus par `afterNextRender({ write })`, aucun `styles:`, `data-testid` partout, composants dumb sous 150 lignes de template (formulaire environ 104, bloc environ 99, outil environ 123). `@utility tool-row-grid` est conforme à ADR-0003 : c'est un conteneur de layout partagé par deux éléments de deux composants (l'en-tête de colonnes du bloc et l'hôte de chaque ligne), qui doivent garder des colonnes identiques. Le bloc de commentaire suit le gabarit de section du fichier.
+
+**Avis sur les points de l'implémenteur** :
+1. **Valeurs rognées.** L'exigence « aucun libellé n'est rogné » vise les libellés : titre du `summary`, en-têtes de colonnes, libellés courts, boutons. Elle vient du « Toutes matières » coupé de la revue 037. Les valeurs n'en font pas partie. Un champ texte qui défile reste lisible au curseur. Le `select` sous `lg` coupe la valeur, mais les options restent distinguables (« Ébauche extéri… » / « Ébauche intéri… ») et la liste ouverte les montre entières : ce n'est pas bloquant. En revanche, à 1024 px, la colonne Plaquette (environ 125 px) est la plus étroite des colonnes de texte, alors qu'elle porte la donnée clé (un code ISO fait souvent 14 caractères ou plus). Pendant ce temps, Opération réserve 16rem. Je recommande de rééquilibrer `tool-row-grid` dès `lg` en prenant sur Remarque, par exemple Plaquette en `minmax(9rem,1.5fr)` et Remarque en `minmax(0,1fr)`, à mesurer. Non bloquant.
+2. **Libellés.**
+   - « Le bloc « X » existe déjà : déplacez-y ces outils et retirez ce bloc » : « déplacez-y » promet une action de déplacement que l'écran n'offre pas (il faut ressaisir). Proposition : « Le bloc « X » existe déjà : ajoutez-y ces outils, puis retirez ce bloc. » À trancher avec Julien : deux blocs du même nom fusionnent naturellement à la relecture, donc les accepter coûterait moins à l'utilisateur que les refuser. C'est un changement de spec, hors de cette PR.
+   - « 300 outils au plus » : correct, mais l'erreur s'affiche sous la liste et peut se lire comme une limite par bloc. « 300 outils au plus, toutes matières confondues » lève l'ambiguïté.
+   - « Nouvelle matière » : acceptable comme titre provisoire. En revanche, il a le même poids visuel qu'un vrai nom, et les champs du même bloc s'appellent « … du bloc 3 ». Le `summary` et les noms accessibles n'emploient donc pas le même vocabulaire. Le titre pourrait passer en `text-muted`, et les deux noms s'aligner.
+3. **Bouton Retirer en icône seule** : acceptable. Le 2.5.3 ne s'applique pas sans texte visible, le nom complet satisfait le 1.1.1 et le 4.1.2, et la cible fait 44 px (`min-w-11`). Il reste toutefois un défaut, objet du point 2 ci-dessous.
+4. **345 lignes** : le diff fait passer le fichier de 236 à 343 lignes, au-delà du seuil advisory de 250. Le template reste à environ 104 lignes. Non bloquant (voir « Altitude composant »).
+5. **État e2e « bloc de matière ouvert »** : exécuté par le reviewer contre l'image de la branche. Il passe en clair et en sombre, avec zéro violation. Attention : le job a11y ne tourne plus sur les PR (hebdomadaire depuis le 2026-10-26), donc seul ce passage local l'atteste.
+
+**Tests notables** :
+- ⚠️ `admin-insert-guide.spec.ts` (helper `accessibleName`) : lit le `textContent` du `label`, pas le nom calculé par le navigateur. Dans Chromium, le nom réel est « Opération , outil 1 de Acier témoin » : une espace avant la virgule, introduite par le `span` `sr-only` hors flux. Le test affirme « Opération, outil 1… ». Ce n'est pas faux pour la synthèse vocale, mais c'est visible en braille, et l'oracle diverge du navigateur.
+- ⚠️ Nom accessible : « outil 1 **de** Acier témoin » ne fait pas l'élision devant une voyelle. Une forme sans article, « outil 1, Acier témoin », l'éviterait pour toute matière.
+- ✨ `admin-insert-guide.spec.ts`, test « invalid field in a folded block » : il épingle à la fois l'ouverture du seul bloc fautif et le focus sur le champ, c'est-à-dire le cœur de l'exigence de parcours 7.
+
+**Altitude composant** (advisory, non bloquant) :
+- ⚠️ `src/app/features/admin/application/components/admin-insert-guide-form.ts` : 343 lignes (contre 236 sur `master`), template d'environ 104 lignes, 2 dépendances. Découpe possible : sortir les validateurs purs (`boundedText`, `radiusError`, `duplicateError`) et la fonction de schéma dans un `insert-guide-validation.ts` sans dépendance DOM. Le composant garderait les commandes d'ajout et de retrait et le focus.
+
+**Risque résiduel** (advisory) :
+- réversibilité et monitoring non renseignés dans le profil.
+- Le premier enregistrement réordonne les entrées stockées (contiguës par matière). Un revert du front ne restaure pas l'ordre d'origine. C'est sans effet visible tant que le site trie par matière.
+- « Retirer la matière » supprime tous les outils du bloc sans confirmation. Seuls « Annuler » et la garde de sortie rattrapent l'erreur avant l'enregistrement.
+
+**Points à corriger** :
+1. `src/app/features/admin/application/components/admin-insert-guide-tool.ts:149` : `/** Fin du nom accessible : « de 1.8522 (33CrMoV12) », « du bloc 3 ». */` est un hit du motif d'archéologie du profil (`/\*\*`). C'est un QUOI (exemple de valeur), pas un WHY. Retirer le commentaire. Si le nom `owner` a besoin d'être expliqué, le renommer (par exemple `nameSuffix`) à la place.
+2. `src/app/features/admin/application/components/admin-insert-guide-tool.ts:131` : `<span class="sr-only">Retirer</span>` n'est jamais exposé, car l'`aria-label` du bouton le remplace (le snapshot ARIA de Chromium donne le nom « Retirer l'outil 1 de … », avec un contenu « Retirer » ignoré). C'est du balisage mort. Ne garder qu'une source du nom : soit l'`aria-label`, soit, de préférence parce que les outils de traduction le traduisent, le `span` `sr-only` portant le nom complet `removeLabel()` sans `aria-label`. Le motif n'existe qu'une fois dans le diff : les boutons du bloc ont un texte visible.
+
+**Suite** : les points de la revue sont corrigés en session.
+
+- **Bloquant 1** : le JSDoc de `owner` est retiré. Le nom de l'input reste, mais il porte maintenant le nom nu (`Acier témoin`, `bloc 3`).
+- **Bloquant 2** : le bouton de retrait d'un outil n'a plus d'`aria-label`. Son nom complet est dans le `span` masqué : « Retirer l'outil 1 (Acier témoin) ».
+- **Remarques traitées** :
+  - les noms des champs suivent la forme « Plaquette (outil 2, Acier témoin) », ce qui supprime l'espace avant la virgule et le « de » sans élision ;
+  - le message de doublon devient « ajoutez-y ces outils, puis retirez ce bloc » ;
+  - le plafond devient « 300 outils au plus, toutes matières confondues » ;
+  - la colonne Opération passe de 16rem à 15rem, et Plaquette de 1.3fr à 1.6fr.
+- **Tests** :
+  - RED : 6 failed / 4962, code de sortie 1 (attentes mises à jour avant le code) ;
+  - GREEN : 4962 passed / 4962, code de sortie 0 ;
+  - lint, format:check et le build de production sortent en 0.
