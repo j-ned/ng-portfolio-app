@@ -4,7 +4,14 @@ title: Guide des plaquettes simplifié, saisi depuis l'admin
 type: feature
 status: draft
 created: 2026-10-26
-related: [specs/034-guide-plaquettes.md, specs/032-atelier.md, docs/adr/0032-confidentialite-verifiable-du-contenu-d-atelier.md, docs/adr/0033-referentiel-d-usinage-source-par-le-type.md, docs/adr/0024-rendu-a-la-requete-des-pages-de-contenu.md]
+related:
+  [
+    specs/034-guide-plaquettes.md,
+    specs/032-atelier.md,
+    docs/adr/0032-confidentialite-verifiable-du-contenu-d-atelier.md,
+    docs/adr/0033-referentiel-d-usinage-source-par-le-type.md,
+    docs/adr/0024-rendu-a-la-requete-des-pages-de-contenu.md,
+  ]
 ---
 
 # 035 — Guide des plaquettes simplifié
@@ -78,12 +85,12 @@ par la spec 035 ». La garde de confidentialité (`findConfidentialReferences`) 
 
 ### Découpage en PR (proposé)
 
-| # | Dépôt | Périmètre | Dépend de |
-|---|---|---|---|
-| 1 | front | cette spec | — |
-| 2 | API | document guide des plaquettes (`GET` public, `PUT` admin), migration, tests | 1 |
-| 3 | front | retrait du référentiel 034 + guide public lu dans l'API + interrupteur (404, carte, sitemap) | 2 en prod |
-| 4 | front | page admin `/admin/guide-plaquettes` (interrupteur et lignes) | 3 |
+| #   | Dépôt | Périmètre                                                                                    | Dépend de |
+| --- | ----- | -------------------------------------------------------------------------------------------- | --------- |
+| 1   | front | cette spec                                                                                   | —         |
+| 2   | API   | document guide des plaquettes (`GET` public, `PUT` admin), migration, tests                  | 1         |
+| 3   | front | retrait du référentiel 034 + guide public lu dans l'API + interrupteur (404, carte, sitemap) | 2 en prod |
+| 4   | front | page admin `/admin/guide-plaquettes` (interrupteur et lignes)                                | 3         |
 
 Les PR front 3 et 4 partent chacune de `master` à jour, l'une après le merge de l'autre (jamais de
 PR empilée).
@@ -104,6 +111,7 @@ PR empilée).
 ## Journal des tranches
 
 - **PR front 3 — retrait du référentiel 034, guide public lu dans l'API, interrupteur** : RED 42 failed / 4642 total (code de sortie 1), puis 2 RED ajoutés au fil de la vérification (option choisie absente du HTML serveur, tableau qui élargissait la page à 375 px) ; GREEN 4643 passed / 4643 total (code de sortie 0) · refactor : lecture des lignes du guide factorisée dans `_entries`, `InsertGuideEntryDto` et le builder inutilisé `anInsertGuide` retirés de l'export
+- **PR front 4 — page d'admin `/admin/guide-plaquettes` (interrupteur et lignes)** : RED `pnpm test` code de sortie 1, 19 erreurs de compilation (page, brouillon, `getDocument`/`saveGuide`, `InsertGuideDocument`, `toInsertGuideDocument` absents), puis 4 échecs d'assertion au premier GREEN (menu admin : 3 tests à mettre à jour, test des 301 lignes trop lent) ; GREEN 4686 passed / 4686 total (code de sortie 0) · refactor : aucun
 
 ## Verify
 
@@ -118,6 +126,19 @@ Image `ng-portfolio-app:ci` (`docker buildx bake ci`) servie devant la doublure 
 7. `pnpm a11y -g atelier` : 6 passed (clair et sombre, `/atelier`, `/atelier/plaquettes`, `?matiere=Acier%20t%C3%A9moin`).
 
 Limite constatée : dans le volet navigateur de l'application (masqué), `requestAnimationFrame` ne se déclenche pas et les transitions de vue du routeur restent bloquées. La navigation côté client y semblait cassée sur toutes les pages, `/mentions-legales` compris. Le parcours a donc été rejoué dans Playwright.
+
+### PR front 4 — admin du guide
+
+Image `ng-portfolio-app:ci` devant la doublure (`ci/a11y-stack.sh up ng-portfolio-app:ci`, `STUB_ADMIN_SESSION=1`), doublure dotée d'un `PUT /api/workshop-guide` gardé en mémoire (409 sur version périmée). Parcours joué par Playwright (Chromium headless, session admin et API réécrite vers la doublure comme l'audit axe). Verdict : **PASS**.
+
+1. `/admin/guide-plaquettes` : 3 lignes de la doublure. Interrupteur décoché, Enregistrer : toast « Guide des plaquettes enregistré » ; `/atelier/plaquettes` répond **404**, `/atelier` sans carte.
+2. Retour à l'admin : « Ajouter une ligne » met le focus sur `insert-guide-4-material` ; une remarque « Plan n° 12 à éviter » affiche l'avertissement de la ligne, sans bloquer (capture `01-admin-avertissement.png`) ; deuxième ligne ajoutée ; « Retirer » sur la ligne 1 met le focus sur « Ajouter une ligne » ; interrupteur coché, Enregistrer.
+3. Corps du `PUT` reçu : `{"enabled":true,"entries":[…Acier témoin/threading…, …Laiton témoin…, {"material":"Inox vérif","operation":"external-finishing","insert":"VERIF-A","noseRadius":0.4,"note":"Arrosage abondant."}, {"material":"Inox vérif","operation":"parting-off","insert":"VERIF-B","noseRadius":0.2}],"version":2}` ; la doublure répond version 3 (capture `02-admin-enregistre.png`).
+4. `/atelier/plaquettes?matiere=Inox%20v%C3%A9rif` : 200, lignes « Finition extérieure / VERIF-A / 0,4 mm / Arrosage abondant. » et « Tronçonnage / VERIF-B / 0,2 mm » ; `/atelier` montre la carte (captures `03-public-plaquettes.png`, `04-atelier-carte.png`).
+5. 409 : une autre fenêtre écrit (PUT direct sur la doublure) pendant l'édition ; Enregistrer renvoie 409 et le toast « Le guide des plaquettes a été modifié depuis une autre fenêtre. Rechargez la page… », le brouillon reste (capture `05-conflit-409.png`).
+6. 375 px : `scrollWidth` 375 pour une fenêtre de 375, sans défilement horizontal (capture `06-admin-375.png`).
+7. Console : seules erreurs, le 404 attendu du guide éteint, le 409 provoqué, et `GET /api/config` en 404 (route absente de la doublure, antérieur).
+8. `pnpm a11y -g admin` : 32 passed, dont `/admin/guide-plaquettes` en clair et en sombre (nouveau scénario).
 
 ## Review code
 
@@ -135,10 +156,12 @@ Limite constatée : dans le volet navigateur de l'application (masqué), `reques
 **Alignement spec** : ✅ (exigences 1, 3, 4, 5 tenues pour la PR 3 ; la spec n'a ni `## Plan technique` ni `## Plan de test`, alignement jugé sur la Description)
 
 **Tests notables** :
+
 - ✨ `src/app/features/workshop/pages/insert-guide/insert-guide.spec.ts:256` : 404 serveur, page introuvable et aucune fuite du guide éteint, sur le statut réel `RESPONSE_INIT`.
 - ✨ `src/server/feeds/feed-handler.spec.ts:92` : interrupteur du sitemap triangulé par `it.each`, et lecture en échec du guide ajoutée aux cas 503.
 
 **Risque résiduel** (advisory) :
+
 - monitoring : Sentry
 - au déploiement, `/atelier/plaquettes` répond 404 et la carte disparaît (production `enabled: false`) jusqu'à l'activation, qui passe par `PUT` tant que la PR 4 (admin) n'est pas livrée
 - `/atelier` dépend désormais de `GET /api/workshop-guide` : une panne de ce seul endpoint met l'accueil de l'atelier en 503 (copie nginx servie si elle existe)
