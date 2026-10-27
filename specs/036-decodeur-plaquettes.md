@@ -136,6 +136,7 @@ comme `32.51`) : refusé avec ce motif, à la position où commence la taille.
   GREEN 4834 passed / 4834 total (code de sortie 0) · refactor : filtre des cartes réduit à
   « interrupteur allumé → toutes les cartes »
 - Les PR 2 et 3 du découpage sont livrées ensemble, en une seule PR (demande de Julien).
+- **Correctif hors tranche (session principale)** : l'éditeur admin du guide (spec 035) signalait tout code ISO à six chiffres (`CNMG 120408`) comme référence de pièce ; le champ plaquette n'est plus analysé quand il se décode. RED sur `CNMG 120408`, puis GREEN 4837/4837, lint et format en code 0.
 
 ## Verify
 

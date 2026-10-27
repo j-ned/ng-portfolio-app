@@ -2,6 +2,7 @@ import { Component, computed, input, output } from '@angular/core';
 import { FormField, type FieldTree } from '@angular/forms/signals';
 import { MACHINING_OPERATIONS } from '@features/workshop/domain/machining-operations.static-data';
 import { findConfidentialReferences } from '@features/workshop/domain/confidential-references';
+import { decodeInsertCode } from '@features/workshop/domain/decode-insert-code';
 import { AppIcon } from '@shared/icons/app-icon';
 import { Button } from '@shared/ui/button';
 import { FieldError } from '@shared/ui/field-error';
@@ -158,6 +159,8 @@ export class AdminInsertGuideRow {
 
   protected readonly references = computed(() => {
     const { material, insert, note } = this.entry()().value();
-    return findConfidentialReferences([material, insert, note].join('\n')).join(', ');
+    // Un code ISO décodable porte des chiffres de taille, pas une référence de pièce.
+    const checkedInsert = decodeInsertCode(insert).ok ? '' : insert;
+    return findConfidentialReferences([material, checkedInsert, note].join('\n')).join(', ');
   });
 }
