@@ -114,6 +114,93 @@ describe('InsertDecoder', () => {
       });
     });
 
+    describe('with insert codes in the guide', () => {
+      const WITH_CODES: GuideAnswer = (request) =>
+        request.flush({
+          ...GUIDE(true),
+          entries: [
+            {
+              material: 'Inox fictif',
+              operation: 'external-roughing',
+              insert: 'CNMG 120408-PM',
+              noseRadius: 0.8,
+            },
+            {
+              material: 'Acier fictif',
+              operation: 'external-roughing',
+              insert: 'cnmg120408pm',
+              noseRadius: 0.8,
+            },
+            {
+              material: 'Acier fictif',
+              operation: 'external-finishing',
+              insert: 'DNMG 150604',
+              noseRadius: 0.4,
+            },
+          ],
+        });
+      const field = (): HTMLInputElement => one('insert-decoder-code') as HTMLInputElement;
+      const type = async (text: string): Promise<void> => {
+        field().value = text;
+        field().dispatchEvent(new Event('input'));
+        await fixture.whenStable();
+        fixture.detectChanges();
+      };
+      const press = async (key: string): Promise<KeyboardEvent> => {
+        const event = new KeyboardEvent('keydown', { key, cancelable: true });
+        field().dispatchEvent(event);
+        await fixture.whenStable();
+        fixture.detectChanges();
+        return event;
+      };
+
+      it('When the code field is opened by ArrowDown Then it is a combobox proposing each code of the guide once', async () => {
+        await render(undefined, WITH_CODES);
+        const listbox = host().querySelector(`[id="${field().getAttribute('aria-controls')}"]`);
+
+        await press('ArrowDown');
+
+        expect({
+          role: field().getAttribute('role'),
+          listLabel: listbox?.getAttribute('aria-label'),
+          options: all('suggest-option').map(collapsed),
+        }).toEqual({
+          role: 'combobox',
+          listLabel: INSERT_DECODER_COPY.codeListLabel,
+          options: ['CNMG 120408-PM', 'DNMG 150604'],
+        });
+      });
+
+      it('When the start of a code is typed and its suggestion chosen Then it is decoded, the url keeping the normalized code', async () => {
+        await render(undefined, WITH_CODES);
+        const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+        await type('dn');
+        const options = all('suggest-option').map(collapsed);
+        await press('ArrowDown');
+        await press('Enter');
+
+        expect([options, navigate.mock.calls]).toEqual([
+          ['DNMG 150604'],
+          [[[], { queryParams: { code: 'DNMG150604' }, replaceUrl: true }]],
+        ]);
+      });
+
+      it('When a code absent from the guide is typed Then it stays free, and Enter leaves it to the form', async () => {
+        await render(undefined, WITH_CODES);
+
+        await type('VBMT 160404');
+        const event = await press('Enter');
+
+        expect([
+          field().value,
+          all('suggest-option').length,
+          one('suggest-no-match'),
+          event.defaultPrevented,
+        ]).toEqual(['VBMT 160404', 0, null, false]);
+      });
+    });
+
     it('When a code is asked in the url Then the field shows it', async () => {
       await render('CNMG120408');
 
