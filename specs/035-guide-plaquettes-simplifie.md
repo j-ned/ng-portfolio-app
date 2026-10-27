@@ -101,10 +101,29 @@ PR empilée).
 2. **Opérations** : la liste fermée ci-dessus, en attendant un ajout de Julien.
 3. **Rayon** : saisi et affiché en mm (0,4 / 0,8 / 1,2).
 
+### Recherche avec suggestions (2026-10-27)
+
+Demande de Julien : « quand je tape une lettre, avoir des propositions de ce que j'ai renseigné
+depuis l'admin ». Un seul composant `shared/ui/suggest-input.ts` (combobox ARIA 1.2 en liste,
+`FormValueControl<string>`), recherche dans `shared/search/suggestion-search.ts` : casse, accents,
+espaces et tirets ignorés, celles qui commencent par la saisie avant celles qui la contiennent.
+
+1. **Guide** : la liste déroulante des matières devient un champ en liste fermée ; un choix met à
+   jour `?matiere=` (`replaceUrl`), une saisie sans correspondance dit « Aucune matière », le HTML
+   serveur porte la matière de l'URL dans `value`.
+2. **Décodeur** : le champ code propose les codes du guide, une fois chacun ; le texte reste libre,
+   choisir une suggestion décode.
+3. **Admin** : Matière et Plaquette de chaque ligne proposent les valeurs du document lu et du
+   brouillon, une fois chacune ; le texte reste libre, la saisie complète ne se propose pas à elle-même.
+
+Suite possible, hors de cette PR : faire reposer `admin-tags-selector` (multi-sélection) sur la
+même recherche.
+
 ## Journal des tranches
 
 - **PR front 3 — retrait du référentiel 034, guide public lu dans l'API, interrupteur** : RED 42 failed / 4642 total (code de sortie 1), puis 2 RED ajoutés au fil de la vérification (option choisie absente du HTML serveur, tableau qui élargissait la page à 375 px) ; GREEN 4643 passed / 4643 total (code de sortie 0) · refactor : lecture des lignes du guide factorisée dans `_entries`, `InsertGuideEntryDto` et le builder inutilisé `anInsertGuide` retirés de l'export
 - **PR front 4 — page d'admin `/admin/guide-plaquettes` (interrupteur et lignes)** : RED `pnpm test` code de sortie 1, 19 erreurs de compilation (page, brouillon, `getDocument`/`saveGuide`, `InsertGuideDocument`, `toInsertGuideDocument` absents), puis 4 échecs d'assertion au premier GREEN (menu admin : 3 tests à mettre à jour, test des 301 lignes trop lent) ; GREEN 4686 passed / 4686 total (code de sortie 0) · refactor : aucun
+- **PR front — recherche avec suggestions** : RED 1 (fonction de recherche et composant) 40 failed / 4907 total (code de sortie 1), échecs d'assertion sur des bouchons ; GREEN 43 passed sur les deux fichiers, après correction d'un hôte de test (`name` généré par un formulaire non nommé). RED 2 (guide, décodeur, admin) 14 failed / 4919 total (code de sortie 1) ; GREEN 4919 passed / 4919 total (code de sortie 0) · refactor : aucun
 
 ## Verify
 
@@ -132,6 +151,18 @@ Image `ng-portfolio-app:ci` devant la doublure (`ci/a11y-stack.sh up ng-portfoli
 6. 375 px : `scrollWidth` 375 pour une fenêtre de 375, sans défilement horizontal (capture `06-admin-375.png`).
 7. Console : seules erreurs, le 404 attendu du guide éteint, le 409 provoqué, et `GET /api/config` en 404 (route absente de la doublure, antérieur).
 8. `pnpm a11y -g admin` : 32 passed, dont `/admin/guide-plaquettes` en clair et en sombre (nouveau scénario).
+
+### PR front — recherche avec suggestions
+
+Image `ng-portfolio-app:ci` (`docker buildx bake ci`) devant la doublure (`ci/a11y-stack.sh up ng-portfolio-app:ci`). Verdict : **PASS**.
+
+1. `/atelier/plaquettes`, volet navigateur, clavier : « tém » propose « Acier témoin » et « Laiton témoin » (statut « 2 propositions »), deux flèches bas puis Entrée : URL `?matiere=Laiton%20t%C3%A9moin`, tableau « Plaquettes pour Laiton témoin », historique non allongé.
+2. 375 px, souris : « ac » propose « Acier témoin », le clic le choisit, le focus reste dans le champ, URL `?matiere=Acier%20t%C3%A9moin` ; `scrollWidth` 375. « titane » puis Entrée : « Aucune matière » affiché et annoncé, URL inchangée ; Échap rend « Acier témoin ».
+3. URL partagée en rendu serveur (`curl`) : `<input … role="combobox" … value="Acier témoin">` ; décodeur `?code=CNMG120408PM` : `value="CNMG120408PM"` et `name="code"` (repli sans JavaScript tenu).
+4. `/atelier/decodeur`, 375 px : « cc » propose « CCGT 09T304-PM », flèche bas puis Entrée : `?code=CCGT09T304PM` et « Décodage de CCGT 09T304-PM » ; code libre « vbmt 160404 » puis clic sur Décoder : `?code=VBMT160404`, « Décodage de VBMT 160404 ».
+5. `/admin/guide-plaquettes`, 375 px, joué par Playwright (session admin et API réécrite vers la doublure, comme l'audit axe ; le volet navigateur appelle l'API de production) : ligne 5 ajoutée, « lai » propose « Laiton témoin », flèche bas puis Entrée ; « ccgt » propose « CCGT 09T304-PM », choisi à la souris, focus conservé ; corps du `PUT` : `…{"material":"Laiton témoin","operation":"parting-off","insert":"CCGT 09T304-PM","noseRadius":0.4}],"version":1}`, toast « Guide des plaquettes enregistré » ; `scrollWidth` 375 (captures `admin-material-375.png`, `admin-insert-375.png`).
+6. Console : seule erreur, `GET /api/config` en 404 (route absente de la doublure, antérieur).
+7. `pnpm a11y -g "atelier|decodeur|guide-plaquettes"` : 16 passed, dont le nouvel état « liste des matières ouverte » en clair et en sombre.
 
 ## Review code
 
