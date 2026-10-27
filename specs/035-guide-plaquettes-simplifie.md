@@ -231,3 +231,34 @@ Image `ng-portfolio-app:ci` (`docker buildx bake ci`) devant la doublure (`ci/a1
 1. `DESIGN.md` (diff entier, 150+/137−) : reformatage seul (guillemets YAML, alignement de tableaux, une ligne vide), sans lien avec la page d'admin et hors du `format:check`. Il élargit la surface de conflit avec les autres PR (CLAUDE.md, workflow item 7). Retirer du commit (`git checkout origin/master -- DESIGN.md`), ou l'isoler dans une PR `chore` dédiée.
 
 **Suite (2026-10-27, session principale)** : point bloquant corrigé, `DESIGN.md` ramené à la seule entrée « Éditeur du guide des plaquettes » (reformatage retiré) ; reformatage de l'en-tête et du tableau de découpage de cette spec retiré aussi ; remarque `step` appliquée (`0.01`, deux décimales), test ajusté.
+
+### PR front — recherche avec suggestions (revue du 2026-10-27, commit `57fa05c`)
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test` exit 0, 4919/4919 ; `tsc --noEmit -p tsconfig.spec.json` exit 0) / lint ✅ (`pnpm lint` exit 0) / build ✅ (`pnpm run build --configuration production` exit 0) ; `pnpm install --frozen-lockfile` exit 0, `pnpm run format:check` exit 0, `docker buildx bake ci` exit 0 (étage test 4919/4919)
+**Checks mécaniques** : checker non vendoré : auto-checks joués à la main sur le diff (archéologie au motif du profil, export default, effect, zone, snapshot, fireEvent, only/skip, innerHTML/console/any, boucles générant des `it`) : 5 hits archéologie (`/**` × 4, dont 2 levés comme WHY d'une ligne ; 2 blocs de 2 lignes), 0 autre
+**Warnings de gate** : aucun induit par le diff ; (b) pré-existant : `pnpm install` « Ignored build scripts » (@parcel/watcher, @sentry/cli, lmdb…)
+**Rendu compilé** : N/A (`app-suggest-input` à sélecteur élément, pas d'hôte attribut)
+**Preuve de verify runtime** : ✅ (section Verify complète ; rejouée par la revue sur `ng-portfolio-app:ci` + doublure : HTML serveur `value="Acier témoin"` sur `/atelier/plaquettes?matiere=…`, `value="CNMG120408PM"` et `name="code"` sur le décodeur dans un `form method="get"` ; « tém » → 2 options, statut « 2 propositions » ; « titane » → « Aucune matière » affiché et annoncé, Entrée sans effet, blur rend « Acier témoin », URL inchangée ; décodeur « cc » → flèche bas → Entrée : `?code=CCGT09T304PM`, « Décodage de CCGT 09T304-PM », focus conservé ; console : seuls les 404/CORS de l'environnement local déjà notés)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ❌ (politique commentaires du profil, point 2)
+**Cross-platform** : ✅
+**Tests** : ❌ (builder non utilisé, point 1)
+**Sécurité** : ✅
+**Alignement spec** : ✅ (guide, décodeur et admin conformes à « Recherche avec suggestions » ; les trois écarts au motif APG sont tenus et justifiés)
+
+**Tests notables** :
+
+- ✨ `src/app/shared/search/suggestion-search.spec.ts:24` : ordre « commence par » puis « contient » triangulé par `it.each` (casse, tirets, accents, sans résultat), requêtes vides comprises.
+- ✨ `src/app/features/admin/pages/admin-insert-guide/admin-insert-guide.spec.ts` : payload du `PUT` vérifié de bout en bout après choix clavier, copie champ par champ comprise.
+
+**Remarques non bloquantes** :
+
+- `src/app/shared/ui/suggest-input.ts:115` : en mode libre l'exclusion se fait par clé, donc « inox 316l » saisi masque « Inox 316L » déjà enregistré ; l'admin ne peut pas reprendre la graphie de référence par la liste, et deux graphies d'une même matière donnent deux entrées dans le guide public (`materialsOf` dédoublonne au texte exact). Exclure au texte exact (`option !== query.trim()`) garde l'intention de l'écart 1 sans ce masquage.
+
+**Points à corriger** :
+
+1. `src/app/features/workshop/pages/insert-decoder/insert-decoder.spec.ts:121-141` : trois lignes du guide écrites en littéraux comme entrée de test alors que `anEntry` existe (`@features/workshop/testing/insert-guide-builders`, déjà utilisé par `admin-insert-guide.spec.ts`). Remplacer par `anEntry({ material, insert, … })`.
+2. Politique commentaires du profil (une ligne de WHY, pas de QUOI) : `src/app/shared/ui/suggest-input.ts:20-21` et `:193-194` (blocs de deux lignes qui décrivent le comportement : réduire chacun à une ligne de WHY ou retirer) ; `src/app/shared/search/suggestion-search.ts:10` et `:23` (JSDoc qui redit le code : retirer). `suggestion-search.ts:1`, `suggest-input.ts:113` et `admin-insert-guide-form.ts:170` sont levés (WHY d'une ligne).
+
+**Suite** : les deux points et la remarque sont corrigés en session. Les trois lignes du décodeur passent par `anEntry`, les quatre commentaires sont retirés, et le mode libre exclut maintenant au texte exact. Nouveau test RED, 1 failed / 4920 (code de sortie 1) : « inox 316l » propose « Inox 316L ». Le test admin qui figeait l'ancienne exclusion par clé saisit maintenant la graphie exacte. GREEN : 4920 passed / 4920 (code de sortie 0), lint et format verts.

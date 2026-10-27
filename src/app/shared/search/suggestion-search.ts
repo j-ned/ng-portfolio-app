@@ -7,7 +7,6 @@ export function suggestionKey(text: string): string {
     .toLowerCase();
 }
 
-/** Suggestions contenant la saisie, celles qui commencent par elle en premier. */
 export function matchingSuggestions(
   suggestions: readonly string[],
   query: string,
@@ -20,7 +19,6 @@ export function matchingSuggestions(
   return [...starting, ...containing].map(({ text }) => text);
 }
 
-/** Une suggestion par clé, dans sa première graphie, sans espaces de bord, triées en français. */
 export function distinctSuggestions(values: readonly string[]): readonly string[] {
   const byKey = new Map<string, string>();
   for (const value of values) {

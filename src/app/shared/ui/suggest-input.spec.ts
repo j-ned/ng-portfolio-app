@@ -207,15 +207,23 @@ describe('SuggestInput', () => {
         noMatch: page.one('suggest-no-match'),
         status: page.status(),
       };
-      await page.type('inox 316l');
+      await page.type('Inox 316L');
 
       expect({ free, exact: page.optionTexts(), value: fixture.componentInstance.value() }).toEqual(
         {
           free: { value: 'Code libre', noMatch: null, status: '' },
           exact: [],
-          value: 'inox 316l',
+          value: 'Inox 316L',
         },
       );
+    });
+
+    it('Given the free field When another spelling of a suggestion is typed Then the reference spelling is still proposed', async () => {
+      const { page } = await render('free');
+
+      await page.type('inox 316l');
+
+      expect(page.optionTexts()).toEqual(['Inox 316L']);
     });
   });
 

@@ -17,8 +17,6 @@ import { matchingSuggestions, suggestionKey } from '@shared/search/suggestion-se
 
 type SuggestMode = 'restricted' | 'free';
 
-// Combobox ARIA 1.2 en liste, sans sélection automatique. `restricted` : seule une suggestion
-// devient la valeur ; `free` : le texte saisi est la valeur, Entrée sans option active reste au formulaire.
 @Component({
   selector: 'app-suggest-input',
   host: { class: 'relative block' },
@@ -110,9 +108,7 @@ export class SuggestInput implements FormValueControl<string> {
     const query = this._query();
     const matches = matchingSuggestions(this.suggestions(), query);
     if (this.mode() === 'restricted') return matches;
-    // La saisie déjà complète ne se propose pas à elle-même.
-    const typed = suggestionKey(query);
-    return matches.filter((option) => suggestionKey(option) !== typed);
+    return matches.filter((option) => option !== query.trim());
   });
   protected readonly expanded = computed(() => this.options().length > 0);
   protected readonly activeId = computed(() => {
@@ -190,8 +186,6 @@ export class SuggestInput implements FormValueControl<string> {
     else this.text.set(this.value());
   }
 
-  // Entrée : l'option active, ou en liste fermée la suggestion saisie en entier ; en mode libre
-  // sans option active, la touche reste au formulaire, qui soumet le texte.
   private confirm(event: KeyboardEvent): void {
     const active = this.options()[this.activeIndex()];
     if (active !== undefined) {

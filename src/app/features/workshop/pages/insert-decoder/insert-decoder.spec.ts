@@ -10,6 +10,7 @@ import { Router, provideRouter } from '@angular/router';
 import { API_BASE_URL } from '@shared/api/api-config';
 import { INSERT_DECODER_COPY } from '../../application/insert-decoder-copy';
 import type { InsertGuideDto } from '../../infra/insert-guide.types';
+import { anEntry } from '../../testing/insert-guide-builders';
 import { InsertDecoder } from './insert-decoder';
 
 const API = '/api';
@@ -119,24 +120,14 @@ describe('InsertDecoder', () => {
         request.flush({
           ...GUIDE(true),
           entries: [
-            {
-              material: 'Inox fictif',
-              operation: 'external-roughing',
-              insert: 'CNMG 120408-PM',
-              noseRadius: 0.8,
-            },
-            {
-              material: 'Acier fictif',
-              operation: 'external-roughing',
-              insert: 'cnmg120408pm',
-              noseRadius: 0.8,
-            },
-            {
+            anEntry({ material: 'Inox fictif', insert: 'CNMG 120408-PM' }),
+            anEntry({ material: 'Acier fictif', insert: 'cnmg120408pm' }),
+            anEntry({
               material: 'Acier fictif',
               operation: 'external-finishing',
               insert: 'DNMG 150604',
               noseRadius: 0.4,
-            },
+            }),
           ],
         });
       const field = (): HTMLInputElement => one('insert-decoder-code') as HTMLInputElement;

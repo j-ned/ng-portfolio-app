@@ -757,7 +757,7 @@ describe('AdminInsertGuide: suggestions des lignes', () => {
     const editor = await openWithValues();
     await addRow(editor);
 
-    await fill(editor, 'admin-insert-guide-material', 'acier fictif', 3);
+    await fill(editor, 'admin-insert-guide-material', 'Acier fictif', 3);
 
     expect(options(editor)).toEqual([]);
   });
