@@ -89,7 +89,7 @@ import type { InsertGuideRowDraft } from '../insert-guide-draft';
       <label [for]="id + '-radius'" class="field-label">Rayon de bec (mm)</label>
       <input
         type="number"
-        step="0.1"
+        step="0.01"
         inputmode="decimal"
         [id]="id + '-radius'"
         data-testid="admin-insert-guide-radius"

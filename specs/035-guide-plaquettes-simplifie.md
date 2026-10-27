@@ -4,14 +4,7 @@ title: Guide des plaquettes simplifié, saisi depuis l'admin
 type: feature
 status: draft
 created: 2026-10-26
-related:
-  [
-    specs/034-guide-plaquettes.md,
-    specs/032-atelier.md,
-    docs/adr/0032-confidentialite-verifiable-du-contenu-d-atelier.md,
-    docs/adr/0033-referentiel-d-usinage-source-par-le-type.md,
-    docs/adr/0024-rendu-a-la-requete-des-pages-de-contenu.md,
-  ]
+related: [specs/034-guide-plaquettes.md, specs/032-atelier.md, docs/adr/0032-confidentialite-verifiable-du-contenu-d-atelier.md, docs/adr/0033-referentiel-d-usinage-source-par-le-type.md, docs/adr/0024-rendu-a-la-requete-des-pages-de-contenu.md]
 ---
 
 # 035 — Guide des plaquettes simplifié
@@ -85,12 +78,12 @@ par la spec 035 ». La garde de confidentialité (`findConfidentialReferences`) 
 
 ### Découpage en PR (proposé)
 
-| #   | Dépôt | Périmètre                                                                                    | Dépend de |
-| --- | ----- | -------------------------------------------------------------------------------------------- | --------- |
-| 1   | front | cette spec                                                                                   | —         |
-| 2   | API   | document guide des plaquettes (`GET` public, `PUT` admin), migration, tests                  | 1         |
-| 3   | front | retrait du référentiel 034 + guide public lu dans l'API + interrupteur (404, carte, sitemap) | 2 en prod |
-| 4   | front | page admin `/admin/guide-plaquettes` (interrupteur et lignes)                                | 3         |
+| # | Dépôt | Périmètre | Dépend de |
+|---|---|---|---|
+| 1 | front | cette spec | — |
+| 2 | API | document guide des plaquettes (`GET` public, `PUT` admin), migration, tests | 1 |
+| 3 | front | retrait du référentiel 034 + guide public lu dans l'API + interrupteur (404, carte, sitemap) | 2 en prod |
+| 4 | front | page admin `/admin/guide-plaquettes` (interrupteur et lignes) | 3 |
 
 Les PR front 3 et 4 partent chacune de `master` à jour, l'une après le merge de l'autre (jamais de
 PR empilée).
@@ -167,3 +160,43 @@ Image `ng-portfolio-app:ci` devant la doublure (`ci/a11y-stack.sh up ng-portfoli
 - `/atelier` dépend désormais de `GET /api/workshop-guide` : une panne de ce seul endpoint met l'accueil de l'atelier en 503 (copie nginx servie si elle existe)
 
 **Suite (2026-10-27, session principale)** : remarque 1 appliquée, `track` sur une clé stable (opération, plaquette, rayon) au lieu de l'objet recréé.
+
+### PR front 4 — admin du guide (revue du 2026-10-27, commit `ba09304`)
+
+**Verdict** : REJECTED
+**Gates CI locaux** : tests ✅ (`pnpm test` exit 0, 4686/4686) / lint ✅ (`pnpm lint` exit 0) / build ✅ (`pnpm run build --configuration production` exit 0) ; `pnpm install --frozen-lockfile` 0, `pnpm run format:check` 0, `docker buildx bake ci` 0 (4686/4686 dans l'image)
+**Checks mécaniques** : checker non vendoré : auto-checks joués à la main sur le diff (archéologie, export default, effect, zone, snapshot, fireEvent, only/skip, innerHTML/console/any) : 0 hit ; 4 commentaires d'une ligne, WHY intemporels
+**Warnings de gate** : aucun induit par le diff ; (b) pré-existant : `pnpm install` « Ignored build scripts » (@parcel/watcher, @sentry/cli, lmdb, msgpackr-extract)
+**Rendu compilé** : N/A (aucun composant `shared/ui` à sélecteur attribut touché)
+**Preuve de verify runtime** : ✅ (section Verify PR 4 complète, rejouée par la revue sur `ng-portfolio-app:ci` à 375 px : `scrollWidth` 375, focus sur `insert-guide-4-material` après ajout et saisie clavier, focus sur « Ajouter une ligne » après retrait, avertissement « OF 123456 » non bloquant, corps du `PUT` copié champ par champ avec `version`, rayon 0.25 accepté, 409 provoqué : toast de conflit et saisie conservée ; console : 404 `/api/config` antérieur et 409 provoqué ; `pnpm a11y -g guide-plaquettes` 2 passed)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ✅
+**Sécurité** : ✅
+**Alignement spec** : ❌ (fichier hors périmètre : `DESIGN.md`)
+
+**Écarts de l'implémenteur, jugés** :
+
+- `noseRadius: number | null` : accepté. La doc officielle (angular.dev, « Form models ») admet `null` pour une feuille primitive et ne l'exclut que pour les contrôles texte ; un défaut `0` préremplirait une valeur fausse et remplacerait « obligatoire » par « supérieur à 0 ». La règle de CLAUDE.md (« défauts non-`null` ») est plus stricte que la doc : à nuancer (feuille numérique), pas à contourner en silence.
+- Un seul gateway (`getGuide`, `getDocument`, `saveGuide`) : accepté, une seule implémentation HTTP (YAGNI) ; même patron que les pages `workshop` qui injectent déjà `HttpInsertGuideGateway`.
+- Avertissement de confidentialité par ligne : accepté, il désigne la ligne fautive dans un tableau de 300 lignes possibles.
+- Délai de 15 s du test « 301 lignes » : accepté, 3,4 s mesurées dans l'image (défaut 5 s), marge pour un runner plus lent.
+- Vouvoiement de l'admin : accepté, cohérent avec tout `features/admin` (le tutoiement de la spec 031 vise les pages publiques).
+
+**Tests notables** :
+
+- ✨ `src/app/features/admin/pages/admin-insert-guide/admin-insert-guide.spec.ts:381` : 409, saisie conservée et bouton réactivé, sur le comportement rendu.
+- ✨ `src/app/features/admin/pages/admin-insert-guide/admin-insert-guide.spec.ts:462` : bornes de l'API triangulées par `it.each` (80/40/200, blanc, 0, négatif, 10,5, trois décimales), et cas limites acceptés (10, 1.15, 0.05).
+
+**Risque résiduel** (advisory) :
+
+- monitoring : Sentry
+- `src/app/features/admin/application/components/admin-insert-guide-row.ts:92` : `step="0.1"` alors que deux décimales sont admises ; sans effet bloquant (`novalidate`, styles sur `aria-invalid`), mais les flèches du champ sautent de 0,1. `step="0.01"` serait cohérent.
+- doublure `ci/api-stub/server.mjs:45` : le `PUT` ne vérifie ni session (401) ni corps (400), comme celui du parcours ; ces deux cas ne sont couverts qu'en unitaire.
+
+**Points à corriger** :
+
+1. `DESIGN.md` (diff entier, 150+/137−) : reformatage seul (guillemets YAML, alignement de tableaux, une ligne vide), sans lien avec la page d'admin et hors du `format:check`. Il élargit la surface de conflit avec les autres PR (CLAUDE.md, workflow item 7). Retirer du commit (`git checkout origin/master -- DESIGN.md`), ou l'isoler dans une PR `chore` dédiée.
+
+**Suite (2026-10-27, session principale)** : point bloquant corrigé, `DESIGN.md` ramené à la seule entrée « Éditeur du guide des plaquettes » (reformatage retiré) ; reformatage de l'en-tête et du tableau de découpage de cette spec retiré aussi ; remarque `step` appliquée (`0.01`, deux décimales), test ajusté.

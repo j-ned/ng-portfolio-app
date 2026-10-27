@@ -231,7 +231,7 @@ describe('AdminInsertGuide: accessibilité des lignes', () => {
     ]);
   });
 
-  it('Given a line When it renders Then every field has its own label, the required ones say so and the radius steps by 0.1', async () => {
+  it('Given a line When it renders Then every field has its own label, the required ones say so and the radius steps by 0.01, its two allowed decimals', async () => {
     const editor = await openEditor();
     const row = byTestId(editor.host, 'admin-insert-guide-row');
     const fields = [...(row?.querySelectorAll<Control>('input, select') ?? [])];
@@ -253,7 +253,7 @@ describe('AdminInsertGuide: accessibilité des lignes', () => {
         { label: 'Rayon de bec (mm)', required: 'true' },
         { label: 'Remarque (facultative)', required: null },
       ],
-      radius: { type: 'number', step: '0.1' },
+      radius: { type: 'number', step: '0.01' },
     });
   });
 
