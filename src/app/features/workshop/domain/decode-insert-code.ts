@@ -73,6 +73,18 @@ export function normalizeInsertCode(raw: string): string {
   return raw.toUpperCase().replace(/[\s-]+/g, '');
 }
 
+export function textAfterInsertCode(raw: string): string | undefined {
+  const decoding = decodeInsertCode(raw);
+  if (!decoding.ok) return undefined;
+  let remaining = normalizeInsertCode(raw).length - decoding.suffix.length;
+  let index = 0;
+  while (remaining > 0 && index < raw.length) {
+    if (!/[\s-]/.test(raw[index])) remaining -= 1;
+    index += 1;
+  }
+  return raw.slice(index);
+}
+
 export function decodeInsertCode(raw: string): InsertCodeDecoding {
   const code = normalizeInsertCode(raw);
   const ansi = ansiError(code);

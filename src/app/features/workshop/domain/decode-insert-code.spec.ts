@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeInsertCode, normalizeInsertCode } from './decode-insert-code';
+import { decodeInsertCode, textAfterInsertCode, normalizeInsertCode } from './decode-insert-code';
 import {
   ISO_1832_CLEARANCES,
   ISO_1832_FIXINGS,
@@ -223,5 +223,17 @@ describe('decodeInsertCode', () => {
 
       expect(wrong).toEqual([]);
     });
+  });
+});
+
+describe('textAfterInsertCode', () => {
+  it.each<[string, string, string | undefined]>([
+    ['a bare code', 'CNMG 120408', ''],
+    ['a maker suffix', 'CNMG 120408-PM', '-PM'],
+    ['a typed work order', 'CNMG 120408 OF n° 4521', ' OF n° 4521'],
+    ['spaces inside the code', 'cnmg 12 04 08 12345', ' 12345'],
+    ['a code that does not decode', 'CODE 123456', undefined],
+  ])('Given %s When the text after the code is read Then it is kept as typed', (_, raw, after) => {
+    expect(textAfterInsertCode(raw)).toBe(after);
   });
 });

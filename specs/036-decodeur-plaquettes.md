@@ -171,3 +171,27 @@ vers la doublure comme l'audit axe. Verdict : **PASS**.
    antérieur) et les 404 attendues du guide éteint.
 8. `pnpm a11y -g "atelier|decodeur"` : 12 passed (clair et sombre ; `/atelier`, guide, guide avec
    matière, décodeur vide, décodé avec suffixe, en erreur ANSI).
+
+## Review code
+
+**Verdict** : REJECTED
+**Gates CI locaux** : install `pnpm install --frozen-lockfile` 0 / build `pnpm run build --configuration production` 0 (cache `ng cache clean` purgé avant) / tests `pnpm test` 0 (4837/4837, 245 fichiers) / lint `pnpm lint` 0 / format `pnpm run format:check` 0 / `docker buildx bake ci` 0
+**Checks mécaniques** : checker non vendoré (`.claude/checks/` absent) : auto-checks joués à la main (archéologie, sécurité, `export default`, `effect()`) : 0 hit
+**Warnings de gate** : aucun
+**Rendu compilé** : N/A (aucun composant `shared/ui` touché ; page vérifiée à l'exécution)
+**Preuve de verify runtime** : ✅ (section Verify complète ; captures non commitées, rejouée par le reviewer sur `ng-portfolio-app:ci` + doublure : décodage SSR 200, ANSI et position 2 en `role="alert"`, `WNMG 080408` décodé, `/atelier/decodeur/x` 404, lien du guide `?code=CCGT09T304PM` avec nom « CCGT 09T304-PM, décoder ce code », guide éteint → 404 décodeur et guide, `/atelier` 200 sans carte, sitemap sans les deux pages ; API arrêtée → 503 `X-Cache-Status: MISS`)
+**Score de mutation** : N/A (profil sans outil)
+**Conventions Angular 20+** : ✅
+**Cross-platform** : ✅
+**Tests** : ❌
+**Sécurité** : ❌
+**Alignement spec** : ✅
+
+**Tests notables** :
+- ✨ `decode-insert-code.spec.ts:197` — propriété « décoder puis recomposer » sur toutes les entrées de la table, dans toutes les graphies acceptées.
+- ⚠️ `admin-insert-guide.spec.ts:540` — aucun cas « code décodable suivi d'une référence » dans le champ plaquette (cf. point 1).
+
+**Points à corriger** :
+1. `src/app/features/admin/application/components/admin-insert-guide-row.ts:162` — quand le code se décode, tout le champ plaquette sort de `findConfidentialReferences`, **suffixe compris** : `CNMG 120408 12345` ou `CNMG 120408 OF n° 4521` se normalisent en code décodable de suffixe `12345` / `OFN°4521`, et la référence n'est plus signalée (elle l'était avant la PR). Analyser le suffixe (`decoding.ok ? decoding.suffix : insert`) et ajouter le cas au `it.each` de `admin-insert-guide.spec.ts:541`.
+
+**Suite (2026-10-27, session principale)** : point bloquant corrigé. Le champ plaquette n'est plus ignoré en entier quand il se décode : `textAfterInsertCode` rend ce qui suit le code, tel que saisi, et c'est ce reste qui passe par `findConfidentialReferences` (`CNMG 120408 OF n° 4521` et `CNMG 120408 12345` redeviennent signalés). RED sur ces deux cas, puis GREEN 4844/4844, lint et format en code 0 ; test unitaire de `textAfterInsertCode` ajouté.
